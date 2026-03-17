@@ -1,0 +1,905 @@
+"""
+The Impact Board — Season Data Ingestion
+==========================================
+python backend/ingest/fetch_season.py
+
+Fetches all NBA API endpoints for a given season and upserts
+into player_seasons and players tables.
+
+Run once for full season load. Safe to re-run — uses upsert.
+
+Usage:
+    python backend/ingest/fetch_season.py
+    python backend/ingest/fetch_season.py --season 2023-24
+"""
+
+import os
+import sys
+import time
+import argparse
+from datetime import datetime
+from dotenv import load_dotenv
+import pandas as pd
+import psycopg2
+from psycopg2.extras import execute_values
+
+load_dotenv()
+
+DATABASE_URL = os.getenv('DATABASE_URL')
+SEASON      = os.getenv('NBA_SEASON', '2024-25')
+SEASON_TYPE = os.getenv('NBA_SEASON_TYPE', 'Regular Season')
+DELAY       = 1.8
+
+if not DATABASE_URL:
+    print("❌ DATABASE_URL not set.")
+    sys.exit(1)
+
+def try_import(name):
+    try:
+        import importlib
+        mod = importlib.import_module("nba_api.stats.endpoints")
+        return getattr(mod, name)
+    except (ImportError, AttributeError):
+        return None
+
+PlayerGameLogs                = try_import("PlayerGameLogs")
+LeagueDashPlayerBioStats      = try_import("LeagueDashPlayerBioStats")
+LeagueDashPtStats             = try_import("LeagueDashPtStats")
+LeagueDashPtDefend            = try_import("LeagueDashPtDefend")
+LeagueSeasonMatchups          = try_import("LeagueSeasonMatchups")
+LeagueHustleStatsPlayer       = try_import("LeagueHustleStatsPlayer")
+LeagueDashLineups             = try_import("LeagueDashLineups")
+LeagueDashPlayerClutch        = try_import("LeagueDashPlayerClutch")
+LeagueDashPlayerBioStats      = try_import("LeagueDashPlayerBioStats")
+SynergyPlayTypes              = try_import("SynergyPlayTypes")
+TeamPlayerOnOffDetails        = try_import("TeamPlayerOnOffDetails")
+LeagueDashPlayerShotLocations = try_import("LeagueDashPlayerShotLocations")
+
+
+# ── Fetch helpers ─────────────────────────────────────────────
+def fetch(label, fn):
+    print(f"  Fetching {label}...", end=" ", flush=True)
+    try:
+        time.sleep(DELAY)
+        ep  = fn()
+        dfs = ep.get_data_frames()
+        if dfs and len(dfs[0]) > 0:
+            print(f"✅ {len(dfs[0])} rows")
+            return dfs[0]
+        print("⚠️  empty")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"❌ {e}")
+        return pd.DataFrame()
+
+def safe(val, default=None):
+    """Convert pandas value to Python native, handling NaN."""
+    if val is None:
+        return default
+    try:
+        import math
+        if isinstance(val, float) and math.isnan(val):
+            return default
+        if hasattr(val, 'item'):
+            return val.item()
+        return val
+    except:
+        return default
+
+def safe_float(val):
+    return safe(val, None)
+
+def safe_int(val):
+    v = safe(val, None)
+    if v is None:
+        return None
+    try:
+        return int(float(v))
+    except:
+        return None
+
+def parse_minutes(val):
+    """Convert '36:24' or 36.4 to float minutes."""
+    try:
+        s = str(val).strip()
+        if ':' in s:
+            parts = s.split(':')
+            return int(parts[0]) + int(parts[1]) / 60.0
+        return float(s)
+    except:
+        return None
+
+def normalize_position(pos):
+    """Map raw NBA position to position group."""
+    pos = str(pos).strip().upper() if pos else ''
+    mapping = {
+        'PG': 'G', 'SG': 'G', 'G': 'G',
+        'G-F': 'GF', 'F-G': 'GF',
+        'SF': 'F', 'PF': 'F', 'F': 'F',
+        'F-C': 'FC', 'C-F': 'FC',
+        'C': 'C',
+    }
+    return mapping.get(pos, 'F')
+
+
+# ── Main fetch ────────────────────────────────────────────────
+def fetch_all(season, season_type):
+    print(f"\n{'='*60}")
+    print(f"Fetching season data: {season} {season_type}")
+    print(f"{'='*60}\n")
+
+    data = {}
+
+    # Game logs
+    data['base'] = fetch("Game Logs — Base",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Base"))
+
+    data['adv'] = fetch("Game Logs — Advanced",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Advanced"))
+
+    data['misc'] = fetch("Game Logs — Misc",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Misc"))
+
+    data['scoring'] = fetch("Game Logs — Scoring",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Scoring"))
+
+    data['usage'] = fetch("Game Logs — Usage",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Usage"))
+
+    data['bio'] = fetch("Player Bio Stats",
+        lambda: LeagueDashPlayerBioStats(season=season,
+            season_type_all_star=season_type, per_mode_simple="PerGame"))
+
+    # Tracking
+    for key, measure in [
+        ('drives',    'Drives'),
+        ('passing',   'Passing'),
+        ('touches',   'Possessions'),
+        ('pullup',    'PullUpShot'),
+        ('catchshoot','CatchShoot'),
+        ('post',      'PostTouch'),
+        ('speed',     'SpeedDistance'),
+        ('def_track', 'Defense'),
+    ]:
+        data[key] = fetch(f"Tracking — {measure}",
+            lambda m=measure: LeagueDashPtStats(season=season,
+                season_type_all_star=season_type,
+                per_mode_simple="Totals",
+                pt_measure_type=m, player_or_team="Player"))
+
+    # Defense
+    data['def_overall'] = fetch("Defender Shooting — Overall",
+        lambda: LeagueDashPtDefend(season=season,
+            season_type_all_star=season_type,
+            per_mode_simple="Totals", defense_category="Overall"))
+
+    data['def_2pt'] = fetch("Defender Shooting — 2PT",
+        lambda: LeagueDashPtDefend(season=season,
+            season_type_all_star=season_type,
+            per_mode_simple="Totals", defense_category="2 Pointers"))
+
+    data['def_3pt'] = fetch("Defender Shooting — 3PT",
+        lambda: LeagueDashPtDefend(season=season,
+            season_type_all_star=season_type,
+            per_mode_simple="Totals", defense_category="3 Pointers"))
+
+    # Hustle
+    data['hustle'] = fetch("Hustle Stats",
+        lambda: LeagueHustleStatsPlayer(season=season,
+            season_type_all_star=season_type, per_mode_time="Totals"))
+
+    # Clutch
+    data['clutch'] = fetch("Clutch Stats",
+        lambda: LeagueDashPlayerClutch(season=season,
+            season_type_all_star=season_type,
+            measure_type_detailed_defense="Advanced",
+            clutch_time="Last 5 Minutes",
+            ahead_behind="Ahead or Behind", point_diff=5))
+
+    # Synergy
+    for key, play_type, grouping in [
+        ('syn_iso_off',    'Isolation',    'offensive'),
+        ('syn_pnr_off',    'PRBallHandler','offensive'),
+        ('syn_pnr_roll',   'PRRollman',    'offensive'),
+        ('syn_post_off',   'Postup',       'offensive'),
+        ('syn_spotup',     'Spotup',       'offensive'),
+        ('syn_transition', 'Transition',   'offensive'),
+        ('syn_iso_def',    'Isolation',    'defensive'),
+        ('syn_pnr_def',    'PRBallHandler','defensive'),
+    ]:
+        data[key] = fetch(f"Synergy — {play_type} ({grouping})",
+            lambda pt=play_type, g=grouping: SynergyPlayTypes(
+                season=season, season_type_all_star=season_type,
+                per_mode_simple="PerGame", play_type_nullable=pt,
+                type_grouping_nullable=g, player_or_team_abbreviation="P"))
+
+    # Shot locations
+    data['shot_zones'] = fetch("Player Shot Locations",
+        lambda: LeagueDashPlayerShotLocations(season=season,
+            season_type_all_star=season_type, distance_range="By Zone"))
+
+    return data
+
+
+# ── Aggregate game logs to season totals ──────────────────────
+def aggregate_game_logs(df, value_cols, id_cols=None):
+    """
+    Aggregate per-game logs to season totals/averages.
+    Returns one row per player.
+    """
+    if df.empty:
+        return pd.DataFrame()
+
+    if id_cols is None:
+        id_cols = ['PLAYER_ID', 'PLAYER_NAME', 'TEAM_ID', 'TEAM_ABBREVIATION']
+    id_cols = [c for c in id_cols if c in df.columns]
+
+    # For per-game stats, average across games
+    # For counts (GP), sum
+    agg = {}
+    for col in value_cols:
+        if col in df.columns:
+            agg[col] = 'mean'
+
+    if 'GP' in df.columns:
+        # Count unique games per player
+        gp = df.groupby('PLAYER_ID')['GAME_ID'].nunique().reset_index()
+        gp.columns = ['PLAYER_ID', 'GP']
+    else:
+        gp = None
+
+    if 'MIN' in df.columns:
+        min_total = df.groupby('PLAYER_ID')['MIN'].apply(
+            lambda x: sum(parse_minutes(v) or 0 for v in x)
+        ).reset_index()
+        min_total.columns = ['PLAYER_ID', 'MIN_TOTAL']
+    else:
+        min_total = None
+
+    result = df.groupby('PLAYER_ID')[
+        [c for c in value_cols if c in df.columns]
+    ].mean().reset_index()
+
+    if gp is not None:
+        result = result.merge(gp, on='PLAYER_ID', how='left')
+    if min_total is not None:
+        result = result.merge(min_total, on='PLAYER_ID', how='left')
+
+    # Add name/team from last game
+    if id_cols:
+        last = df.groupby('PLAYER_ID')[id_cols].last().reset_index()
+        result = result.merge(last, on='PLAYER_ID', how='left')
+
+    return result
+
+
+# ── Build player rows ─────────────────────────────────────────
+def build_player_rows(data, season, season_type):
+    """
+    Merge all data sources into one dict per player.
+    Returns list of dicts ready for upsert.
+    """
+    # Start with base game logs — every player who played is here
+    base = data.get('base', pd.DataFrame())
+    if base.empty:
+        print("❌ No base game log data — cannot build rows.")
+        return [], []
+
+    # Get unique player list from base logs
+    players_df = base.groupby('PLAYER_ID').agg(
+        PLAYER_NAME=('PLAYER_NAME', 'last'),
+        TEAM_ID=('TEAM_ID', 'last'),
+        TEAM_ABBREVIATION=('TEAM_ABBREVIATION', 'last'),
+        GP=('GAME_ID', 'nunique'),
+    ).reset_index()
+
+    # Aggregate game logs
+    base_agg = base.groupby('PLAYER_ID').agg(
+        PTS=('PTS', 'mean'), AST=('AST', 'mean'), REB=('REB', 'mean'),
+        OREB=('OREB', 'mean'), DREB=('DREB', 'mean'), STL=('STL', 'mean'),
+        BLK=('BLK', 'mean'), TOV=('TOV', 'mean'), PF=('PF', 'mean'),
+        PFD=('PFD', 'mean'), FGM=('FGM', 'mean'), FGA=('FGA', 'mean'),
+        FG_PCT=('FG_PCT', 'mean'), FG3M=('FG3M', 'mean'), FG3A=('FG3A', 'mean'),
+        FG3_PCT=('FG3_PCT', 'mean'), FTM=('FTM', 'mean'), FTA=('FTA', 'mean'),
+        FT_PCT=('FT_PCT', 'mean'), PLUS_MINUS=('PLUS_MINUS', 'mean'),
+    ).reset_index()
+
+    # Total minutes
+    min_total = base.groupby('PLAYER_ID')['MIN'].apply(
+        lambda x: sum(parse_minutes(v) or 0 for v in x)
+    ).reset_index()
+    min_total.columns = ['PLAYER_ID', 'MIN_TOTAL']
+
+    # Advanced logs
+    adv = data.get('adv', pd.DataFrame())
+    adv_agg = pd.DataFrame()
+    if not adv.empty:
+        adv_cols = ['OFF_RATING', 'DEF_RATING', 'NET_RATING', 'AST_PCT',
+                    'AST_TO', 'AST_RATIO', 'OREB_PCT', 'DREB_PCT', 'REB_PCT',
+                    'TM_TOV_PCT', 'EFG_PCT', 'TS_PCT', 'USG_PCT', 'PACE', 'PIE', 'POSS']
+        adv_cols = [c for c in adv_cols if c in adv.columns]
+        adv_agg = adv.groupby('PLAYER_ID')[adv_cols].mean().reset_index()
+
+    # Misc logs
+    misc = data.get('misc', pd.DataFrame())
+    misc_agg = pd.DataFrame()
+    if not misc.empty:
+        misc_cols = ['PTS_OFF_TOV', 'PTS_2ND_CHANCE', 'PTS_FB', 'PTS_PAINT',
+                     'OPP_PTS_OFF_TOV', 'OPP_PTS_PAINT']
+        misc_cols = [c for c in misc_cols if c in misc.columns]
+        misc_agg = misc.groupby('PLAYER_ID')[misc_cols].mean().reset_index()
+
+    # Scoring logs
+    scoring = data.get('scoring', pd.DataFrame())
+    scoring_agg = pd.DataFrame()
+    if not scoring.empty:
+        sc_cols = ['PCT_UAST_2PM', 'PCT_UAST_3PM', 'PCT_UAST_FGM', 'PCT_AST_FGM',
+                   'PCT_PTS_PAINT', 'PCT_PTS_3PT', 'PCT_PTS_FT', 'PCT_PTS_2PT_MR']
+        sc_cols = [c for c in sc_cols if c in scoring.columns]
+        scoring_agg = scoring.groupby('PLAYER_ID')[sc_cols].mean().reset_index()
+
+    # Usage logs
+    usage = data.get('usage', pd.DataFrame())
+    usage_agg = pd.DataFrame()
+    if not usage.empty:
+        us_cols = ['PCT_FGA', 'PCT_FTA', 'PCT_AST', 'PCT_TOV']
+        us_cols = [c for c in us_cols if c in usage.columns]
+        usage_agg = usage.groupby('PLAYER_ID')[us_cols].mean().reset_index()
+
+    # Merge everything into players_df
+    merged = players_df.merge(base_agg, on='PLAYER_ID', how='left')
+    merged = merged.merge(min_total, on='PLAYER_ID', how='left')
+    if not adv_agg.empty:
+        merged = merged.merge(adv_agg, on='PLAYER_ID', how='left')
+    if not misc_agg.empty:
+        merged = merged.merge(misc_agg, on='PLAYER_ID', how='left')
+    if not scoring_agg.empty:
+        merged = merged.merge(scoring_agg, on='PLAYER_ID', how='left')
+    if not usage_agg.empty:
+        merged = merged.merge(usage_agg, on='PLAYER_ID', how='left')
+
+    # Tracking datasets (already season totals, one row per player)
+    tracking_merges = [
+        ('drives',     'PLAYER_ID', ['DRIVES', 'DRIVE_FGA', 'DRIVE_FGM', 'DRIVE_FG_PCT',
+                                      'DRIVE_PTS', 'DRIVE_AST', 'DRIVE_TOV', 'DRIVE_PF',
+                                      'DRIVE_PASSES', 'DRIVE_FT_PCT']),
+        ('passing',    'PLAYER_ID', ['PASSES_MADE', 'PASSES_RECEIVED', 'AST_PTS_CREATED',
+                                      'SECONDARY_AST', 'POTENTIAL_AST', 'FT_AST',
+                                      'AST_TO_PASS_PCT']),
+        ('touches',    'PLAYER_ID', ['TOUCHES', 'FRONT_CT_TOUCHES', 'TIME_OF_POSS',
+                                      'AVG_SEC_PER_TOUCH', 'AVG_DRIB_PER_TOUCH',
+                                      'ELBOW_TOUCHES', 'POST_TOUCHES', 'PAINT_TOUCHES']),
+        ('pullup',     'PLAYER_ID', ['PULL_UP_FGA', 'PULL_UP_FGM', 'PULL_UP_FG_PCT',
+                                      'PULL_UP_FG3A', 'PULL_UP_FG3_PCT', 'PULL_UP_EFG_PCT']),
+        ('catchshoot', 'PLAYER_ID', ['CATCH_SHOOT_FGA', 'CATCH_SHOOT_FGM', 'CATCH_SHOOT_FG_PCT',
+                                      'CATCH_SHOOT_FG3A', 'CATCH_SHOOT_FG3_PCT',
+                                      'CATCH_SHOOT_EFG_PCT']),
+        ('post',       'PLAYER_ID', ['POST_TOUCH_FGA', 'POST_TOUCH_FG_PCT', 'POST_TOUCH_PTS',
+                                      'POST_TOUCH_AST', 'POST_TOUCH_TOV']),
+        ('speed',      'PLAYER_ID', ['DIST_MILES', 'DIST_MILES_OFF', 'DIST_MILES_DEF',
+                                      'AVG_SPEED', 'AVG_SPEED_OFF', 'AVG_SPEED_DEF']),
+        ('def_track',  'PLAYER_ID', ['DEF_RIM_FGA', 'DEF_RIM_FG_PCT']),
+    ]
+
+    for key, join_col, cols in tracking_merges:
+        df = data.get(key, pd.DataFrame())
+        if not df.empty:
+            cols_present = [c for c in cols if c in df.columns]
+            if cols_present:
+                sub = df[['PLAYER_ID'] + cols_present].copy()
+                merged = merged.merge(sub, on='PLAYER_ID', how='left')
+
+    # Defender shooting
+    def_overall = data.get('def_overall', pd.DataFrame())
+    if not def_overall.empty:
+        def_o = def_overall[['CLOSE_DEF_PERSON_ID', 'D_FGA', 'D_FG_PCT',
+                               'NORMAL_FG_PCT']].copy()
+        def_o.columns = ['PLAYER_ID', 'D_FGA_OVERALL', 'D_FG_PCT_OVERALL', 'NORMAL_FG_PCT']
+        merged = merged.merge(def_o, on='PLAYER_ID', how='left')
+
+    def_2pt = data.get('def_2pt', pd.DataFrame())
+    if not def_2pt.empty:
+        def_2 = def_2pt[['CLOSE_DEF_PERSON_ID', 'FG2A', 'FG2_PCT', 'NS_FG2_PCT']].copy()
+        def_2.columns = ['PLAYER_ID', 'D_FGA_2PT', 'D_FG_PCT_2PT', 'NS_FG2_PCT']
+        merged = merged.merge(def_2, on='PLAYER_ID', how='left')
+
+    def_3pt = data.get('def_3pt', pd.DataFrame())
+    if not def_3pt.empty:
+        def_3 = def_3pt[['CLOSE_DEF_PERSON_ID', 'FG3A', 'FG3_PCT', 'NS_FG3_PCT']].copy()
+        def_3.columns = ['PLAYER_ID', 'D_FGA_3PT', 'D_FG_PCT_3PT', 'NS_FG3_PCT']
+        merged = merged.merge(def_3, on='PLAYER_ID', how='left')
+
+    # Hustle
+    hustle = data.get('hustle', pd.DataFrame())
+    if not hustle.empty:
+        hust_cols = ['PLAYER_ID', 'CONTESTED_SHOTS', 'CONTESTED_SHOTS_2PT',
+                     'CONTESTED_SHOTS_3PT', 'DEFLECTIONS', 'CHARGES_DRAWN',
+                     'SCREEN_ASSISTS', 'SCREEN_AST_PTS', 'LOOSE_BALLS_RECOVERED',
+                     'BOX_OUTS', 'OFF_BOXOUTS', 'DEF_BOXOUTS']
+        hust_cols = [c for c in hust_cols if c in hustle.columns]
+        merged = merged.merge(hustle[hust_cols], on='PLAYER_ID', how='left')
+
+    # Clutch
+    clutch = data.get('clutch', pd.DataFrame())
+    if not clutch.empty:
+        cl_cols = ['PLAYER_ID', 'NET_RATING', 'TS_PCT', 'USG_PCT', 'MIN']
+        cl_cols = [c for c in cl_cols if c in clutch.columns]
+        cl_sub = clutch[cl_cols].copy()
+        cl_sub.columns = ['PLAYER_ID'] + [f'CLUTCH_{c}' for c in cl_sub.columns[1:]]
+        merged = merged.merge(cl_sub, on='PLAYER_ID', how='left')
+
+    # Synergy — pick PPP per play type
+    synergy_map = [
+        ('syn_iso_off',    'ISO_PPP',        'ISO_EFG_PCT',    'ISO_FGA',     'ISO_TOV_PCT'),
+        ('syn_pnr_off',    'PNR_BH_PPP',     None,             'PNR_BH_FGA',  None),
+        ('syn_pnr_roll',   'PNR_ROLL_PPP',   None,             None,          None),
+        ('syn_post_off',   'POST_PPP',        None,             None,          None),
+        ('syn_spotup',     'SPOTUP_PPP',      'SPOTUP_EFG_PCT', None,          None),
+        ('syn_transition', 'TRANSITION_PPP',  None,             'TRANSITION_FGA', None),
+        ('syn_iso_def',    'DEF_ISO_PPP',     None,             None,          None),
+        ('syn_pnr_def',    'DEF_PNR_BH_PPP',  None,             None,          None),
+    ]
+
+    for key, ppp_col, efg_col, fga_col, tov_col in synergy_map:
+        df = data.get(key, pd.DataFrame())
+        if not df.empty and 'PPP' in df.columns:
+            syn_cols = ['PLAYER_ID']
+            rename = {'PLAYER_ID': 'PLAYER_ID', 'PPP': ppp_col}
+            if efg_col and 'EFG_PCT' in df.columns:
+                syn_cols.append('EFG_PCT')
+                rename['EFG_PCT'] = efg_col
+            if fga_col and 'FGA' in df.columns:
+                syn_cols.append('FGA')
+                rename['FGA'] = fga_col
+            if tov_col and 'TOV_POSS_PCT' in df.columns:
+                syn_cols.append('TOV_POSS_PCT')
+                rename['TOV_POSS_PCT'] = tov_col
+
+            syn_cols.append('PPP')
+            syn_sub = df[[c for c in syn_cols if c in df.columns]].rename(columns=rename)
+            merged = merged.merge(syn_sub, on='PLAYER_ID', how='left')
+
+    print(f"\n  Merged dataset: {len(merged)} players, {len(merged.columns)} columns")
+
+    # ── Build player_seasons rows ─────────────────────────────
+    season_rows = []
+    player_rows = []
+
+    bio = data.get('bio', pd.DataFrame())
+    bio_dict = {}
+    if not bio.empty:
+        for _, row in bio.iterrows():
+            pid = safe_int(row.get('PLAYER_ID'))
+            if pid:
+                bio_dict[pid] = row.to_dict()
+
+    def g(row, col, default=None):
+        """Safe get from merged row."""
+        val = row.get(col)
+        if val is None:
+            return default
+        try:
+            import math
+            if isinstance(val, float) and math.isnan(val):
+                return default
+            if hasattr(val, 'item'):
+                return val.item()
+            return val
+        except:
+            return default
+
+    for _, row in merged.iterrows():
+        pid = safe_int(row.get('PLAYER_ID'))
+        if not pid:
+            continue
+
+        # Minutes per game
+        min_total  = g(row, 'MIN_TOTAL') or 0
+        gp         = safe_int(row.get('GP')) or 1
+        min_pg     = min_total / gp if gp > 0 else 0
+        poss       = g(row, 'POSS')
+
+        # Bio data
+        b = bio_dict.get(pid, {})
+        pos_raw    = safe(b.get('PLAYER_HEIGHT_INCHES')) or None
+        position   = safe(b.get('PLAYER_POSITION', b.get('POSITION', ''))) or ''
+        pos_group  = normalize_position(position)
+
+        # Player row
+        player_rows.append({
+            'player_id':      pid,
+            'player_name':    str(row.get('PLAYER_NAME', '')).strip(),
+            'position':       position,
+            'position_group': pos_group,
+            'height_inches':  safe_float(b.get('PLAYER_HEIGHT_INCHES')),
+            'weight':         safe_int(b.get('PLAYER_WEIGHT')),
+            'draft_year':     safe_int(b.get('DRAFT_YEAR')),
+            'draft_round':    safe_int(b.get('DRAFT_ROUND')),
+            'draft_number':   safe_int(b.get('DRAFT_NUMBER')),
+            'college':        safe(b.get('COLLEGE')),
+            'country':        safe(b.get('COUNTRY')),
+            'is_active':      True,
+        })
+
+        # Season row
+        season_rows.append({
+            'player_id':   pid,
+            'season':      season,
+            'season_type': season_type,
+            'league':      'NBA',
+            'team_id':     safe_int(row.get('TEAM_ID')),
+            'team_abbr':   safe(row.get('TEAM_ABBREVIATION')),
+
+            'gp':          gp,
+            'min':         round(min_total, 1) if min_total else None,
+            'min_per_game': round(min_pg, 2) if min_pg else None,
+            'poss':        safe_float(poss),
+
+            # Base
+            'pts':         safe_float(row.get('PTS')),
+            'ast':         safe_float(row.get('AST')),
+            'reb':         safe_float(row.get('REB')),
+            'oreb':        safe_float(row.get('OREB')),
+            'dreb':        safe_float(row.get('DREB')),
+            'stl':         safe_float(row.get('STL')),
+            'blk':         safe_float(row.get('BLK')),
+            'tov':         safe_float(row.get('TOV')),
+            'pf':          safe_float(row.get('PF')),
+            'pfd':         safe_float(row.get('PFD')),
+            'fgm':         safe_float(row.get('FGM')),
+            'fga':         safe_float(row.get('FGA')),
+            'fg_pct':      safe_float(row.get('FG_PCT')),
+            'fg3m':        safe_float(row.get('FG3M')),
+            'fg3a':        safe_float(row.get('FG3A')),
+            'fg3_pct':     safe_float(row.get('FG3_PCT')),
+            'ftm':         safe_float(row.get('FTM')),
+            'fta':         safe_float(row.get('FTA')),
+            'ft_pct':      safe_float(row.get('FT_PCT')),
+            'plus_minus':  safe_float(row.get('PLUS_MINUS')),
+
+            # Advanced
+            'off_rating':  safe_float(row.get('OFF_RATING')),
+            'def_rating':  safe_float(row.get('DEF_RATING')),
+            'net_rating':  safe_float(row.get('NET_RATING')),
+            'ast_pct':     safe_float(row.get('AST_PCT')),
+            'ast_to':      safe_float(row.get('AST_TO')),
+            'ast_ratio':   safe_float(row.get('AST_RATIO')),
+            'oreb_pct':    safe_float(row.get('OREB_PCT')),
+            'dreb_pct':    safe_float(row.get('DREB_PCT')),
+            'reb_pct':     safe_float(row.get('REB_PCT')),
+            'tm_tov_pct':  safe_float(row.get('TM_TOV_PCT')),
+            'efg_pct':     safe_float(row.get('EFG_PCT')),
+            'ts_pct':      safe_float(row.get('TS_PCT')),
+            'usg_pct':     safe_float(row.get('USG_PCT')),
+            'pace':        safe_float(row.get('PACE')),
+            'pie':         safe_float(row.get('PIE')),
+
+            # Misc
+            'pts_off_tov':     safe_float(row.get('PTS_OFF_TOV')),
+            'pts_2nd_chance':  safe_float(row.get('PTS_2ND_CHANCE')),
+            'pts_fb':          safe_float(row.get('PTS_FB')),
+            'pts_paint':       safe_float(row.get('PTS_PAINT')),
+            'opp_pts_off_tov': safe_float(row.get('OPP_PTS_OFF_TOV')),
+            'opp_pts_paint':   safe_float(row.get('OPP_PTS_PAINT')),
+
+            # Scoring
+            'pct_uast_2pm':  safe_float(row.get('PCT_UAST_2PM')),
+            'pct_uast_3pm':  safe_float(row.get('PCT_UAST_3PM')),
+            'pct_uast_fgm':  safe_float(row.get('PCT_UAST_FGM')),
+            'pct_ast_fgm':   safe_float(row.get('PCT_AST_FGM')),
+            'pct_pts_paint': safe_float(row.get('PCT_PTS_PAINT')),
+            'pct_pts_3pt':   safe_float(row.get('PCT_PTS_3PT')),
+            'pct_pts_ft':    safe_float(row.get('PCT_PTS_FT')),
+            'pct_pts_mid2':  safe_float(row.get('PCT_PTS_2PT_MR')),
+
+            # Usage
+            'pct_fga':  safe_float(row.get('PCT_FGA')),
+            'pct_fta':  safe_float(row.get('PCT_FTA')),
+            'pct_ast':  safe_float(row.get('PCT_AST')),
+            'pct_tov':  safe_float(row.get('PCT_TOV')),
+
+            # Tracking: drives
+            'drives':        safe_float(row.get('DRIVES')),
+            'drive_fga':     safe_float(row.get('DRIVE_FGA')),
+            'drive_fgm':     safe_float(row.get('DRIVE_FGM')),
+            'drive_fg_pct':  safe_float(row.get('DRIVE_FG_PCT')),
+            'drive_pts':     safe_float(row.get('DRIVE_PTS')),
+            'drive_ast':     safe_float(row.get('DRIVE_AST')),
+            'drive_tov':     safe_float(row.get('DRIVE_TOV')),
+            'drive_pf':      safe_float(row.get('DRIVE_PF')),
+            'drive_passes':  safe_float(row.get('DRIVE_PASSES')),
+            'drive_ft_pct':  safe_float(row.get('DRIVE_FT_PCT')),
+
+            # Tracking: passing
+            'passes_made':     safe_float(row.get('PASSES_MADE')),
+            'passes_received': safe_float(row.get('PASSES_RECEIVED')),
+            'ast_pts_created': safe_float(row.get('AST_PTS_CREATED')),
+            'secondary_ast':   safe_float(row.get('SECONDARY_AST')),
+            'potential_ast':   safe_float(row.get('POTENTIAL_AST')),
+            'ft_ast':          safe_float(row.get('FT_AST')),
+            'ast_to_pass_pct': safe_float(row.get('AST_TO_PASS_PCT')),
+
+            # Tracking: touches
+            'touches':           safe_float(row.get('TOUCHES')),
+            'front_ct_touches':  safe_float(row.get('FRONT_CT_TOUCHES')),
+            'time_of_poss':      safe_float(row.get('TIME_OF_POSS')),
+            'avg_sec_per_touch': safe_float(row.get('AVG_SEC_PER_TOUCH')),
+            'avg_drib_per_touch':safe_float(row.get('AVG_DRIB_PER_TOUCH')),
+            'elbow_touches':     safe_float(row.get('ELBOW_TOUCHES')),
+            'post_touches':      safe_float(row.get('POST_TOUCHES')),
+            'paint_touches':     safe_float(row.get('PAINT_TOUCHES')),
+
+            # Tracking: pull-up
+            'pull_up_fga':     safe_float(row.get('PULL_UP_FGA')),
+            'pull_up_fgm':     safe_float(row.get('PULL_UP_FGM')),
+            'pull_up_fg_pct':  safe_float(row.get('PULL_UP_FG_PCT')),
+            'pull_up_fg3a':    safe_float(row.get('PULL_UP_FG3A')),
+            'pull_up_fg3_pct': safe_float(row.get('PULL_UP_FG3_PCT')),
+            'pull_up_efg_pct': safe_float(row.get('PULL_UP_EFG_PCT')),
+
+            # Tracking: catch & shoot
+            'cs_fga':     safe_float(row.get('CATCH_SHOOT_FGA')),
+            'cs_fgm':     safe_float(row.get('CATCH_SHOOT_FGM')),
+            'cs_fg_pct':  safe_float(row.get('CATCH_SHOOT_FG_PCT')),
+            'cs_fg3a':    safe_float(row.get('CATCH_SHOOT_FG3A')),
+            'cs_fg3_pct': safe_float(row.get('CATCH_SHOOT_FG3_PCT')),
+            'cs_efg_pct': safe_float(row.get('CATCH_SHOOT_EFG_PCT')),
+
+            # Tracking: post-up
+            'post_touch_fga':    safe_float(row.get('POST_TOUCH_FGA')),
+            'post_touch_fg_pct': safe_float(row.get('POST_TOUCH_FG_PCT')),
+            'post_touch_pts':    safe_float(row.get('POST_TOUCH_PTS')),
+            'post_touch_ast':    safe_float(row.get('POST_TOUCH_AST')),
+            'post_touch_tov':    safe_float(row.get('POST_TOUCH_TOV')),
+
+            # Tracking: speed
+            'dist_miles':     safe_float(row.get('DIST_MILES')),
+            'dist_miles_off': safe_float(row.get('DIST_MILES_OFF')),
+            'dist_miles_def': safe_float(row.get('DIST_MILES_DEF')),
+            'avg_speed':      safe_float(row.get('AVG_SPEED')),
+            'avg_speed_off':  safe_float(row.get('AVG_SPEED_OFF')),
+            'avg_speed_def':  safe_float(row.get('AVG_SPEED_DEF')),
+
+            # Tracking: defense
+            'def_rim_fga':    safe_float(row.get('DEF_RIM_FGA')),
+            'def_rim_fgm':    safe_float(row.get('DEF_RIM_FGM')),
+            'def_rim_fg_pct': safe_float(row.get('DEF_RIM_FG_PCT')),
+
+            # Defender shooting
+            'd_fga_overall':    safe_float(row.get('D_FGA_OVERALL')),
+            'd_fg_pct_overall': safe_float(row.get('D_FG_PCT_OVERALL')),
+            'normal_fg_pct':    safe_float(row.get('NORMAL_FG_PCT')),
+            'd_fga_2pt':        safe_float(row.get('D_FGA_2PT')),
+            'd_fg_pct_2pt':     safe_float(row.get('D_FG_PCT_2PT')),
+            'ns_fg2_pct':       safe_float(row.get('NS_FG2_PCT')),
+            'd_fga_3pt':        safe_float(row.get('D_FGA_3PT')),
+            'd_fg_pct_3pt':     safe_float(row.get('D_FG_PCT_3PT')),
+            'ns_fg3_pct':       safe_float(row.get('NS_FG3_PCT')),
+
+            # Hustle
+            'contested_shots': safe_float(row.get('CONTESTED_SHOTS')),
+            'contested_2pt':   safe_float(row.get('CONTESTED_SHOTS_2PT')),
+            'contested_3pt':   safe_float(row.get('CONTESTED_SHOTS_3PT')),
+            'deflections':     safe_float(row.get('DEFLECTIONS')),
+            'charges_drawn':   safe_float(row.get('CHARGES_DRAWN')),
+            'screen_assists':  safe_float(row.get('SCREEN_ASSISTS')),
+            'screen_ast_pts':  safe_float(row.get('SCREEN_AST_PTS')),
+            'loose_balls':     safe_float(row.get('LOOSE_BALLS_RECOVERED')),
+            'box_outs':        safe_float(row.get('BOX_OUTS')),
+            'off_box_outs':    safe_float(row.get('OFF_BOXOUTS')),
+            'def_box_outs':    safe_float(row.get('DEF_BOXOUTS')),
+
+            # Synergy
+            'iso_ppp':        safe_float(row.get('ISO_PPP')),
+            'iso_fga':        safe_float(row.get('ISO_FGA')),
+            'iso_efg_pct':    safe_float(row.get('ISO_EFG_PCT')),
+            'iso_tov_pct':    safe_float(row.get('ISO_TOV_PCT')),
+            'pnr_bh_ppp':     safe_float(row.get('PNR_BH_PPP')),
+            'pnr_bh_fga':     safe_float(row.get('PNR_BH_FGA')),
+            'pnr_roll_ppp':   safe_float(row.get('PNR_ROLL_PPP')),
+            'post_ppp':       safe_float(row.get('POST_PPP')),
+            'spotup_ppp':     safe_float(row.get('SPOTUP_PPP')),
+            'spotup_efg_pct': safe_float(row.get('SPOTUP_EFG_PCT')),
+            'transition_ppp': safe_float(row.get('TRANSITION_PPP')),
+            'transition_fga': safe_float(row.get('TRANSITION_FGA')),
+            'def_iso_ppp':    safe_float(row.get('DEF_ISO_PPP')),
+            'def_pnr_bh_ppp': safe_float(row.get('DEF_PNR_BH_PPP')),
+
+            # Clutch
+            'clutch_net_rating': safe_float(row.get('CLUTCH_NET_RATING')),
+            'clutch_ts_pct':     safe_float(row.get('CLUTCH_TS_PCT')),
+            'clutch_usg_pct':    safe_float(row.get('CLUTCH_USG_PCT')),
+            'clutch_min':        safe_float(row.get('CLUTCH_MIN')),
+        })
+
+    return player_rows, season_rows
+
+
+# ── Upsert to database ────────────────────────────────────────
+def upsert_players(conn, rows):
+    if not rows:
+        return
+    cur = conn.cursor()
+    sql = """
+        INSERT INTO players (
+            player_id, player_name, position, position_group,
+            height_inches, weight, draft_year, draft_round, draft_number,
+            college, country, is_active, updated_at
+        ) VALUES %s
+        ON CONFLICT (player_id) DO UPDATE SET
+            player_name    = EXCLUDED.player_name,
+            position       = EXCLUDED.position,
+            position_group = EXCLUDED.position_group,
+            height_inches  = EXCLUDED.height_inches,
+            weight         = EXCLUDED.weight,
+            draft_year     = EXCLUDED.draft_year,
+            draft_round    = EXCLUDED.draft_round,
+            draft_number   = EXCLUDED.draft_number,
+            college        = EXCLUDED.college,
+            country        = EXCLUDED.country,
+            is_active      = EXCLUDED.is_active,
+            updated_at     = NOW()
+    """
+    values = [(
+        r['player_id'], r['player_name'], r['position'], r['position_group'],
+        r['height_inches'], r['weight'], r['draft_year'], r['draft_round'],
+        r['draft_number'], r['college'], r['country'], r['is_active'], datetime.now()
+    ) for r in rows]
+    execute_values(cur, sql, values)
+    conn.commit()
+    cur.close()
+    print(f"  ✅ Upserted {len(rows)} players")
+
+
+def upsert_seasons(conn, rows):
+    if not rows:
+        return
+
+    cols = [k for k in rows[0].keys()]
+    cur  = conn.cursor()
+
+    # Build dynamic upsert
+    col_str     = ', '.join(cols)
+    placeholder = ', '.join(['%s'] * len(cols))
+    update_str  = ', '.join([f"{c} = EXCLUDED.{c}" for c in cols
+                              if c not in ('player_id', 'season', 'season_type', 'league')])
+    sql = f"""
+        INSERT INTO player_seasons ({col_str}, updated_at)
+        VALUES ({placeholder}, NOW())
+        ON CONFLICT (player_id, season, season_type, league) DO UPDATE SET
+            {update_str},
+            updated_at = NOW()
+    """
+
+    values = [tuple(r[c] for c in cols) for r in rows]
+    cur.executemany(sql, values)
+    conn.commit()
+    cur.close()
+    print(f"  ✅ Upserted {len(rows)} season rows")
+
+
+# ── Shot zones ────────────────────────────────────────────────
+def upsert_shot_zones(conn, df, season):
+    if df.empty:
+        return
+
+    # League averages per zone from the same dataset
+    zone_cols = {
+        'Restricted Area':       ('Restricted Area_FGM', 'Restricted Area_FGA', 'Restricted Area_FG_PCT'),
+        'In The Paint (Non-RA)': ('In The Paint (Non-RA)_FGM', 'In The Paint (Non-RA)_FGA', 'In The Paint (Non-RA)_FG_PCT'),
+        'Mid-Range':             ('Mid-Range_FGM', 'Mid-Range_FGA', 'Mid-Range_FG_PCT'),
+        'Left Corner 3':         ('Left Corner 3_FGM', 'Left Corner 3_FGA', 'Left Corner 3_FG_PCT'),
+        'Right Corner 3':        ('Right Corner 3_FGM', 'Right Corner 3_FGA', 'Right Corner 3_FG_PCT'),
+        'Above the Break 3':     ('Above the Break 3_FGM', 'Above the Break 3_FGA', 'Above the Break 3_FG_PCT'),
+    }
+
+    # Compute league averages
+    league_avg = {}
+    for zone, (fgm_col, fga_col, pct_col) in zone_cols.items():
+        if fga_col in df.columns and fgm_col in df.columns:
+            total_fga = df[fga_col].sum()
+            total_fgm = df[fgm_col].sum()
+            league_avg[zone] = total_fgm / total_fga if total_fga > 0 else 0.44
+
+    cur  = conn.cursor()
+    rows = []
+    for _, row in df.iterrows():
+        pid = safe_int(row.get('PLAYER_ID'))
+        if not pid:
+            continue
+        for zone, (fgm_col, fga_col, pct_col) in zone_cols.items():
+            fga = safe_int(row.get(fga_col))
+            fgm = safe_int(row.get(fgm_col))
+            pct = safe_float(row.get(pct_col))
+            if fga is not None:
+                rows.append((pid, season, zone, fga, fgm, pct,
+                             league_avg.get(zone), datetime.now()))
+
+    sql = """
+        INSERT INTO player_shot_zones
+            (player_id, season, zone, fga, fgm, fg_pct, league_fg_pct, updated_at)
+        VALUES %s
+        ON CONFLICT (player_id, season, zone) DO UPDATE SET
+            fga           = EXCLUDED.fga,
+            fgm           = EXCLUDED.fgm,
+            fg_pct        = EXCLUDED.fg_pct,
+            league_fg_pct = EXCLUDED.league_fg_pct,
+            updated_at    = NOW()
+    """
+    execute_values(cur, sql, rows)
+    conn.commit()
+    cur.close()
+    print(f"  ✅ Upserted {len(rows)} shot zone rows")
+
+
+# ── Main ──────────────────────────────────────────────────────
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--season',      default=SEASON)
+    parser.add_argument('--season-type', default=SEASON_TYPE)
+    args = parser.parse_args()
+
+    season      = args.season
+    season_type = args.season_type
+
+    print(f"\nThe Impact Board — Season Ingestion")
+    print(f"Season: {season} | Type: {season_type}")
+    print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+
+    # Fetch
+    data = fetch_all(season, season_type)
+
+    # Build rows
+    print(f"\nBuilding rows...")
+    player_rows, season_rows = build_player_rows(data, season, season_type)
+    print(f"  {len(player_rows)} players")
+    print(f"  {len(season_rows)} season rows")
+
+    # Deduplicate — players who changed teams appear multiple times
+    # Keep last entry (most recent team)
+    seen_players = {}
+    for r in player_rows:
+        seen_players[r['player_id']] = r
+    player_rows = list(seen_players.values())
+
+    seen_seasons = {}
+    for r in season_rows:
+        seen_seasons[r['player_id']] = r
+    season_rows = list(seen_seasons.values())
+
+    print(f"  {len(player_rows)} players (after dedup)")
+    print(f"  {len(season_rows)} season rows (after dedup)")
+
+    # Write to DB
+    print(f"\nWriting to database...")
+    conn = psycopg2.connect(DATABASE_URL)
+
+    upsert_players(conn, player_rows)
+    upsert_seasons(conn, season_rows)
+
+    if not data.get('shot_zones', pd.DataFrame()).empty:
+        upsert_shot_zones(conn, data['shot_zones'], season)
+
+    conn.close()
+
+    print(f"\n{'='*60}")
+    print(f"✅ Ingestion complete: {season} {season_type}")
+    print(f"   {len(player_rows)} players")
+    print(f"   {len(season_rows)} season rows")
+    print(f"Finished: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    print(f"{'='*60}\n")
+    print(f"Next step: python backend/ingest/compute_metrics.py")
+
+
+if __name__ == "__main__":
+    main()

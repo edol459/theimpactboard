@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Impact Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--bg4:#222;
+  --border:#1e1e1e;--border2:#2a2a2a;
+  --text:#e8e8e8;--text2:#999;--text3:#555;--text4:#333;
+  --accent:#f97316;--accent2:#ea580c;--accent-dim:rgba(249,115,22,0.1);
+  --green:#22c55e;--red:#ef4444;--blue:#60a5fa;
+  --fh:'Barlow Condensed',sans-serif;
+  --fb:'Barlow',sans-serif;
+  --fm:'DM Mono',monospace;
+  --r:3px;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--fb);font-size:14px;line-height:1.4;overflow:hidden}
+
+/* ── Layout ─────────────────────────────── */
+.app{display:grid;grid-template-rows:52px 48px 1fr;height:100vh;overflow:hidden}
+
+/* ── Header ─────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;border-bottom:1px solid var(--border);
+  background:var(--bg);position:relative;z-index:50;
+}
+.logo{font-family:var(--fh);font-size:20px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.logo em{color:var(--accent);font-style:normal}
+.hdr-right{display:flex;align-items:center;gap:12px}
+.season-pill{
+  font-family:var(--fm);font-size:10px;color:var(--accent);
+  border:1px solid rgba(249,115,22,.35);padding:3px 8px;border-radius:var(--r);
+  letter-spacing:.06em;
+}
+
+/* ── Controls ───────────────────────────── */
+.controls{
+  display:flex;align-items:center;gap:10px;padding:0 20px;
+  border-bottom:1px solid var(--border);background:var(--bg2);
+  overflow-x:auto;scrollbar-width:none;
+}
+.controls::-webkit-scrollbar{display:none}
+.ctrl-sep{width:1px;height:20px;background:var(--border2);flex-shrink:0}
+
+/* category tabs */
+.cat-tabs{display:flex;gap:2px;flex-shrink:0}
+.cat-tab{
+  font-family:var(--fm);font-size:10px;font-weight:500;letter-spacing:.05em;
+  text-transform:uppercase;padding:5px 10px;border:none;
+  background:transparent;color:var(--text3);cursor:pointer;
+  border-radius:var(--r);transition:all .12s;white-space:nowrap;
+}
+.cat-tab:hover{color:var(--text2);background:var(--bg3)}
+.cat-tab.active{background:var(--accent);color:#000}
+
+/* metric picker within category */
+.metric-picker{display:flex;gap:2px;flex-shrink:0}
+.metric-btn{
+  font-family:var(--fm);font-size:10px;letter-spacing:.04em;
+  padding:4px 9px;border:1px solid var(--border2);
+  border-radius:var(--r);background:transparent;color:var(--text3);
+  cursor:pointer;transition:all .12s;white-space:nowrap;
+}
+.metric-btn:hover{border-color:var(--text3);color:var(--text2)}
+.metric-btn.active{background:var(--bg3);border-color:var(--accent);color:var(--accent)}
+
+/* pos filter */
+.pos-btns{display:flex;gap:2px;flex-shrink:0}
+.pos-btn{
+  font-family:var(--fh);font-size:12px;font-weight:600;letter-spacing:.04em;
+  padding:4px 8px;border:1px solid var(--border2);border-radius:var(--r);
+  background:transparent;color:var(--text3);cursor:pointer;transition:all .12s;
+}
+.pos-btn:hover{border-color:var(--text3);color:var(--text2)}
+.pos-btn.active{background:var(--accent);border-color:var(--accent);color:#000}
+
+/* search */
+.search-wrap{position:relative;flex-shrink:0}
+.search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none}
+input[type=search]{
+  width:180px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text);font-family:var(--fb);
+  font-size:12px;padding:5px 8px 5px 28px;outline:none;transition:border-color .15s;
+}
+input[type=search]:focus{border-color:var(--accent)}
+input[type=search]::placeholder{color:var(--text3)}
+
+/* min min */
+.min-wrap{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.ctrl-lbl{font-family:var(--fm);font-size:9px;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+input[type=number]{
+  width:60px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--r);color:var(--text);font-family:var(--fm);
+  font-size:11px;padding:5px 6px;outline:none;text-align:center;
+}
+input[type=number]:focus{border-color:var(--accent)}
+
+.result-count{font-family:var(--fm);font-size:10px;color:var(--text3);margin-left:auto;flex-shrink:0}
+
+/* ── Table area ─────────────────────────── */
+.table-area{display:grid;grid-template-rows:1fr auto;overflow:hidden}
+.table-wrap{overflow:auto}
+
+table{width:100%;border-collapse:collapse;min-width:700px}
+
+thead th{
+  position:sticky;top:0;z-index:20;background:var(--bg2);
+  border-bottom:1px solid var(--border2);
+  padding:0 10px;height:32px;white-space:nowrap;
+}
+.th-btn{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--fm);font-size:9px;font-weight:500;
+  color:var(--text3);letter-spacing:.07em;text-transform:uppercase;
+  background:none;border:none;cursor:pointer;padding:0;
+  transition:color .12s;white-space:nowrap;
+}
+.th-btn:hover{color:var(--text2)}
+.th-btn.active{color:var(--accent)}
+.th-btn .arr{opacity:.4;font-size:8px}
+.th-btn.active .arr{opacity:1}
+
+tbody tr{
+  border-bottom:1px solid var(--border);cursor:pointer;
+  transition:background .08s;
+}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+tbody tr.selected{background:var(--accent-dim);border-left:2px solid var(--accent)}
+
+td{padding:0 10px;height:40px;white-space:nowrap;vertical-align:middle}
+
+/* column types */
+td.c-rank{width:36px;text-align:center}
+.rank-n{font-family:var(--fm);font-size:10px;color:var(--text3)}
+.rank-n.t3{color:var(--accent);font-weight:500}
+
+td.c-player{width:200px}
+.pcell{display:flex;align-items:center;gap:8px}
+.pimg{width:26px;height:26px;border-radius:50%;object-fit:cover;background:var(--bg3);border:1px solid var(--border2);flex-shrink:0}
+.pname{font-family:var(--fh);font-size:14px;font-weight:600;letter-spacing:.01em;transition:color .1s}
+tr:hover .pname{color:var(--accent)}
+
+td.c-tag{width:42px}
+.tag{font-family:var(--fm);font-size:9px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:1px 4px;border-radius:2px;letter-spacing:.04em}
+
+.num{font-family:var(--fm);font-size:11px;color:var(--text2);text-align:right;display:block}
+.num.hl{color:var(--text);font-weight:500}
+.num.pos{color:var(--green)}
+.num.neg{color:var(--red)}
+.num.acc{color:var(--accent)}
+
+/* Primary sort column — with inline bar */
+td.c-primary{min-width:120px}
+.prim-cell{display:flex;align-items:center;justify-content:flex-end;gap:7px}
+.prim-val{font-family:var(--fm);font-size:12px;font-weight:500;color:var(--text);min-width:40px;text-align:right}
+.bar{width:52px;height:2px;background:var(--bg4);border-radius:1px;overflow:hidden;flex-shrink:0}
+.bar-f{height:100%;background:var(--accent);border-radius:1px}
+
+/* ── Pagination ──────────────────────────── */
+.pg{
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:8px;border-top:1px solid var(--border);background:var(--bg);
+}
+.pg-btn{
+  font-family:var(--fm);font-size:10px;padding:4px 9px;
+  border:1px solid var(--border2);border-radius:var(--r);
+  background:transparent;color:var(--text2);cursor:pointer;transition:all .12s;
+}
+.pg-btn:hover:not(:disabled){border-color:var(--text3);color:var(--text)}
+.pg-btn.cur{background:var(--accent);border-color:var(--accent);color:#000}
+.pg-btn:disabled{opacity:.3;cursor:default}
+
+/* ── Skeletons ───────────────────────────── */
+.skel-row td{padding:0}
+.skel-inner{display:flex;align-items:center;padding:0 10px;gap:10px;height:40px}
+.sk{background:linear-gradient(90deg,var(--bg3) 25%,var(--bg2) 50%,var(--bg3) 75%);background-size:200%;animation:sh 1.4s infinite;border-radius:2px}
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.sk-c{width:26px;height:26px;border-radius:50%;flex-shrink:0}
+.sk-n{width:130px;height:12px}
+.sk-s{width:32px;height:10px}
+
+/* ── Drawer ──────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.on{opacity:1;pointer-events:all}
+.drawer{
+  position:fixed;right:0;top:0;bottom:0;width:400px;
+  background:var(--bg2);border-left:1px solid var(--border2);
+  z-index:101;transform:translateX(100%);
+  transition:transform .22s cubic-bezier(.4,0,.2,1);
+  overflow-y:auto;overflow-x:hidden;
+}
+.drawer.on{transform:translateX(0)}
+
+.d-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between}
+.d-name{font-family:var(--fh);font-size:24px;font-weight:700;letter-spacing:.01em}
+.d-sub{font-family:var(--fm);font-size:10px;color:var(--text3);margin-top:3px;letter-spacing:.04em}
+.d-close{background:var(--bg3);border:1px solid var(--border2);color:var(--text2);width:26px;height:26px;border-radius:var(--r);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .12s}
+.d-close:hover{border-color:var(--text3);color:var(--text)}
+
+.d-img-wrap{padding:14px 20px 0;display:flex;justify-content:center}
+.d-img{width:90px;height:68px;object-fit:cover;object-position:top;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg3)}
+
+.d-comps{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:14px 20px;border-bottom:1px solid var(--border)}
+.d-comp{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px}
+.d-comp.hi{border-color:var(--accent);background:var(--accent-dim)}
+.d-comp-lbl{font-family:var(--fm);font-size:8px;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
+.d-comp-val{font-family:var(--fh);font-size:24px;font-weight:700;color:var(--text);line-height:1}
+.d-comp.hi .d-comp-val{color:var(--accent)}
+.d-comp-bar{margin-top:5px;height:2px;background:var(--border2);border-radius:1px;overflow:hidden}
+.d-comp-fill{height:100%;background:var(--accent);border-radius:1px}
+
+.d-sec{padding:12px 20px;border-bottom:1px solid var(--border)}
+.d-sec-title{font-family:var(--fm);font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.d-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.d-stat-val{font-family:var(--fm);font-size:15px;font-weight:500;color:var(--text)}
+.d-stat-lbl{font-family:var(--fm);font-size:8px;color:var(--text3);letter-spacing:.05em;text-transform:uppercase;margin-top:2px}
+.d-rows{}
+.d-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)}
+.d-row:last-child{border-bottom:none}
+.d-row-lbl{font-size:11px;color:var(--text2)}
+.d-row-val{font-family:var(--fm);font-size:11px;font-weight:500;color:var(--text)}
+
+/* scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+@media(max-width:768px){.drawer{width:100vw}.controls{gap:8px;padding:0 12px}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div class="logo">The <em>Impact</em> Board</div>
+  <div class="hdr-right">
+    <span class="season-pill" id="season-badge">2024-25</span>
+  </div>
+</header>
+
+<div class="controls">
+  <!-- Category -->
+  <div class="cat-tabs" id="cat-tabs">
+    <button class="cat-tab active" data-cat="composites">Composites</button>
+    <button class="cat-tab" data-cat="scoring">Scoring</button>
+    <button class="cat-tab" data-cat="playmaking">Playmaking</button>
+    <button class="cat-tab" data-cat="defense">Defense</button>
+    <button class="cat-tab" data-cat="hustle">Hustle</button>
+    <button class="cat-tab" data-cat="advanced">Advanced</button>
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- Metric picker (changes per category) -->
+  <div class="metric-picker" id="metric-picker"></div>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- Position -->
+  <div class="pos-btns" id="pos-btns">
+    <button class="pos-btn active" data-pos="ALL">ALL</button>
+    <button class="pos-btn" data-pos="G">G</button>
+    <button class="pos-btn" data-pos="GF">G-F</button>
+    <button class="pos-btn" data-pos="F">F</button>
+    <button class="pos-btn" data-pos="FC">F-C</button>
+    <button class="pos-btn" data-pos="C">C</button>
+  </div>
+
+  <div class="ctrl-sep"></div>
+
+  <!-- Search -->
+  <div class="search-wrap">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="search" id="search" placeholder="Search…" autocomplete="off">
+  </div>
+
+  <!-- Min minutes -->
+  <div class="ctrl-sep"></div>
+  <div class="min-wrap">
+    <span class="ctrl-lbl">MIN</span>
+    <input type="number" id="min-min" value="1000" min="0" max="3000" step="100">
+  </div>
+
+  <span class="result-count" id="result-count"></span>
+</div>
+
+<div class="table-area">
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="thead-row"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="pg" id="pagination" style="display:none"></div>
+</div>
+</div>
+
+<!-- Drawer -->
+<div class="overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="d-head">
+    <div>
+      <div class="d-name" id="d-name">—</div>
+      <div class="d-sub" id="d-sub">—</div>
+    </div>
+    <button class="d-close" id="d-close">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="d-img-wrap"><img class="d-img" id="d-img" src="" alt=""></div>
+  <div class="d-comps" id="d-comps"></div>
+  <div class="d-sec"><div class="d-sec-title">Box Score</div><div class="d-grid" id="d-box"></div></div>
+  <div class="d-sec"><div class="d-sec-title">Advanced</div><div class="d-rows" id="d-adv"></div></div>
+  <div class="d-sec"><div class="d-sec-title">Playmaking</div><div class="d-rows" id="d-play"></div></div>
+  <div class="d-sec"><div class="d-sec-title">Defense</div><div class="d-rows" id="d-def"></div></div>
+  <div class="d-sec"><div class="d-sec-title">Hustle</div><div class="d-rows" id="d-hus"></div></div>
+</div>
+
+<script>
+const API = 'http://localhost:5000';
+
+// ── Category / metric definitions ─────────
+const CATEGORIES = {
+  composites: {
+    label: 'Composites',
+    metrics: [
+      {key:'playmaker_score', label:'Playmaker', fmt:'1f', src:'pm'},
+      {key:'creator_score',   label:'Creator',   fmt:'1f', src:'pm'},
+      {key:'defender_score',  label:'Defender',  fmt:'1f', src:'pm'},
+      {key:'three_and_d_score',label:'3-and-D',  fmt:'1f', src:'pm'},
+      {key:'hustle_score',    label:'Hustle',    fmt:'1f', src:'pm'},
+      {key:'bpm_computed',    label:'BPM',       fmt:'1f', src:'pm'},
+    ],
+    // columns shown in the table for this category
+    cols: [
+      {key:'pts',     label:'PTS',    fmt:'1f', src:'ps'},
+      {key:'ast',     label:'AST',    fmt:'1f', src:'ps'},
+      {key:'reb',     label:'REB',    fmt:'1f', src:'ps'},
+      {key:'net_rating', label:'NET', fmt:'1f', src:'ps'},
+      {key:'ts_pct',  label:'TS%',   fmt:'pct', src:'ps'},
+      {key:'usg_pct', label:'USG%',  fmt:'pct', src:'ps'},
+    ],
+  },
+  scoring: {
+    label: 'Scoring',
+    metrics: [
+      {key:'ts_pct',          label:'TS%',          fmt:'pct', src:'ps'},
+      {key:'efg_pct',         label:'EFG%',         fmt:'pct', src:'ps'},
+      {key:'pull_up_efg_pct', label:'Pull-Up EFG%', fmt:'pct', src:'ps'},
+      {key:'cs_efg_pct',      label:'C&S EFG%',     fmt:'pct', src:'ps'},
+      {key:'shot_quality_delta',label:'Shot Quality',fmt:'3f', src:'pm'},
+      {key:'paint_scoring_rate',label:'Paint Score', fmt:'2f', src:'pm'},
+      {key:'creation_premium',label:'Creation Δ',   fmt:'3f', src:'pm'},
+      {key:'ft_rate',         label:'FT Rate',      fmt:'2f', src:'pm'},
+      {key:'pts',             label:'PTS',          fmt:'1f', src:'ps'},
+      {key:'pct_pts_paint',   label:'% Paint PTS',  fmt:'pct', src:'ps'},
+      {key:'pct_pts_3pt',     label:'% 3PT PTS',    fmt:'pct', src:'ps'},
+      {key:'pct_pts_mid2',    label:'% Mid PTS',    fmt:'pct', src:'ps'},
+    ],
+    cols: [
+      {key:'pts',             label:'PTS',         fmt:'1f',  src:'ps'},
+      {key:'fga',             label:'FGA',         fmt:'1f',  src:'ps'},
+      {key:'fg_pct',          label:'FG%',         fmt:'pct', src:'ps'},
+      {key:'fg3_pct',         label:'3P%',         fmt:'pct', src:'ps'},
+      {key:'ft_pct',          label:'FT%',         fmt:'pct', src:'ps'},
+      {key:'ts_pct',          label:'TS%',         fmt:'pct', src:'ps'},
+      {key:'usg_pct',         label:'USG%',        fmt:'pct', src:'ps'},
+    ],
+  },
+  playmaking: {
+    label: 'Playmaking',
+    metrics: [
+      {key:'playmaker_score',    label:'Playmaker',   fmt:'1f',  src:'pm'},
+      {key:'ast_pct',            label:'AST%',        fmt:'pct', src:'ps'},
+      {key:'potential_ast_per75',label:'Pot AST/75',  fmt:'1f',  src:'pm'},
+      {key:'ast_conversion_rate',label:'AST Conv%',   fmt:'pct', src:'pm'},
+      {key:'pot_ast_per_tov',    label:'Pot AST/TOV', fmt:'2f',  src:'pm'},
+      {key:'pass_quality_index', label:'Pass Quality',fmt:'3f',  src:'pm'},
+      {key:'playmaking_gravity', label:'PM Gravity',  fmt:'2f',  src:'pm'},
+      {key:'pass_to_score_pct',  label:'Pass→Score%', fmt:'pct', src:'pm'},
+      {key:'secondary_ast_per75',label:'Sec AST/75',  fmt:'2f',  src:'pm'},
+      {key:'drive_and_dish_rate',label:'Drive&Dish%', fmt:'pct', src:'pm'},
+      {key:'iso_ppp',            label:'ISO PPP',     fmt:'2f',  src:'ps'},
+      {key:'pnr_bh_ppp',         label:'PnR BH PPP',  fmt:'2f',  src:'ps'},
+      {key:'transition_ppp',     label:'Trans PPP',   fmt:'2f',  src:'ps'},
+    ],
+    cols: [
+      {key:'ast',                label:'AST',        fmt:'1f',  src:'ps'},
+      {key:'ast_to',             label:'AST/TOV',    fmt:'2f',  src:'ps'},
+      {key:'ast_pct',            label:'AST%',       fmt:'pct', src:'ps'},
+      {key:'potential_ast_per75',label:'Pot AST/75', fmt:'1f',  src:'pm'},
+      {key:'pot_ast_per_tov',    label:'Pot/TOV',    fmt:'2f',  src:'pm'},
+      {key:'pass_quality_index', label:'Pass Q',     fmt:'3f',  src:'pm'},
+    ],
+  },
+  defense: {
+    label: 'Defense',
+    metrics: [
+      {key:'defender_score',    label:'Defender',     fmt:'1f',  src:'pm'},
+      {key:'def_delta_overall', label:'Def Delta',    fmt:'3f',  src:'pm'},
+      {key:'def_delta_2pt',     label:'Def Δ 2PT',    fmt:'3f',  src:'pm'},
+      {key:'def_delta_3pt',     label:'Def Δ 3PT',    fmt:'3f',  src:'pm'},
+      {key:'rim_protection_score',label:'Rim Prot',   fmt:'1f',  src:'pm'},
+      {key:'def_disruption_rate',label:'Disruption',  fmt:'2f',  src:'pm'},
+      {key:'box_out_rate',      label:'Box Out/75',   fmt:'2f',  src:'pm'},
+      {key:'dreb_pct',          label:'DREB%',        fmt:'pct', src:'ps'},
+      {key:'def_rating',        label:'DEF RTG',      fmt:'1f',  src:'ps'},
+      {key:'def_iso_ppp',       label:'Def ISO PPP',  fmt:'2f',  src:'ps'},
+      {key:'def_pnr_bh_ppp',    label:'Def PnR PPP',  fmt:'2f',  src:'ps'},
+    ],
+    cols: [
+      {key:'stl',              label:'STL',       fmt:'1f',  src:'ps'},
+      {key:'blk',              label:'BLK',       fmt:'1f',  src:'ps'},
+      {key:'dreb_pct',         label:'DREB%',     fmt:'pct', src:'ps'},
+      {key:'def_rating',       label:'DEF RTG',   fmt:'1f',  src:'ps'},
+      {key:'def_delta_overall',label:'Def Δ',     fmt:'3f',  src:'pm'},
+      {key:'rim_protection_score',label:'Rim Prot',fmt:'1f', src:'pm'},
+    ],
+  },
+  hustle: {
+    label: 'Hustle',
+    metrics: [
+      {key:'hustle_score',      label:'Hustle Score', fmt:'1f',  src:'pm'},
+      {key:'motor_score',       label:'Motor',        fmt:'2f',  src:'pm'},
+      {key:'hustle_composite',  label:'Hustle Comp',  fmt:'2f',  src:'pm'},
+      {key:'loose_ball_rate',   label:'Loose/75',     fmt:'2f',  src:'pm'},
+      {key:'screen_assist_rate',label:'Scr AST/75',   fmt:'2f',  src:'pm'},
+      {key:'box_out_rate',      label:'Box Out/75',   fmt:'2f',  src:'pm'},
+      {key:'def_disruption_rate',label:'Disruption',  fmt:'2f',  src:'pm'},
+    ],
+    cols: [
+      {key:'stl',              label:'STL',       fmt:'1f',  src:'ps'},
+      {key:'deflections',      label:'DEFL',      fmt:'1f',  src:'ps'},
+      {key:'charges_drawn',    label:'CHG',       fmt:'1f',  src:'ps'},
+      {key:'screen_assists',   label:'SCR AST',   fmt:'1f',  src:'ps'},
+      {key:'loose_balls',      label:'LOOSE',     fmt:'1f',  src:'ps'},
+      {key:'box_outs',         label:'BOX OUT',   fmt:'1f',  src:'ps'},
+    ],
+  },
+  advanced: {
+    label: 'Advanced',
+    metrics: [
+      {key:'net_rating',   label:'NET RTG',  fmt:'1f',  src:'ps'},
+      {key:'bpm_computed', label:'BPM',      fmt:'1f',  src:'pm'},
+      {key:'pie',          label:'PIE',      fmt:'pct', src:'ps'},
+      {key:'ts_pct',       label:'TS%',      fmt:'pct', src:'ps'},
+      {key:'usg_pct',      label:'USG%',     fmt:'pct', src:'ps'},
+      {key:'ast_pct',      label:'AST%',     fmt:'pct', src:'ps'},
+      {key:'on_off_diff',  label:'On/Off',   fmt:'1f',  src:'ps'},
+      {key:'clutch_net_rating',label:'Clutch NET',fmt:'1f',src:'ps'},
+    ],
+    cols: [
+      {key:'off_rating',  label:'OFF RTG',  fmt:'1f',  src:'ps'},
+      {key:'def_rating',  label:'DEF RTG',  fmt:'1f',  src:'ps'},
+      {key:'net_rating',  label:'NET RTG',  fmt:'1f',  src:'ps'},
+      {key:'ts_pct',      label:'TS%',      fmt:'pct', src:'ps'},
+      {key:'usg_pct',     label:'USG%',     fmt:'pct', src:'ps'},
+      {key:'pie',         label:'PIE',      fmt:'pct', src:'ps'},
+    ],
+  },
+};
+
+// ── State ─────────────────────────────────
+const ST = {
+  cat:    'composites',
+  sort:   'playmaker_score',
+  dir:    'desc',
+  pos:    'ALL',
+  search: '',
+  minMin: 1000,
+  page:   1,
+  per:    50,
+  data:   [],
+  total:  0,
+  maxVal: null,
+  season: '2024-25',
+};
+
+// ── Format ────────────────────────────────
+function fmt(val, f) {
+  if (val === null || val === undefined) return '—';
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  switch(f) {
+    case 'pct': return (n * 100).toFixed(1) + '%';
+    case '1f':  return n.toFixed(1);
+    case '2f':  return n.toFixed(2);
+    case '3f':  return n.toFixed(3);
+    default:    return n.toFixed(1);
+  }
+}
+
+function getVal(row, key) {
+  // row has both ps.* and pm.* fields merged at the API level
+  return row[key];
+}
+
+function getSortFmt() {
+  const cat  = CATEGORIES[ST.cat];
+  const m    = cat.metrics.find(m => m.key === ST.sort);
+  return m ? m.fmt : '1f';
+}
+
+function getSortLabel() {
+  const cat = CATEGORIES[ST.cat];
+  const m   = cat.metrics.find(m => m.key === ST.sort);
+  return m ? m.label.toUpperCase() : ST.sort.toUpperCase();
+}
+
+// ── Render metric picker ──────────────────
+function renderMetricPicker() {
+  const cat     = CATEGORIES[ST.cat];
+  const picker  = document.getElementById('metric-picker');
+  picker.innerHTML = cat.metrics.map(m =>
+    `<button class="metric-btn ${m.key === ST.sort ? 'active' : ''}" data-key="${m.key}">${m.label}</button>`
+  ).join('');
+}
+
+// ── Render table header ───────────────────
+function renderHeader() {
+  const cat  = CATEGORIES[ST.cat];
+  const row  = document.getElementById('thead-row');
+  const arr  = ST.dir === 'desc' ? '↓' : '↑';
+
+  let html = `
+    <th class="c-rank"><button class="th-btn">#</button></th>
+    <th class="c-player"><button class="th-btn">Player</button></th>
+    <th class="c-tag"><button class="th-btn">Pos</button></th>
+    <th class="c-tag"><button class="th-btn">Team</button></th>
+    <th><button class="th-btn sortable" data-k="min_per_game">MIN <span class="arr">${ST.sort==='min_per_game'?arr:''}</span></button></th>
+  `;
+
+  for (const col of cat.cols) {
+    const active = ST.sort === col.key;
+    html += `<th><button class="th-btn sortable ${active ? 'active' : ''}" data-k="${col.key}">${col.label} <span class="arr">${active ? arr : ''}</span></button></th>`;
+  }
+
+  const sortActive = true;
+  html += `<th style="min-width:130px"><button class="th-btn active" data-k="${ST.sort}">${getSortLabel()} <span class="arr">${arr}</span></button></th>`;
+
+  row.innerHTML = html;
+
+  row.querySelectorAll('.sortable, .th-btn[data-k]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.k;
+      if (!k) return;
+      if (ST.sort === k) {
+        ST.dir = ST.dir === 'desc' ? 'asc' : 'desc';
+      } else {
+        ST.sort = k;
+        ST.dir  = 'desc';
+        // Sync metric picker if this key is in current category
+        const cat = CATEGORIES[ST.cat];
+        const found = cat.metrics.find(m => m.key === k);
+        if (found) {
+          document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+          document.querySelector(`.metric-btn[data-key="${k}"]`)?.classList.add('active');
+        }
+      }
+      ST.page = 1;
+      fetchPlayers();
+    });
+  });
+}
+
+// ── Fetch ─────────────────────────────────
+async function fetchPlayers() {
+  const params = new URLSearchParams({
+    sort:     ST.sort,
+    dir:      ST.dir,
+    pos:      ST.pos,
+    season:   ST.season,
+    min:      ST.minMin,
+    page:     ST.page,
+    per_page: ST.per,
+  });
+  if (ST.search) params.set('search', ST.search);
+
+  showSkeletons();
+
+  try {
+    const res  = await fetch(`${API}/api/players?${params}`);
+    const data = await res.json();
+    ST.data  = data.players || [];
+    ST.total = data.total   || 0;
+
+    const vals = ST.data.map(p => parseFloat(p[ST.sort])).filter(v => !isNaN(v) && v !== null);
+    ST.maxVal  = vals.length ? Math.max(...vals) : 100;
+
+    renderHeader();
+    renderRows();
+    renderPagination();
+    document.getElementById('result-count').textContent = `${ST.total.toLocaleString()} players`;
+  } catch(e) {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="20" style="text-align:center;padding:40px;font-family:var(--fm);font-size:11px;color:var(--text3)">Failed to connect — is the server running at ${API}?</td></tr>`;
+  }
+}
+
+function showSkeletons() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = Array(8).fill(0).map(() =>
+    `<tr class="skel-row"><td colspan="20"><div class="skel-inner"><div class="sk sk-c"></div><div class="sk sk-n"></div><div class="sk sk-s" style="margin-left:auto"></div></div></td></tr>`
+  ).join('');
+}
+
+// ── Render rows ───────────────────────────
+function renderRows() {
+  const tbody  = document.getElementById('tbody');
+  const cat    = CATEGORIES[ST.cat];
+  const offset = (ST.page - 1) * ST.per;
+  const f      = getSortFmt();
+
+  if (!ST.data.length) {
+    tbody.innerHTML = `<tr><td colspan="20" style="text-align:center;padding:40px;font-family:var(--fm);font-size:11px;color:var(--text3)">No players match your filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = ST.data.map((p, i) => {
+    const rank    = offset + i + 1;
+    const val     = p[ST.sort];
+    const barPct  = (ST.maxVal && val != null) ? Math.min(100, (parseFloat(val) / ST.maxVal) * 100) : 0;
+    const net     = parseFloat(p.net_rating);
+    const netCls  = net > 3 ? 'pos' : net < -3 ? 'neg' : '';
+    const delay   = Math.min(i * 15, 250);
+
+    let extraCols = `<td><div class="num">${fmt(p.min_per_game, '1f')}</div></td>`;
+    for (const col of cat.cols) {
+      const v    = p[col.key];
+      const disp = fmt(v, col.fmt);
+      const cls  = col.key === 'net_rating' ? netCls : col.key === ST.sort ? 'acc' : '';
+      extraCols += `<td><div class="num ${cls}">${disp}</div></td>`;
+    }
+
+    return `<tr data-id="${p.player_id}" style="animation:sh .3s both;animation-delay:${delay}ms">
+      <td class="c-rank"><div class="rank-n ${rank<=3?'t3':''}">${rank}</div></td>
+      <td class="c-player">
+        <div class="pcell">
+          <img class="pimg" src="https://cdn.nba.com/headshots/nba/latest/1040x760/${p.player_id}.png" onerror="this.style.opacity=0" alt="">
+          <span class="pname">${p.player_name}</span>
+        </div>
+      </td>
+      <td class="c-tag"><span class="tag">${p.position_group || '—'}</span></td>
+      <td class="c-tag"><span class="tag" style="border-color:transparent;background:transparent;color:var(--text2)">${p.team_abbr || '—'}</span></td>
+      ${extraCols}
+      <td class="c-primary">
+        <div class="prim-cell">
+          <div class="bar"><div class="bar-f" style="width:${barPct.toFixed(1)}%"></div></div>
+          <div class="prim-val">${fmt(val, f)}</div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Row animation (reuse shimmer keyframe name workaround)
+  const style = document.createElement('style');
+  style.textContent = `@keyframes sh{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}`;
+  document.head.appendChild(style);
+
+  document.querySelectorAll('tr[data-id]').forEach(row => {
+    row.addEventListener('click', () => openDrawer(parseInt(row.dataset.id)));
+  });
+}
+
+// ── Pagination ────────────────────────────
+function renderPagination() {
+  const pages = Math.ceil(ST.total / ST.per);
+  const pg    = document.getElementById('pagination');
+  if (pages <= 1) { pg.style.display = 'none'; return; }
+  pg.style.display = 'flex';
+  const cur = ST.page;
+  let html = `<button class="pg-btn" ${cur===1?'disabled':''} onclick="gp(${cur-1})">←</button>`;
+  for (let p = 1; p <= pages; p++) {
+    if (p === 1 || p === pages || Math.abs(p - cur) <= 1) {
+      html += `<button class="pg-btn ${p===cur?'cur':''}" onclick="gp(${p})">${p}</button>`;
+    } else if (Math.abs(p - cur) === 2) {
+      html += `<span style="color:var(--text3);padding:0 3px;font-family:var(--fm);font-size:10px">…</span>`;
+    }
+  }
+  html += `<button class="pg-btn" ${cur===pages?'disabled':''} onclick="gp(${cur+1})">→</button>`;
+  pg.innerHTML = html;
+}
+function gp(p) { ST.page = p; fetchPlayers(); document.querySelector('.table-wrap').scrollTop = 0; }
+window.gp = gp;
+
+// ── Drawer ────────────────────────────────
+async function openDrawer(playerId) {
+  document.getElementById('overlay').classList.add('on');
+  document.getElementById('drawer').classList.add('on');
+  document.querySelectorAll('tr[data-id]').forEach(r => r.classList.remove('selected'));
+  document.querySelector(`tr[data-id="${playerId}"]`)?.classList.add('selected');
+
+  // Reset
+  document.getElementById('d-name').textContent = '…';
+  document.getElementById('d-comps').innerHTML = '';
+  document.getElementById('d-box').innerHTML = '';
+  document.getElementById('d-adv').innerHTML = '';
+  document.getElementById('d-play').innerHTML = '';
+  document.getElementById('d-def').innerHTML = '';
+  document.getElementById('d-hus').innerHTML = '';
+
+  try {
+    const res  = await fetch(`${API}/api/players/${playerId}?season=${ST.season}`);
+    const data = await res.json();
+    const s    = data.season_stats || {};
+    const m    = data.metrics      || {};
+
+    document.getElementById('d-name').textContent = s.player_name || '—';
+    document.getElementById('d-sub').textContent  =
+      [s.position, s.team_abbr, s.gp ? `${s.gp}G` : '', s.min_per_game ? `${Math.round(s.min_per_game)}MPG` : '']
+        .filter(Boolean).join(' · ');
+
+    const img = document.getElementById('d-img');
+    img.src     = `https://cdn.nba.com/headshots/nba/latest/1040x760/${playerId}.png`;
+    img.onerror = () => { img.style.display = 'none'; };
+    img.style.display = 'block';
+
+    // Composites
+    const comps = [
+      {key:'playmaker_score',    label:'Playmaker'},
+      {key:'creator_score',      label:'Creator'},
+      {key:'defender_score',     label:'Defender'},
+      {key:'three_and_d_score',  label:'3-and-D'},
+      {key:'hustle_score',       label:'Hustle'},
+    ];
+    const best = comps.reduce((b, c) => parseFloat(m[c.key]||0) > parseFloat(m[b.key]||0) ? c : b, comps[0]);
+    document.getElementById('d-comps').innerHTML = comps.map(c => {
+      const v   = m[c.key];
+      const pct = v ? Math.min(100, parseFloat(v)) : 0;
+      const hi  = c.key === best.key;
+      return `<div class="d-comp ${hi?'hi':''}">
+        <div class="d-comp-lbl">${c.label}</div>
+        <div class="d-comp-val">${v ? parseFloat(v).toFixed(1) : '—'}</div>
+        <div class="d-comp-bar"><div class="d-comp-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+
+    // Box score
+    document.getElementById('d-box').innerHTML = [
+      ['PTS', fmt(s.pts, '1f')], ['AST', fmt(s.ast, '1f')], ['REB', fmt(s.reb, '1f')],
+      ['STL', fmt(s.stl, '1f')], ['BLK', fmt(s.blk, '1f')], ['TOV', fmt(s.tov, '1f')],
+      ['FG%', fmt(s.fg_pct, 'pct')], ['3P%', fmt(s.fg3_pct, 'pct')], ['FT%', fmt(s.ft_pct, 'pct')],
+    ].map(([l,v]) => `<div><div class="d-stat-val">${v}</div><div class="d-stat-lbl">${l}</div></div>`).join('');
+
+    // Advanced
+    document.getElementById('d-adv').innerHTML = [
+      ['True Shooting %',   fmt(s.ts_pct, 'pct')],
+      ['EFG%',              fmt(s.efg_pct, 'pct')],
+      ['Usage %',           fmt(s.usg_pct, 'pct')],
+      ['Net Rating',        fmt(s.net_rating, '1f')],
+      ['On/Off Diff',       fmt(s.on_off_diff, '1f')],
+      ['BPM',               fmt(m.bpm_computed, '1f')],
+      ['PIE',               fmt(s.pie, 'pct')],
+      ['Clutch Net Rtg',    fmt(s.clutch_net_rating, '1f')],
+    ].map(dr).join('');
+
+    // Playmaking
+    document.getElementById('d-play').innerHTML = [
+      ['Potential AST/75',  fmt(m.potential_ast_per75, '1f')],
+      ['Pot AST / TOV',     fmt(m.pot_ast_per_tov, '2f')],
+      ['AST Conv %',        fmt(m.ast_conversion_rate, 'pct')],
+      ['Pass Quality',      fmt(m.pass_quality_index, '3f')],
+      ['PM Gravity',        fmt(m.playmaking_gravity, '2f')],
+      ['Pass→Score %',      fmt(m.pass_to_score_pct, 'pct')],
+      ['Drive & Dish %',    fmt(m.drive_and_dish_rate, 'pct')],
+      ['Sec AST/75',        fmt(m.secondary_ast_per75, '2f')],
+      ['ISO PPP',           fmt(s.iso_ppp, '2f')],
+      ['P&R BH PPP',        fmt(s.pnr_bh_ppp, '2f')],
+      ['Transition PPP',    fmt(s.transition_ppp, '2f')],
+    ].map(dr).join('');
+
+    // Defense
+    document.getElementById('d-def').innerHTML = [
+      ['Def Delta (overall)', fmt(m.def_delta_overall, '3f')],
+      ['Def Delta (2PT)',     fmt(m.def_delta_2pt, '3f')],
+      ['Def Delta (3PT)',     fmt(m.def_delta_3pt, '3f')],
+      ['Rim Protection',      fmt(m.rim_protection_score, '1f')],
+      ['Disruption/75',       fmt(m.def_disruption_rate, '2f')],
+      ['Box Out Rate/75',     fmt(m.box_out_rate, '2f')],
+      ['DREB%',               fmt(s.dreb_pct, 'pct')],
+      ['DEF Rating',          fmt(s.def_rating, '1f')],
+    ].map(dr).join('');
+
+    // Hustle
+    document.getElementById('d-hus').innerHTML = [
+      ['Hustle Composite/75', fmt(m.hustle_composite, '2f')],
+      ['Motor Score',         fmt(m.motor_score, '2f')],
+      ['Screen AST Pts/75',   fmt(m.screen_assist_rate, '2f')],
+      ['Loose Balls/75',      fmt(m.loose_ball_rate, '2f')],
+      ['Box Outs/75',         fmt(m.box_out_rate, '2f')],
+      ['Deflections',         fmt(s.deflections, '1f')],
+      ['Charges Drawn',       fmt(s.charges_drawn, '1f')],
+    ].map(dr).join('');
+
+  } catch(e) { console.error(e); }
+}
+
+function dr([label, val]) {
+  return `<div class="d-row"><span class="d-row-lbl">${label}</span><span class="d-row-val">${val}</span></div>`;
+}
+
+function closeDrawer() {
+  document.getElementById('overlay').classList.remove('on');
+  document.getElementById('drawer').classList.remove('on');
+  document.querySelectorAll('tr[data-id]').forEach(r => r.classList.remove('selected'));
+}
+
+// ── Events ────────────────────────────────
+document.getElementById('d-close').addEventListener('click', closeDrawer);
+document.getElementById('overlay').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+// Category tabs
+document.getElementById('cat-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.cat-tab');
+  if (!btn) return;
+  document.querySelectorAll('.cat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ST.cat  = btn.dataset.cat;
+  ST.sort = CATEGORIES[ST.cat].metrics[0].key;
+  ST.dir  = 'desc';
+  ST.page = 1;
+  renderMetricPicker();
+  fetchPlayers();
+});
+
+// Metric picker
+document.getElementById('metric-picker').addEventListener('click', e => {
+  const btn = e.target.closest('.metric-btn');
+  if (!btn) return;
+  document.querySelectorAll('.metric-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ST.sort = btn.dataset.key;
+  ST.dir  = 'desc';
+  ST.page = 1;
+  fetchPlayers();
+});
+
+// Position
+document.getElementById('pos-btns').addEventListener('click', e => {
+  const btn = e.target.closest('.pos-btn');
+  if (!btn) return;
+  document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ST.pos  = btn.dataset.pos;
+  ST.page = 1;
+  fetchPlayers();
+});
+
+// Search
+let st;
+document.getElementById('search').addEventListener('input', e => {
+  clearTimeout(st);
+  st = setTimeout(() => { ST.search = e.target.value.trim(); ST.page = 1; fetchPlayers(); }, 300);
+});
+
+// Min minutes
+let mt;
+document.getElementById('min-min').addEventListener('input', e => {
+  clearTimeout(mt);
+  mt = setTimeout(() => { ST.minMin = parseInt(e.target.value) || 0; ST.page = 1; fetchPlayers(); }, 400);
+});
+
+// ── Init ──────────────────────────────────
+renderMetricPicker();
+renderHeader();
+fetchPlayers();
+</script>
+</body>
+</html>

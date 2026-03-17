@@ -87,6 +87,11 @@ BASE_COLS = """
     ps.screen_ast_pts, ps.loose_balls, ps.box_outs,
     ps.contested_shots,
 
+    -- External metrics
+    ps.darko_dpm, ps.darko_odpm, ps.darko_ddpm, ps.darko_box,
+    ps.lebron, ps.o_lebron, ps.d_lebron, ps.war,
+    ps.net_pts100, ps.o_net_pts100, ps.d_net_pts100,
+
     -- Metrics (derived + composites)
     pm.ts_pct_computed,
     pm.ft_rate,
@@ -127,7 +132,36 @@ BASE_COLS = """
     pm.three_and_d_pctile,
     pm.hustle_pctile,
     pm.ts_pct_pctile,
-    pm.net_rating_pctile
+    pm.net_rating_pctile,
+    pm.finishing_score,
+    pm.shooting_score,
+    pm.creation_score,
+    pm.passing_score,
+    pm.ballhandling_score,
+    pm.perimeter_def_score,
+    pm.interior_def_score,
+    pm.activity_score,
+    pm.rebounding_score,
+    pm.paint_efg,
+    pm.paint_efg_delta,
+    pm.paint_fga_pg,
+    pm.paint_efg_vw,
+    pm.midrange_efg,
+    pm.midrange_efg_delta,
+    pm.midrange_fga_pg,
+    pm.midrange_efg_vw,
+    pm.corner3_efg,
+    pm.corner3_efg_delta,
+    pm.corner3_fga_pg,
+    pm.corner3_efg_vw,
+    pm.above_break3_efg,
+    pm.above_break3_efg_delta,
+    pm.above_break3_fga_pg,
+    pm.above_break3_efg_vw,
+    pm.all3_efg,
+    pm.all3_efg_delta,
+    pm.all3_fga_pg,
+    pm.all3_efg_vw
 """
 
 
@@ -145,6 +179,15 @@ def get_sort_col(sort_key):
         'creation_load', 'dribble_pressure_idx', 'cs_fga_rate', 'bpm_computed',
         'playmaker_score', 'creator_score', 'defender_score', 'three_and_d_score',
         'hustle_score',
+        'finishing_score', 'shooting_score', 'creation_score',
+        'passing_score', 'ballhandling_score',
+        'perimeter_def_score', 'interior_def_score',
+        'activity_score', 'rebounding_score',
+        'paint_efg', 'paint_efg_delta', 'paint_fga_pg', 'paint_efg_vw',
+        'midrange_efg', 'midrange_efg_delta', 'midrange_fga_pg', 'midrange_efg_vw',
+        'corner3_efg', 'corner3_efg_delta', 'corner3_fga_pg', 'corner3_efg_vw',
+        'above_break3_efg', 'above_break3_efg_delta', 'above_break3_fga_pg', 'above_break3_efg_vw',
+        'all3_efg', 'all3_efg_delta', 'all3_fga_pg', 'all3_efg_vw',
     }
     if sort_key in pm_cols:
         return f'pm.{sort_key}'
@@ -174,6 +217,14 @@ def get_players():
     per_page    = min(100, int(request.args.get('per_page', 50)))
     offset      = (page - 1) * per_page
 
+    # Sub-composite thresholds (adjustable via Filters drawer)
+    min_ast_pg      = float(request.args.get('min_ast_pg',      2.0))
+    min_touches_pg  = float(request.args.get('min_touches_pg',  40.0))
+    min_drives_pg   = float(request.args.get('min_drives_pg',   2.0))
+    min_paint_fga   = float(request.args.get('min_paint_fga',   2.0))
+    min_rim_fga     = float(request.args.get('min_rim_fga',     50.0))
+    min_3pt_fga     = float(request.args.get('min_3pt_fga',     1.5))
+
     sort_col  = get_sort_col(sort)
     direction = 'DESC' if sort_dir != 'asc' else 'ASC'
     nulls     = 'NULLS LAST' if direction == 'DESC' else 'NULLS FIRST'
@@ -190,12 +241,38 @@ def get_players():
 
     where_str = ' AND '.join(where)
 
+    # Dynamic sub-composite expressions — return NULL if player doesn't meet thresholds
+    # touches and drives are season totals in player_seasons, divide by gp for per-game
+    sub_expr = f"""
+        CASE WHEN pm.paint_fga_pg >= {min_paint_fga}
+             THEN pm.finishing_score    ELSE NULL END AS finishing_score,
+        pm.shooting_score,
+        CASE WHEN ps.drives / NULLIF(ps.gp, 0) >= {min_drives_pg}
+             THEN pm.creation_score     ELSE NULL END AS creation_score,
+        CASE WHEN ps.ast >= {min_ast_pg}
+             THEN pm.passing_score      ELSE NULL END AS passing_score,
+        CASE WHEN ps.touches / NULLIF(ps.gp, 0) >= {min_touches_pg}
+             AND p.position_group IN ('G','GF')
+             THEN pm.ballhandling_score ELSE NULL END AS ballhandling_score,
+        pm.perimeter_def_score,
+        CASE WHEN ps.def_rim_fga >= {min_rim_fga}
+             THEN pm.interior_def_score ELSE NULL END AS interior_def_score,
+        pm.activity_score,
+        pm.rebounding_score,
+        CASE WHEN pm.all3_fga_pg >= {min_3pt_fga}
+             THEN pm.all3_efg_vw        ELSE NULL END AS all3_efg_vw_gated,
+        CASE WHEN pm.corner3_fga_pg >= {min_3pt_fga} * 0.33
+             THEN pm.corner3_efg_vw     ELSE NULL END AS corner3_efg_vw_gated,
+        CASE WHEN pm.above_break3_fga_pg >= {min_3pt_fga}
+             THEN pm.above_break3_efg_vw ELSE NULL END AS above_break3_efg_vw_gated
+    """
+
     try:
         conn = get_conn()
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         cur.execute(f"""
-            SELECT {BASE_COLS}
+            SELECT {BASE_COLS}, {sub_expr}
             FROM player_seasons ps
             JOIN players p ON ps.player_id = p.player_id
             LEFT JOIN player_metrics pm
@@ -207,7 +284,16 @@ def get_players():
             LIMIT %s OFFSET %s
         """, params + [per_page, offset])
 
-        rows = [clean_row(r) for r in cur.fetchall()]
+        rows = cur.fetchall()
+
+        # Merge gated zone values back over stored ones so table shows gated values
+        merged = []
+        for r in rows:
+            d = dict(r)
+            if 'all3_efg_vw_gated'        in d: d['all3_efg_vw']        = d.pop('all3_efg_vw_gated')
+            if 'corner3_efg_vw_gated'     in d: d['corner3_efg_vw']     = d.pop('corner3_efg_vw_gated')
+            if 'above_break3_efg_vw_gated'in d: d['above_break3_efg_vw']= d.pop('above_break3_efg_vw_gated')
+            merged.append(clean_row(d))
 
         cur.execute(f"""
             SELECT COUNT(*) FROM player_seasons ps
@@ -224,7 +310,7 @@ def get_players():
         conn.close()
 
         return jsonify({
-            'players':  rows,
+            'players':  merged,
             'total':    total,
             'page':     page,
             'per_page': per_page,

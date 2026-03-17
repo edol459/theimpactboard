@@ -1,16 +1,21 @@
 """
 Fix player positions using CommonPlayerInfo
-python backend/ingest/fix_positions.py
+python backend/ingest/fix_positions.py [--season 2025-26]
 
 Takes ~15 min for full run. Safe to interrupt and re-run.
 """
-import os, time
+import os, sys, time, argparse
 from dotenv import load_dotenv
 import psycopg2
 import psycopg2.extras
 
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--season', default=os.getenv('NBA_SEASON', '2024-25'))
+args   = parser.parse_args()
+SEASON = args.season
 
 def try_import(name):
     try:
@@ -65,10 +70,10 @@ conn.commit()
 print(f"  ✅ Re-normalized {fixed} position groups")
 
 # ── Step 1: PlayerIndex for current roster players ────────────
-print("Step 1: PlayerIndex for current players...")
+print(f"Step 1: PlayerIndex for current players ({SEASON})...")
 try:
     time.sleep(DELAY)
-    df = PlayerIndex(league_id="00", season="2024-25").get_data_frames()[0]
+    df = PlayerIndex(league_id="00", season=SEASON).get_data_frames()[0]
     updated = 0
     for _, row in df.iterrows():
         pid = int(row['PERSON_ID'])

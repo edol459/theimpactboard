@@ -789,42 +789,77 @@ def upsert_seasons(conn, rows):
 
 
 # ── Shot zones ────────────────────────────────────────────────
+# Replace the upsert_shot_zones function in fetch_season.py with this:
+
 def upsert_shot_zones(conn, df, season):
     if df.empty:
         return
 
-    # League averages per zone from the same dataset
-    zone_cols = {
-        'Restricted Area':       ('Restricted Area_FGM', 'Restricted Area_FGA', 'Restricted Area_FG_PCT'),
-        'In The Paint (Non-RA)': ('In The Paint (Non-RA)_FGM', 'In The Paint (Non-RA)_FGA', 'In The Paint (Non-RA)_FG_PCT'),
-        'Mid-Range':             ('Mid-Range_FGM', 'Mid-Range_FGA', 'Mid-Range_FG_PCT'),
-        'Left Corner 3':         ('Left Corner 3_FGM', 'Left Corner 3_FGA', 'Left Corner 3_FG_PCT'),
-        'Right Corner 3':        ('Right Corner 3_FGM', 'Right Corner 3_FGA', 'Right Corner 3_FG_PCT'),
-        'Above the Break 3':     ('Above the Break 3_FGM', 'Above the Break 3_FGA', 'Above the Break 3_FG_PCT'),
-    }
+    ZONES = [
+        'Restricted Area',
+        'In The Paint (Non-RA)',
+        'Mid-Range',
+        'Corner 3',
+        'Above the Break 3',
+        'Left Corner 3',
+        'Right Corner 3',
+    ]
 
-    # Compute league averages
+    import math
+    from psycopg2.extras import execute_values
+    from datetime import datetime
+
+    def safe_float(val):
+        try:
+            v = float(val)
+            return None if math.isnan(v) else v
+        except:
+            return None
+
+    # League averages per zone
     league_avg = {}
-    for zone, (fgm_col, fga_col, pct_col) in zone_cols.items():
-        if fga_col in df.columns and fgm_col in df.columns:
-            total_fga = df[fga_col].sum()
-            total_fgm = df[fgm_col].sum()
-            league_avg[zone] = total_fgm / total_fga if total_fga > 0 else 0.44
+    for zone in ZONES:
+        try:
+            total_fga = df[(zone, 'FGA')].sum()
+            total_fgm = df[(zone, 'FGM')].sum()
+            league_avg[zone] = float(total_fgm / total_fga) if total_fga > 0 else 0.0
+        except KeyError:
+            league_avg[zone] = 0.0
 
-    cur  = conn.cursor()
     rows = []
     for _, row in df.iterrows():
-        pid = safe_int(row.get('PLAYER_ID'))
+        # Get player ID from MultiIndex df
+        pid = None
+        try:
+            pid = int(float(row[('', 'PLAYER_ID')]))
+        except:
+            try:
+                pid = int(float(row.iloc[0]))
+            except:
+                continue
         if not pid:
             continue
-        for zone, (fgm_col, fga_col, pct_col) in zone_cols.items():
-            fga = safe_int(row.get(fga_col))
-            fgm = safe_int(row.get(fgm_col))
-            pct = safe_float(row.get(pct_col))
-            if fga is not None:
-                rows.append((pid, season, zone, fga, fgm, pct,
-                             league_avg.get(zone), datetime.now()))
 
+        for zone in ZONES:
+            try:
+                fga = safe_float(row[(zone, 'FGA')]) or 0
+                fgm = safe_float(row[(zone, 'FGM')]) or 0
+                pct = safe_float(row[(zone, 'FG_PCT')])
+            except KeyError:
+                continue
+
+            rows.append((
+                pid, season, zone,
+                int(fga), int(fgm), pct,
+                league_avg.get(zone),
+                datetime.now(),
+            ))
+
+    if not rows:
+        print(f"  ⚠️  No shot zone rows built")
+        return
+
+    cur = conn.cursor()
     sql = """
         INSERT INTO player_shot_zones
             (player_id, season, zone, fga, fgm, fg_pct, league_fg_pct, updated_at)

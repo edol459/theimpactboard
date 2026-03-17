@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import json
+import argparse
 from datetime import datetime
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -23,10 +24,19 @@ import psycopg2.extras
 load_dotenv()
 
 DATABASE_URL = os.getenv('DATABASE_URL')
-SEASON       = os.getenv('NBA_SEASON',      '2024-25')
-SEASON_TYPE  = os.getenv('NBA_SEASON_TYPE', 'Regular Season')
-DELAY        = 1.8
-PROGRESS_FILE = 'bad_pass_progress.json'
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--season',      default=os.getenv('NBA_SEASON', '2024-25'))
+parser.add_argument('--season-type', default=os.getenv('NBA_SEASON_TYPE', 'Regular Season'))
+args = parser.parse_args()
+
+SEASON      = args.season
+SEASON_TYPE = args.season_type
+
+# Progress file is per-season so 2024-25 and 2025-26 don't collide
+season_slug   = SEASON.replace('-', '_')
+PROGRESS_FILE = f'bad_pass_progress_{season_slug}.json'
+DELAY         = 1.8
 
 if not DATABASE_URL:
     print("❌ DATABASE_URL not set.")
@@ -75,7 +85,8 @@ def process_game(game_id):
     """
     time.sleep(DELAY)
     try:
-        pbp = PlayByPlayV3(game_id=game_id).get_data_frames()[0]
+        from nba_api.stats.endpoints import PlayByPlayV3 as PBP
+        pbp = PBP(game_id=game_id, timeout=10).get_data_frames()[0]
 
         # Filter to bad pass turnovers
         mask = (

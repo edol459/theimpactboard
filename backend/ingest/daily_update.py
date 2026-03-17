@@ -83,7 +83,22 @@ def main():
         (
             os.path.join(base, 'fetch_new_pbp_stats.py'),
             'Incremental PBP stats',
-            []
+            ['--season', season, '--season-type', season_type]
+        ),
+        (
+            os.path.join(base, 'fetch_darko.py'),
+            'DARKO DPM fetch',
+            ['--season', season, '--season-type', season_type]
+        ),
+        (
+            os.path.join(base, 'fetch_lebron.py'),
+            'LEBRON fetch',
+            ['--season', season, '--season-type', season_type]
+        ),
+        (
+            os.path.join(base, 'fetch_net_pts.py'),
+            'Net Points fetch',
+            ['--season', season, '--season-type', season_type]
         ),
         (
             os.path.join(base, 'compute_metrics.py'),

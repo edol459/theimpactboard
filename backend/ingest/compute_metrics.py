@@ -197,6 +197,12 @@ def compute_player_metrics(p):
     # Captures on-ball creators who make plays for teammates out of penetration
     drive_ast_per75     = drive_ast_pg * per75 if drive_ast_pg > 0 and drive_pg >= 2.0 else None
 
+    # Drive passes per 75 — passes made out of drives, pace-adjusted
+    # Best available proxy for "potential assists from drives" since the NBA API
+    # does not break out potential AST by play type. Every drive pass is a potential
+    # assist attempt; high values = player consistently finds teammates off penetration
+    drive_passes_per75  = drive_passes_pg * per75 if drive_passes_pg > 0 and drive_pg >= 2.0 else None
+
     bad_pass_total = safe(p.get('bad_pass_tov'))
     # Gate pot_ast_per_tov: require >= 3.0 potential AST/g to prevent near-zero
     # denominator outliers (low-volume passers with 0 bad pass TOVs)
@@ -350,6 +356,7 @@ def compute_player_metrics(p):
         'pot_ast_per_tov':      r(pot_ast_per_tov, 3),
         'pass_quality_index':   r(pass_quality_index, 4),
         'drive_ast_per75':      r(drive_ast_per75, 3),
+        'drive_passes_per75':   r(drive_passes_per75, 3),
 
         # Defense
         'def_delta_overall':    r(def_delta_overall),
@@ -435,6 +442,7 @@ def compute_composites(metrics_list, seasons_map):
         ('ast_pts_created_pg',  'm'),
         ('ft_ast_per75',        'm'),
         ('drive_ast_per75',     'm'),
+        ('drive_passes_per75',  'm'),
         # Ball handling (league-wide)
         ('playmaking_gravity',    'm'),
         ('ball_handler_load',     'm'),
@@ -645,11 +653,12 @@ def compute_composites(metrics_list, seasons_map):
         # Added:   ft_ast_per75 (captures post/PnR passers whose value shows up
         #          at the free-throw line rather than in direct assists)
         ('passing_score', 'passing',
-         [('pot_ast_per_tov',    'm'),
-          ('pass_quality_index', 'm'),
-          ('secondary_ast_per75','m'),
-          ('ft_ast_per75',       'm'),
-          ('drive_ast_per75',    'm')],
+         [('pot_ast_per_tov',     'm'),
+          ('pass_quality_index',  'm'),
+          ('secondary_ast_per75', 'm'),
+          ('ft_ast_per75',        'm'),
+          ('drive_ast_per75',     'm'),
+          ('drive_passes_per75',  'm')],
          'lg'),
 
         # BALL HANDLING — league-wide, G/GF + touches + drives gate

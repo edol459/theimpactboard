@@ -110,6 +110,7 @@ BASE_COLS = """
     pm.productive_drive_rate,
     pm.ft_ast_per75,
     pm.drive_ast_per75,
+    pm.drive_passes_per75,
     pm.def_delta_overall,
     pm.def_delta_2pt,
     pm.def_delta_3pt,
@@ -176,7 +177,7 @@ def get_sort_col(sort_key):
         'playmaking_gravity', 'secondary_ast_per75', 'pass_to_score_pct',
         'ball_handler_load', 'drive_and_dish_rate', 'pot_ast_per_tov',
         'drive_foul_rate', 'drive_pts_per_drive',
-        'productive_drive_rate', 'ft_ast_per75', 'drive_ast_per75',
+        'productive_drive_rate', 'ft_ast_per75', 'drive_ast_per75', 'drive_passes_per75',
         'pass_quality_index', 'def_delta_overall', 'def_delta_2pt', 'def_delta_3pt',
         'rim_protection_score', 'def_disruption_rate', 'box_out_rate',
         'screen_assist_rate', 'loose_ball_rate', 'hustle_composite', 'motor_score',
@@ -219,7 +220,8 @@ def migrate():
             ALTER TABLE player_metrics
               ADD COLUMN IF NOT EXISTS productive_drive_rate NUMERIC,
               ADD COLUMN IF NOT EXISTS ft_ast_per75          NUMERIC,
-              ADD COLUMN IF NOT EXISTS drive_ast_per75       NUMERIC
+              ADD COLUMN IF NOT EXISTS drive_ast_per75       NUMERIC,
+              ADD COLUMN IF NOT EXISTS drive_passes_per75    NUMERIC
         """)
         conn.commit()
         cur.close()

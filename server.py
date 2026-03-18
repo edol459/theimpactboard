@@ -109,6 +109,7 @@ BASE_COLS = """
     pm.pass_quality_index,
     pm.productive_drive_rate,
     pm.ft_ast_per75,
+    pm.drive_ast_per75,
     pm.def_delta_overall,
     pm.def_delta_2pt,
     pm.def_delta_3pt,
@@ -175,7 +176,7 @@ def get_sort_col(sort_key):
         'playmaking_gravity', 'secondary_ast_per75', 'pass_to_score_pct',
         'ball_handler_load', 'drive_and_dish_rate', 'pot_ast_per_tov',
         'drive_foul_rate', 'drive_pts_per_drive',
-        'productive_drive_rate', 'ft_ast_per75',
+        'productive_drive_rate', 'ft_ast_per75', 'drive_ast_per75',
         'pass_quality_index', 'def_delta_overall', 'def_delta_2pt', 'def_delta_3pt',
         'rim_protection_score', 'def_disruption_rate', 'box_out_rate',
         'screen_assist_rate', 'loose_ball_rate', 'hustle_composite', 'motor_score',
@@ -206,6 +207,28 @@ def index():
 def health():
     return jsonify({'status': 'ok', 'season': DEFAULT_SEASON})
 
+
+@app.route('/api/migrate')
+def migrate():
+    """One-time migration — adds new columns to player_metrics.
+    Hit this once in the browser, then remove this route."""
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            ALTER TABLE player_metrics
+              ADD COLUMN IF NOT EXISTS productive_drive_rate NUMERIC,
+              ADD COLUMN IF NOT EXISTS ft_ast_per75          NUMERIC,
+              ADD COLUMN IF NOT EXISTS drive_ast_per75       NUMERIC
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'ok', 'message': 'Columns added. Remove this route now.'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/api/players')
 def get_players():
     sort        = request.args.get('sort', 'playmaker_score')
@@ -223,9 +246,11 @@ def get_players():
     min_ast_pg      = float(request.args.get('min_ast_pg',      2.0))
     min_touches_pg  = float(request.args.get('min_touches_pg',  40.0))
     min_drives_pg   = float(request.args.get('min_drives_pg',   2.0))
-    min_paint_fga   = float(request.args.get('min_paint_fga',   2.0))
+    # min_paint_fga removed — finishing_score gating is handled in compute_metrics.py
     min_rim_fga     = float(request.args.get('min_rim_fga',     50.0))
     min_3pt_fga     = float(request.args.get('min_3pt_fga',     1.5))
+    # Ball handling gate drives threshold — matches compute_metrics.py ballhandling gate
+    min_bh_drives_pg = 4.0
 
     sort_col  = get_sort_col(sort)
     direction = 'DESC' if sort_dir != 'asc' else 'ASC'
@@ -246,14 +271,14 @@ def get_players():
     # Dynamic sub-composite expressions — return NULL if player doesn't meet thresholds
     # touches and drives are season totals in player_seasons, divide by gp for per-game
     sub_expr = f"""
-        CASE WHEN pm.paint_fga_pg >= {min_paint_fga}
-             THEN pm.finishing_score    ELSE NULL END AS finishing_score,
+        pm.finishing_score,
         pm.shooting_score,
         CASE WHEN ps.drives / NULLIF(ps.gp, 0) >= {min_drives_pg}
              THEN pm.creation_score     ELSE NULL END AS creation_score,
         CASE WHEN ps.ast >= {min_ast_pg}
              THEN pm.passing_score      ELSE NULL END AS passing_score,
         CASE WHEN ps.touches / NULLIF(ps.gp, 0) >= {min_touches_pg}
+             AND ps.drives  / NULLIF(ps.gp, 0) >= {min_bh_drives_pg}
              AND p.position_group IN ('G','GF')
              THEN pm.ballhandling_score ELSE NULL END AS ballhandling_score,
         pm.perimeter_def_score,

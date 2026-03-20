@@ -49,14 +49,38 @@ migrations = [
     ("player_metrics", "tov_pct",             "REAL"),  # tov / (fga + 0.44*fta + tov)
     ("player_metrics", "ast_pts_created_pg",  "REAL"),  # ast_pts_created / gp
     ("player_metrics", "drive_pts_per_drive", "REAL"),  # drive_pts / drives
-    # ── playmaking refactor additions ───────────────────────────────────────
-    ("player_metrics", "ft_ast_per75",        "REAL"),  # ft assists per 75 poss
-    ("player_metrics", "drive_ast_per75",     "REAL"),  # drive assists per 75 poss
-    ("player_metrics", "drive_passes_per75",  "REAL"),  # drive passes per 75 poss (proxy for pot ast from drives)
-    ("player_metrics", "lost_ball_tov_pg",    "REAL"),  # live-ball turnovers per game (inverted in BH composite)
-    # ── turnover type columns (player_seasons) ───────────────────────────────
-    ("player_seasons", "bad_pass_tov",        "REAL"),  # bad-pass turnovers (season total) — fixes pot_ast_per_tov
-    ("player_seasons", "lost_ball_tov",       "REAL"),  # lost-ball turnovers (season total) — dribbling/handling TOVs
+    # ── playmaking redesign additions ───────────────────────────────────────
+    ("player_metrics", "ft_ast_per75",          "REAL"),
+    ("player_metrics", "drive_ast_per75",        "REAL"),
+    ("player_metrics", "drive_passes_per75",     "REAL"),
+    ("player_metrics", "lost_ball_tov_pg",       "REAL"),
+    ("player_metrics", "bad_pass_tov_pg",        "REAL"),
+    ("player_metrics", "shot_creation_score",    "REAL"),
+    ("player_metrics", "decision_making_score",  "REAL"),
+    # ── NBA endpoint data (player_seasons) ──────────────────────────────────
+    ("player_seasons",  "gravity_score",              "REAL"),
+    ("player_seasons",  "gravity_onball_perimeter",   "REAL"),
+    ("player_seasons",  "gravity_offball_perimeter",  "REAL"),
+    ("player_seasons",  "gravity_onball_interior",    "REAL"),
+    ("player_seasons",  "gravity_offball_interior",   "REAL"),
+    ("player_seasons",  "leverage_full",              "REAL"),
+    ("player_seasons",  "leverage_offense",           "REAL"),
+    ("player_seasons",  "leverage_defense",           "REAL"),
+    ("player_seasons",  "leverage_shooting",          "REAL"),
+    ("player_seasons",  "leverage_creation",          "REAL"),
+    ("player_seasons",  "leverage_turnovers",         "REAL"),
+    ("player_seasons",  "leverage_rebounds",          "REAL"),
+    ("player_seasons",  "leverage_onball_def",        "REAL"),
+    ("player_seasons",  "sq_avg_shot_quality",        "REAL"),
+    ("player_seasons",  "sq_fg_pct_above_expected",   "REAL"),
+    ("player_seasons",  "sq_avg_defender_distance",   "REAL"),
+    ("player_seasons",  "sq_avg_defender_pressure",   "REAL"),
+    ("player_seasons",  "sq_avg_shooter_speed",       "REAL"),
+    ("player_seasons",  "sq_avg_made_quality",        "REAL"),
+    ("player_seasons",  "sq_avg_missed_quality",      "REAL"),
+    # ── turnover type columns ────────────────────────────────────────────────
+    ("player_seasons",  "bad_pass_tov",               "REAL"),
+    ("player_seasons",  "lost_ball_tov",               "REAL"),
 ]
 
 print(f"\nRunning migrations...")

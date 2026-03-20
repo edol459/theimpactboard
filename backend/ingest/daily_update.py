@@ -86,6 +86,11 @@ def main():
             ['--season', season, '--season-type', season_type]
         ),
         (
+            os.path.join(base, 'fetch_nba_stats.py'),
+            'NBA Stats (gravity, shot quality, leverage)',
+            ['--season', season, '--season-type', season_type]
+        ),
+        (
             os.path.join(base, 'fetch_darko.py'),
             'DARKO DPM fetch',
             ['--season', season, '--season-type', season_type]

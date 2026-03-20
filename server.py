@@ -111,6 +111,7 @@ BASE_COLS = """
     pm.drive_ast_per75,
     pm.drive_passes_per75,
     pm.lost_ball_tov_pg,
+    pm.bad_pass_tov_pg,
     pm.def_delta_overall,
     pm.def_delta_2pt,
     pm.def_delta_3pt,
@@ -138,13 +139,21 @@ BASE_COLS = """
     pm.ts_pct_pctile,
     pm.net_rating_pctile,
     pm.shooting_score,
-    pm.creation_score,
+    pm.shot_creation_score,
     pm.passing_score,
-    pm.ballhandling_score,
+    pm.creation_score,
+    pm.decision_making_score,
     pm.perimeter_def_score,
     pm.interior_def_score,
     pm.activity_score,
     pm.rebounding_score,
+    ps.gravity_score,
+    ps.gravity_onball_perimeter,
+    ps.gravity_offball_perimeter,
+    ps.leverage_creation,
+    ps.leverage_full,
+    ps.sq_avg_shot_quality,
+    ps.sq_fg_pct_above_expected,
     pm.paint_efg,
     pm.paint_efg_delta,
     pm.paint_fga_pg,
@@ -170,22 +179,22 @@ BASE_COLS = """
 
 def get_sort_col(sort_key):
     """Map a sort key to a SQL column expression."""
-    # pm.* columns
     pm_cols = {
         'ts_pct_computed', 'ft_rate', 'shot_quality_delta', 'creation_premium',
         'paint_scoring_rate', 'potential_ast_per75', 'ast_conversion_rate',
         'playmaking_gravity', 'secondary_ast_per75', 'pass_to_score_pct',
         'ball_handler_load', 'drive_and_dish_rate', 'pot_ast_per_tov',
         'drive_foul_rate', 'drive_pts_per_drive',
-        'ft_ast_per75', 'drive_ast_per75', 'drive_passes_per75', 'lost_ball_tov_pg',
+        'ft_ast_per75', 'drive_ast_per75', 'drive_passes_per75',
+        'lost_ball_tov_pg', 'bad_pass_tov_pg',
         'pass_quality_index', 'def_delta_overall', 'def_delta_2pt', 'def_delta_3pt',
         'rim_protection_score', 'def_disruption_rate', 'box_out_rate',
         'screen_assist_rate', 'loose_ball_rate', 'hustle_composite', 'motor_score',
         'creation_load', 'dribble_pressure_idx', 'cs_fga_rate', 'bpm_computed',
         'playmaker_score', 'creator_score', 'defender_score', 'three_and_d_score',
         'hustle_score',
-        'finishing_score', 'shooting_score', 'creation_score',
-        'passing_score', 'ballhandling_score',
+        'finishing_score', 'shooting_score', 'shot_creation_score',
+        'passing_score', 'creation_score', 'decision_making_score',
         'perimeter_def_score', 'interior_def_score',
         'activity_score', 'rebounding_score',
         'paint_efg', 'paint_efg_delta', 'paint_fga_pg', 'paint_efg_vw',
@@ -194,8 +203,15 @@ def get_sort_col(sort_key):
         'above_break3_efg', 'above_break3_efg_delta', 'above_break3_fga_pg', 'above_break3_efg_vw',
         'all3_efg', 'all3_efg_delta', 'all3_fga_pg', 'all3_efg_vw',
     }
+    ps_cols = {
+        'gravity_score', 'gravity_onball_perimeter', 'gravity_offball_perimeter',
+        'leverage_creation', 'leverage_full',
+        'sq_avg_shot_quality', 'sq_fg_pct_above_expected',
+    }
     if sort_key in pm_cols:
         return f'pm.{sort_key}'
+    if sort_key in ps_cols:
+        return f'ps.{sort_key}'
     return f'ps.{sort_key}'
 
 
@@ -212,95 +228,62 @@ def health():
     return jsonify({'status': 'ok', 'season': DEFAULT_SEASON})
 
 
-@app.route('/api/migrate')
-def migrate():
-    """One-time migration — adds new columns to player_metrics.
-    Hit once in browser, then remove this route."""
-    try:
-        conn = get_conn()
-        cur  = conn.cursor()
-        cur.execute("""
-            ALTER TABLE player_metrics
-              ADD COLUMN IF NOT EXISTS ft_ast_per75        NUMERIC,
-              ADD COLUMN IF NOT EXISTS drive_ast_per75     NUMERIC,
-              ADD COLUMN IF NOT EXISTS drive_passes_per75  NUMERIC,
-              ADD COLUMN IF NOT EXISTS lost_ball_tov_pg    NUMERIC
-        """)
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'status': 'ok', 'message': 'Columns added. Remove this route now.'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@app.route('/api/diag/bh')
-def diag_bh():
-    """Diagnostic — show ball handling gate values for top scorers."""
+@app.route('/api/diag/dm')
+def diag_dm():
+    """Diagnostic — decision making top players with raw values."""
     try:
         conn = get_conn()
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT p.player_name, p.position_group,
-                   ps.gp, ps.min_per_game,
-                   ps.touches, ps.drives,
-                   ps.time_of_poss,
-                   ps.touches  / NULLIF(ps.gp, 0)           AS touches_pg,
-                   ps.drives   / NULLIF(ps.gp, 0)           AS drives_pg,
-                   ps.time_of_poss / NULLIF(ps.min_per_game, 0) AS bh_load,
-                   pm.ballhandling_score,
-                   pm.playmaking_gravity,
-                   pm.lost_ball_tov_pg
+                   ps.gp, ps.ast, ps.touches, ps.drives,
+                   ps.touches / NULLIF(ps.gp, 0)      AS touches_pg,
+                   ps.drives  / NULLIF(ps.gp, 0)      AS drives_pg,
+                   ps.potential_ast / NULLIF(ps.gp,0) AS pot_ast_pg,
+                   ps.bad_pass_tov, ps.lost_ball_tov,
+                   ps.bad_pass_tov  / NULLIF(ps.gp,0) AS bp_pg,
+                   ps.lost_ball_tov / NULLIF(ps.gp,0) AS lb_pg,
+                   ps.tov,
+                   ps.pnr_bh_fga, ps.transition_fga,
+                   pm.bad_pass_tov_pg, pm.lost_ball_tov_pg,
+                   pm.decision_making_score
             FROM player_metrics pm
             JOIN player_seasons ps ON pm.player_id = ps.player_id
                 AND pm.season = ps.season AND pm.season_type = ps.season_type
             JOIN players p ON pm.player_id = p.player_id
             WHERE pm.season = %s AND pm.season_type = %s
               AND ps.min >= 1000
-              AND pm.ballhandling_score IS NOT NULL
-            ORDER BY pm.ballhandling_score DESC NULLS LAST
-            LIMIT 25
+              AND pm.decision_making_score IS NOT NULL
+            ORDER BY pm.decision_making_score DESC NULLS LAST
+            LIMIT 30
         """, (DEFAULT_SEASON, DEFAULT_SEASON_TYPE))
         rows = [dict(r) for r in cur.fetchall()]
         cur.close()
         conn.close()
-        return jsonify({'top_ball_handlers': rows})
+        return jsonify({'top_decision_makers': rows})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    """Diagnostic — check bad_pass_tov and lost_ball_tov population in DB."""
+def migrate():
+    """One-time migration — adds new columns. Hit once then remove."""
     try:
         conn = get_conn()
-        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        # Which seasons have bad_pass_tov data
+        cur  = conn.cursor()
         cur.execute("""
-            SELECT season, season_type,
-                   COUNT(*) FILTER (WHERE bad_pass_tov > 0)  AS bp_populated,
-                   COUNT(*) FILTER (WHERE lost_ball_tov > 0) AS lb_populated,
-                   COUNT(*) AS total
-            FROM player_seasons
-            GROUP BY season, season_type
-            ORDER BY season DESC
+            ALTER TABLE player_metrics
+              ADD COLUMN IF NOT EXISTS ft_ast_per75          NUMERIC,
+              ADD COLUMN IF NOT EXISTS drive_ast_per75       NUMERIC,
+              ADD COLUMN IF NOT EXISTS drive_passes_per75    NUMERIC,
+              ADD COLUMN IF NOT EXISTS lost_ball_tov_pg      NUMERIC,
+              ADD COLUMN IF NOT EXISTS bad_pass_tov_pg       NUMERIC,
+              ADD COLUMN IF NOT EXISTS shot_creation_score   NUMERIC,
+              ADD COLUMN IF NOT EXISTS decision_making_score NUMERIC
         """)
-        seasons = [dict(r) for r in cur.fetchall()]
-
-        # Sample players with data
-        cur.execute("""
-            SELECT p.player_name, ps.season, ps.season_type,
-                   ps.bad_pass_tov, ps.lost_ball_tov, ps.tov, ps.gp
-            FROM player_seasons ps
-            JOIN players p ON ps.player_id = p.player_id
-            WHERE ps.bad_pass_tov > 0
-            ORDER BY ps.season DESC, ps.bad_pass_tov DESC
-            LIMIT 20
-        """)
-        sample = [dict(r) for r in cur.fetchall()]
-
+        conn.commit()
         cur.close()
         conn.close()
-        return jsonify({'seasons': seasons, 'sample': sample})
+        return jsonify({'status': 'ok', 'message': 'Columns added.'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/players')
@@ -317,13 +300,14 @@ def get_players():
     offset      = (page - 1) * per_page
 
     # Sub-composite thresholds (adjustable via Filters drawer)
-    min_ast_pg      = float(request.args.get('min_ast_pg',      2.0))
-    min_touches_pg  = float(request.args.get('min_touches_pg',  40.0))
-    min_drives_pg   = float(request.args.get('min_drives_pg',   2.0))
-    # min_paint_fga removed — finishing_score gating handled in compute_metrics.py
-    min_rim_fga     = float(request.args.get('min_rim_fga',     50.0))
-    min_3pt_fga     = float(request.args.get('min_3pt_fga',     1.5))
-    min_bh_drives_pg = 4.0  # ball handling drives gate — matches compute_metrics.py
+    min_ast_pg       = float(request.args.get('min_ast_pg',      2.0))
+    min_touches_pg   = float(request.args.get('min_touches_pg',  40.0))
+    min_drives_pg    = float(request.args.get('min_drives_pg',   2.0))
+    min_rim_fga      = float(request.args.get('min_rim_fga',     50.0))
+    min_3pt_fga      = float(request.args.get('min_3pt_fga',     1.5))
+    # Ball handler gates — match compute_metrics.py pm_creation gate
+    min_bh_drives_pg = 4.0
+    min_bh_load      = 0.08   # (time_of_poss/gp) / min_per_game
 
     sort_col  = get_sort_col(sort)
     direction = 'DESC' if sort_dir != 'asc' else 'ASC'
@@ -341,31 +325,35 @@ def get_players():
 
     where_str = ' AND '.join(where)
 
-    # Dynamic sub-composite expressions — return NULL if player doesn't meet thresholds
-    # touches and drives are season totals in player_seasons, divide by gp for per-game
+    # Unified playmaking gate — same for all three sub-composites
+    pm_gate = f"""ps.ast >= {min_ast_pg}
+             AND ps.touches / NULLIF(ps.gp, 0) >= {min_touches_pg}
+             AND ps.drives  / NULLIF(ps.gp, 0) >= {min_bh_drives_pg}
+             AND ps.gp >= 30
+             AND ps.potential_ast / NULLIF(ps.gp, 0) >= 3.0"""
+
     sub_expr = f"""
         pm.finishing_score,
         pm.shooting_score,
         CASE WHEN ps.drives / NULLIF(ps.gp, 0) >= {min_drives_pg}
-             THEN pm.creation_score     ELSE NULL END AS creation_score,
-        CASE WHEN ps.ast >= {min_ast_pg}
-             THEN pm.passing_score      ELSE NULL END AS passing_score,
-        CASE WHEN ps.touches / NULLIF(ps.gp, 0) >= {min_touches_pg}
-             AND  ps.drives  / NULLIF(ps.gp, 0) >= {min_bh_drives_pg}
-             AND  ps.time_of_poss / NULLIF(ps.min_per_game, 0) >= 0.08
-             AND  p.position_group IN ('G','GF')
-             THEN pm.ballhandling_score ELSE NULL END AS ballhandling_score,
+             THEN pm.shot_creation_score  ELSE NULL END AS shot_creation_score,
+        CASE WHEN {pm_gate}
+             THEN pm.passing_score        ELSE NULL END AS passing_score,
+        CASE WHEN {pm_gate}
+             THEN pm.creation_score       ELSE NULL END AS creation_score,
+        CASE WHEN {pm_gate}
+             THEN pm.decision_making_score ELSE NULL END AS decision_making_score,
         pm.perimeter_def_score,
         CASE WHEN ps.def_rim_fga >= {min_rim_fga}
-             THEN pm.interior_def_score ELSE NULL END AS interior_def_score,
+             THEN pm.interior_def_score   ELSE NULL END AS interior_def_score,
         pm.activity_score,
         pm.rebounding_score,
         CASE WHEN pm.all3_fga_pg >= {min_3pt_fga}
-             THEN pm.all3_efg_vw        ELSE NULL END AS all3_efg_vw_gated,
+             THEN pm.all3_efg_vw          ELSE NULL END AS all3_efg_vw_gated,
         CASE WHEN pm.corner3_fga_pg >= {min_3pt_fga} * 0.33
-             THEN pm.corner3_efg_vw     ELSE NULL END AS corner3_efg_vw_gated,
+             THEN pm.corner3_efg_vw       ELSE NULL END AS corner3_efg_vw_gated,
         CASE WHEN pm.above_break3_fga_pg >= {min_3pt_fga}
-             THEN pm.above_break3_efg_vw ELSE NULL END AS above_break3_efg_vw_gated
+             THEN pm.above_break3_efg_vw  ELSE NULL END AS above_break3_efg_vw_gated
     """
 
     try:

@@ -537,7 +537,7 @@ const NAV = {
     subs: [
       {
         key:'finishing', label:'Finishing',
-        overall: { key:'finishing_score',    label:'Finishing Avg Percentile',     fmt:'1f', isOverall:true },
+        overall: { key:'finishing_score',       label:'Finishing Avg Percentile',     fmt:'1f', isOverall:true },
         metrics: [
           { key:'paint_efg_vw',        label:'Paint EFG+',       fmt:'3f', badge:'PAINT' },
           { key:'paint_scoring_rate',  label:'Paint Scoring',    fmt:'2f', badge:'PSR'   },
@@ -550,26 +550,27 @@ const NAV = {
       },
       {
         key:'shooting', label:'Shooting',
-        overall: { key:'shooting_score',     label:'Shooting Avg Percentile',      fmt:'1f', isOverall:true },
+        overall: { key:'shooting_score',        label:'Shooting Avg Percentile',      fmt:'1f', isOverall:true },
         metrics: [
-          { key:'ts_pct',            label:'True Shooting',  fmt:'pct', badge:'TS%'  },
-          { key:'efg_pct',           label:'Eff FG%',        fmt:'pct', badge:'EFG%' },
-          { key:'shot_quality_delta',label:'Shot Quality',   fmt:'3f',  badge:'SQ'   },
-          { key:'pull_up_efg_pct',   label:'Pull-Up EFG%',  fmt:'pct', badge:'PU'   },
-          { key:'cs_efg_pct',        label:'Catch & Shoot',  fmt:'pct', badge:'C&S'  },
-          { key:'all3_efg_vw',       label:'3-Pointers EFG+',fmt:'3f',  badge:'3PT', is3pt:true },
-          { key:'clutch_net_rating', label:'Clutch Rating',  fmt:'1f',  badge:'CLCH' },
+          { key:'ts_pct',              label:'True Shooting',    fmt:'pct', badge:'TS%'  },
+          { key:'efg_pct',             label:'Eff FG%',          fmt:'pct', badge:'EFG%' },
+          { key:'sq_fg_pct_above_expected', label:'FG% Above Expected', fmt:'3f', badge:'FG+' },
+          { key:'sq_avg_shot_quality', label:'Avg Shot Quality', fmt:'3f', badge:'SQ'   },
+          { key:'pull_up_efg_pct',     label:'Pull-Up EFG%',    fmt:'pct', badge:'PU'   },
+          { key:'cs_efg_pct',          label:'Catch & Shoot',    fmt:'pct', badge:'C&S'  },
+          { key:'all3_efg_vw',         label:'3-Pointers EFG+',  fmt:'3f',  badge:'3PT', is3pt:true },
+          { key:'clutch_net_rating',   label:'Clutch Rating',    fmt:'1f',  badge:'CLCH' },
         ],
         cols:['pts','fg3_pct','ts_pct','efg_pct','usg_pct'],
       },
       {
-        key:'creation', label:'Shot Creation',
-        overall: { key:'creation_score',     label:'Creation Avg Percentile',      fmt:'1f', isOverall:true },
+        key:'shot_creation', label:'Shot Creation',
+        overall: { key:'shot_creation_score',   label:'Shot Creation Avg Percentile', fmt:'1f', isOverall:true },
         metrics: [
-          { key:'iso_ppp',           label:'ISO PPP',        fmt:'2f',  badge:'ISO'   },
-          { key:'creation_premium',  label:'Creation Delta', fmt:'3f',  badge:'CΔ'    },
-          { key:'pull_up_efg_pct',   label:'Pull-Up EFG%',  fmt:'pct', badge:'PU'    },
-          { key:'pct_uast_fgm',      label:'Unassisted FGM%',fmt:'pct',badge:'UAST'  },
+          { key:'iso_ppp',             label:'ISO PPP',          fmt:'2f',  badge:'ISO'  },
+          { key:'creation_premium',    label:'Creation Delta',   fmt:'3f',  badge:'CΔ'   },
+          { key:'pull_up_efg_pct',     label:'Pull-Up EFG%',    fmt:'pct', badge:'PU'   },
+          { key:'pct_uast_fgm',        label:'Unassisted FGM%',  fmt:'pct', badge:'UAST' },
         ],
         cols:['pts','usg_pct','ts_pct','iso_ppp'],
       },
@@ -583,32 +584,42 @@ const NAV = {
     subs: [
       {
         key:'passing', label:'Passing',
-        overall: { key:'passing_score',      label:'Passing Avg Percentile',       fmt:'1f', isOverall:true },
+        overall: { key:'passing_score',         label:'Passing Avg Percentile',       fmt:'1f', isOverall:true },
         metrics: [
-          { key:'potential_ast_per75', label:'Pot AST / 75',      fmt:'1f',  badge:'POT'   },
-          { key:'ast_conversion_rate', label:'AST Conv %',        fmt:'pct', badge:'CONV'  },
-          { key:'pot_ast_per_tov',     label:'Pot AST / BP TOV',  fmt:'2f',  badge:'P/BPT' },
-          { key:'pass_quality_index',  label:'Pass Quality',      fmt:'3f',  badge:'PQ'    },
-          { key:'ast_pct',             label:'Assist %',          fmt:'pct', badge:'AST%'  },
-          { key:'secondary_ast_per75', label:'Sec AST / 75',      fmt:'2f',  badge:'SEC'   },
-          { key:'ft_ast_per75',        label:'FT AST / 75',       fmt:'2f',  badge:'FTA'   },
-          { key:'drive_ast_per75',     label:'Drive AST / 75',    fmt:'2f',  badge:'DRVA'  },
-          { key:'drive_passes_per75',  label:'Drive Passes / 75', fmt:'2f',  badge:'DRVP'  },
-          { key:'pass_to_score_pct',   label:'Pass→Score %',      fmt:'pct', badge:'P2S'   },
+          { key:'pot_ast_per_tov',     label:'Pot AST / BP TOV', fmt:'2f',  badge:'P/BPT' },
+          { key:'ast_pct',             label:'Assist %',         fmt:'pct', badge:'AST%'  },
+          { key:'pass_quality_index',  label:'Pass Quality',     fmt:'3f',  badge:'PQ'    },
+          { key:'ft_ast_per75',        label:'FT AST / 75',      fmt:'2f',  badge:'FTA'   },
+          { key:'potential_ast_per75', label:'Pot AST / 75',     fmt:'1f',  badge:'POT'   },
+          { key:'ast_conversion_rate', label:'AST Conv %',       fmt:'pct', badge:'CONV'  },
+          { key:'pass_to_score_pct',   label:'Pass→Score %',     fmt:'pct', badge:'P2S'   },
         ],
         cols:['ast','ast_to','ast_pct','potential_ast_per75','pot_ast_per_tov'],
       },
       {
-        key:'ballhandling', label:'Ball Handling',
-        overall: { key:'ballhandling_score', label:'Ball Handling Avg Percentile', fmt:'1f', isOverall:true },
+        key:'pm_creation', label:'Creation',
+        overall: { key:'creation_score',        label:'Creation Avg Percentile',      fmt:'1f', isOverall:true },
         metrics: [
-          { key:'playmaking_gravity',  label:'PM Gravity',         fmt:'2f',  badge:'GRAV'  },
-          { key:'pnr_bh_ppp',          label:'P&R BH PPP',         fmt:'2f',  badge:'PNR'   },
-          { key:'transition_ppp',      label:'Transition PPP',     fmt:'2f',  badge:'TRANS' },
-          { key:'lost_ball_tov_pg',    label:'Lost Ball TOV/G',    fmt:'2f',  badge:'LB'    },
-          { key:'drive_and_dish_rate', label:'Drive & Dish %',     fmt:'pct', badge:'D&D'   },
+          { key:'gravity_score',           label:'Gravity Score',     fmt:'2f',  badge:'GRAV'  },
+          { key:'leverage_creation',       label:'Leverage Creation', fmt:'3f',  badge:'LEV'   },
+          { key:'drive_ast_per75',         label:'Drive AST / 75',   fmt:'2f',  badge:'DRVA'  },
+          { key:'secondary_ast_per75',     label:'Sec AST / 75',     fmt:'2f',  badge:'SEC'   },
+          { key:'gravity_onball_perimeter',label:'On-Ball Gravity',  fmt:'2f',  badge:'OBGR'  },
+          { key:'playmaking_gravity',      label:'PM Gravity (comp)', fmt:'2f', badge:'PMG'   },
         ],
-        cols:['ast','ast_to','usg_pct','playmaking_gravity'],
+        cols:['ast','usg_pct','gravity_score','leverage_creation'],
+      },
+      {
+        key:'decision_making', label:'Decision Making',
+        overall: { key:'decision_making_score', label:'Decision Making Avg Percentile', fmt:'1f', isOverall:true },
+        metrics: [
+          { key:'lost_ball_tov_pg',    label:'Lost Ball TOV/G',  fmt:'2f',  badge:'LB'    },
+          { key:'bad_pass_tov_pg',     label:'Bad Pass TOV/G',   fmt:'2f',  badge:'BP'    },
+          { key:'transition_ppp',      label:'Transition PPP',   fmt:'2f',  badge:'TRANS' },
+          { key:'pnr_bh_ppp',          label:'P&R BH PPP',       fmt:'2f',  badge:'PNR'   },
+          { key:'drive_and_dish_rate', label:'Drive & Dish %',   fmt:'pct', badge:'D&D'   },
+        ],
+        cols:['ast','ast_to','usg_pct','lost_ball_tov_pg','bad_pass_tov_pg'],
       },
       {
         key:'traditional_pm', label:'Traditional',
@@ -808,10 +819,18 @@ const COL_DEF = {
   midrange_fga_pg:{label:'MID/G',fmt:'1f',cls:''},
   iso_ppp:{label:'ISO',fmt:'2f',cls:''},
   playmaking_gravity:{label:'GRAV',fmt:'2f',cls:''},
+  gravity_score:{label:'GRAV',fmt:'2f',cls:''},
+  gravity_onball_perimeter:{label:'OB-GRAV',fmt:'2f',cls:''},
+  gravity_offball_perimeter:{label:'FB-GRAV',fmt:'2f',cls:''},
+  leverage_creation:{label:'LEV-CR',fmt:'3f',cls:''},
+  leverage_full:{label:'LEV',fmt:'3f',cls:''},
+  sq_avg_shot_quality:{label:'SQ',fmt:'3f',cls:''},
+  sq_fg_pct_above_expected:{label:'FG+EXP',fmt:'3f',cls:''},
   ft_ast_per75:{label:'FTA/75',fmt:'2f',cls:''},
   drive_ast_per75:{label:'DRVA/75',fmt:'2f',cls:''},
   drive_passes_per75:{label:'DRVP/75',fmt:'2f',cls:''},
-  lost_ball_tov_pg:{label:'LBTOV/G',fmt:'2f',cls:''},
+  lost_ball_tov_pg:{label:'LBTOV',fmt:'2f',cls:''},
+  bad_pass_tov_pg:{label:'BPTOV',fmt:'2f',cls:''},
   motor_score:{label:'MOTR',fmt:'2f',cls:''},
   box_out_rate:{label:'BOX/75',fmt:'2f',cls:''},
   pct_uast_fgm:{label:'UAST%',fmt:'pct',cls:''},
@@ -911,10 +930,19 @@ const METRIC_INFO = {
   drive_foul_rate:{formula:'Drive PF Drawn / Drives',desc:'Fouls drawn per drive — getting to the line on attacking attempts.',source:'Computed'},
   pnr_roll_ppp:{formula:'Roll Man Points Per Possession',desc:'Efficiency as the roll man in pick-and-roll.',source:'Synergy'},
   post_ppp:{formula:'Post Up Points Per Possession',desc:'Scoring efficiency on post-up plays.',source:'Synergy'},
-  drive_and_dish_rate:{formula:'Drive Passes / (Drive FGA + Drive TOV + Drive Passes)',desc:'On drives, how often a player passes rather than shooting or turning it over. Requires ≥ 2.0 drives/g.',source:'Computed'},
-  ft_ast_per75:{formula:'(FT AST / GP) × (75 / Poss/G)',desc:'Free-throw assists per 75 possessions. Captures post passers and PnR passers whose value shows up at the free-throw line rather than in direct assists.',source:'Computed'},
-  drive_ast_per75:{formula:'(Drive AST / GP) × (75 / Poss/G)',desc:'Assists generated specifically off drives per 75 possessions. Captures on-ball creators who make plays for teammates out of penetration. Requires ≥ 2.0 drives/g.',source:'Computed'},
-  lost_ball_tov_pg:{formula:'Lost Ball TOV / GP',desc:'Live-ball turnovers from dribbling and handling per game — fumbles, strips, travels while handling. Lower is better. Distinct from bad-pass turnovers which are passing decisions. Used inverted in ball handling composite.',source:'NBA Stats (Misc)'},
+  drive_and_dish_rate:{formula:'Drive Passes / (Drive FGA + Drive TOV + Drive Passes)',desc:'On drives, how often a player passes rather than shooting or turning it over.',source:'Computed'},
+  ft_ast_per75:{formula:'(FT AST / GP) × (75 / Poss/G)',desc:'Free-throw assists per 75 possessions. Captures post passers and PnR passers whose value shows up at the free-throw line.',source:'Computed'},
+  drive_ast_per75:{formula:'(Drive AST / GP) × (75 / Poss/G)',desc:'Assists generated specifically off drives per 75 possessions. Requires ≥ 2.0 drives/g.',source:'Computed'},
+  drive_passes_per75:{formula:'(Drive Passes / GP) × (75 / Poss/G)',desc:'Passes made out of drives per 75 possessions. Display metric — shows drive playmaking volume without penalising scorers.',source:'Computed'},
+  lost_ball_tov_pg:{formula:'Lost Ball TOV / GP',desc:'Live-ball turnovers per game from dribbling and handling — fumbles, strips, travels. Lower is better. Used inverted in Decision Making composite.',source:'PBP'},
+  bad_pass_tov_pg:{formula:'Bad Pass TOV / GP',desc:'Bad-pass turnovers per game. Lower is better. Used inverted in Decision Making composite. Also used as the denominator for Pot AST / BP TOV.',source:'PBP'},
+  gravity_score:{formula:'AVGGRAVITYSCORE (NBA)',desc:'Average gravity score from NBA tracking — measures how much defenders shift toward a player when they have the ball. Higher = more space created for teammates.',source:'NBA Stats'},
+  gravity_onball_perimeter:{formula:'AVGONBALLPERIMETERGRAVITYSCORE (NBA)',desc:'Gravity score specifically when handling the ball on the perimeter. Measures on-ball threat level.',source:'NBA Stats'},
+  gravity_offball_perimeter:{formula:'AVGOFFBALLPERIMETERGRAVITYSCORE (NBA)',desc:'Gravity score when moving off the ball on the perimeter. Measures off-ball spacing threat.',source:'NBA Stats'},
+  leverage_creation:{formula:'CREATION (NBA Leverage)',desc:'On/off creation leverage — how much a player\'s presence changes team creation. From NBA Leverage data.',source:'NBA Stats'},
+  leverage_full:{formula:'FULL (NBA Leverage)',desc:'Full leverage score — combined offensive and defensive impact from NBA Leverage data.',source:'NBA Stats'},
+  sq_avg_shot_quality:{formula:'AVGSHOTQUALITY (NBA)',desc:'Average quality of shots taken, based on shot location, defender distance, and body movement. Higher = harder shots attempted.',source:'NBA Stats'},
+  sq_fg_pct_above_expected:{formula:'FGPCTABOVEEXPECTED (NBA)',desc:'FG% above what was expected given shot difficulty. Positive = making harder shots than average. Key indicator of shot-making ability.',source:'NBA Stats'},
   pnr_bh_ppp:{formula:'PnR PTS / PnR Poss',desc:'Points per possession as ball handler in pick-and-roll.',source:'Synergy'},
   transition_ppp:{formula:'Trans PTS / Trans Poss',desc:'Points per possession in transition.',source:'Synergy'},
   def_delta_overall:{formula:'Normal Opp FG% − Actual Opp FG%',desc:'How much a player reduces opponent FG% vs their normal shooting.',source:'Defender Shooting'},
@@ -954,14 +982,15 @@ const METRIC_INFO = {
   pct_uast_fgm:{formula:'Unassisted FGM / Total FGM',desc:'% of made field goals that were unassisted — indicates self-creation.',source:'Tracking'},
   // Composites — percentile-averaging methodology
   creator_score:{formula:'Avg percentile of: Finishing score + Shooting score + Creation score',desc:'Overall Scoring composite. Average of sub-category percentile scores across Finishing, Shooting, and Shot Creation. Requires qualifying in all three.',source:'Composite'},
-  playmaker_score:{formula:'Avg percentile of: Passing score + Ball Handling score',desc:'Overall Playmaking composite. Average of Passing and Ball Handling sub-scores. Requires qualifying in both (min 2 AST/g and G/GF with 40+ touches/g).',source:'Composite'},
+  playmaker_score:{formula:'Avg percentile of: Passing + Creation + Decision Making scores',desc:'Overall Playmaking composite. Flat average of all three sub-scores. All three share the same gate (2 APG, 30 GP, 3 pot AST/g, 40 touches/g, 4 drives/g) so a player either qualifies for all or none.',source:'Composite'},
   defender_score:{formula:'Avg percentile of: Perimeter Defense score + Interior Defense score',desc:'Overall Defense composite (position-normalized). Average of Perimeter and Interior Defense sub-scores. Requires qualifying in both.',source:'Composite'},
   hustle_score:{formula:'Avg percentile of: Activity score + Rebounding score',desc:'Overall Hustle composite (position-normalized). Average of Activity and Rebounding sub-scores.',source:'Composite'},
   finishing_score:{formula:'Avg percentile (position-normalized) of: Paint EFG+, Paint Scoring Rate, Pts Per Drive, Drive Foul Rate, Roll Man PPP, Post PPP',desc:'Finishing composite — rim efficiency, drive scoring, and post/roll finishing. Position-normalized.',source:'Composite'},
   shooting_score:{formula:'Avg percentile (league-wide) of: TS%, EFG%, Shot Quality, C&S EFG%, All 3PT EFG+, Clutch Rating',desc:'Shooting sub-composite. No volume gate beyond 1000 min.',source:'Composite'},
-  creation_score:{formula:'Avg percentile (league-wide) of: Unassisted FGM%, Creation Load, ISO PPP, Creation Delta',desc:'Shot Creation sub-composite. Gate: min 2.0 drives/g.',source:'Composite'},
-  passing_score:{formula:'Avg percentile (league-wide) of: Pot AST/BP TOV, Pass Quality Index, AST%, Secondary AST/75, FT AST/75, Drive AST/75, Drive Passes/75. Min 2 of 7 non-NULL required.',desc:'Passing sub-composite. AST% normalizes assists by teammate FGM on-floor, discounting volume inflation on bad teams. Gate: min 2.0 AST/g and 3.0 potential AST/g.',source:'Composite'},
-  ballhandling_score:{formula:'Avg percentile (league-wide) of: PM Gravity, P&R BH PPP, Transition PPP, Lost Ball TOV/G (inverted)',desc:'Ball Handling sub-composite. Requires min 2 non-NULL metrics. PM Gravity anchors; PnR and transition PPP count when sample qualifies (≥30 PnR FGA, ≥20 transition FGA); Lost Ball TOV/G inverted penalises dribbling turnovers. Gate: G/GF + min 40 touches/g + min 4.0 drives/g + min 30 GP + ball handler load ≥ 8% (time of poss / MPG) — excludes catch-and-attack wings who drive occasionally but don\'t run the offense.',source:'Composite'},
+  shot_creation_score:{formula:'Avg percentile (league-wide) of: Unassisted FGM%, ISO PPP, Pull-Up EFG%, Drive FG%, USG%, TOV% (inv)',desc:'Shot Creation sub-composite (Scoring category). Self-creation ability: how often you make your own shot and how efficiently. Gate: min 2.0 drives/g.',source:'Composite'},
+  creation_score:{formula:'Avg percentile (league-wide) of: Gravity Score, Leverage Creation, Drive AST/75, Secondary AST/75',desc:'Playmaking Creation sub-composite. Space and opportunity creation: gravity (how much defense shifts), leverage creation impact, and assist creation off drives and off-ball movement. Gate: 2 APG + 30 GP + 3 pot AST/g + 40 touches/g + 4 drives/g.',source:'Composite'},
+  passing_score:{formula:'Avg percentile (league-wide) of: Pot AST/BP TOV (required), AST%, Pass Quality Index, FT AST/75',desc:'Passing sub-composite. Pot AST per bad pass TOV is required — no passing score without it. AST% normalizes for team context. Pass quality measures value per pass. FT AST catches post/PnR passers. Gate: 2 APG + 30 GP + 3 pot AST/g + 40 touches/g + 4 drives/g.',source:'Composite'},
+  decision_making_score:{formula:'Avg percentile (league-wide) of: Lost Ball TOV/G (inv), Bad Pass TOV/G (inv), Transition PPP, P&R BH PPP',desc:'Decision Making sub-composite. Ball security inverted (lost ball, bad pass) plus execution efficiency in structured play types. Gate: 2 APG + 30 GP + 3 pot AST/g + 40 touches/g + 4 drives/g.',source:'Composite'},
   perimeter_def_score:{formula:'Avg percentile (position-normalized) of: Def Delta 3PT, Disruption/75, Steals, Def Delta Overall',desc:'Perimeter Defense sub-composite.',source:'Composite'},
   interior_def_score:{formula:'Avg percentile (position-normalized) of: Rim Protection, Def Delta 2PT, DREB%, Blocks, Box Out/75',desc:'Interior Defense sub-composite. Gate: min 50 rim FGA defended.',source:'Composite'},
   activity_score:{formula:'Avg percentile (position-normalized) of: Motor Score, Hustle Composite, Deflections, Charges Drawn',desc:'Activity sub-composite.',source:'Composite'},
@@ -1342,14 +1371,23 @@ function renderHeader() {
     return m ? m.label.toUpperCase() : ST.sort.toUpperCase();
   })();
 
-  html += `<th style="min-width:150px"><button class="th-btn active">${sortLabel}<span class="th-arr"> ${arr}</span></button></th>`;
+  html += `<th style="min-width:150px"><button class="th-btn sortable active" data-k="${sortKey}">${sortLabel}<span class="th-arr"> ${arr}</span></button></th>`;
   row.innerHTML = html;
+
+  // Columns where lower = better — default to ascending when first clicked
+  const ASC_DEFAULT = new Set([
+    'lost_ball_tov_pg', 'bad_pass_tov_pg', 'tov', 'tov_pct', 'pf',
+  ]);
 
   row.querySelectorAll('.sortable').forEach(btn => {
     btn.addEventListener('click', () => {
       const k = btn.dataset.k;
       if (sortKey===k) { ST.dir = ST.dir==='desc'?'asc':'desc'; }
-      else { ST.sort=k; ST.sortFmt=COL_DEF[k]?.fmt||'1f'; ST.isOverall=false; ST.dir='desc'; renderSidebar(); updateViewLabel(); }
+      else {
+        ST.sort=k; ST.sortFmt=COL_DEF[k]?.fmt||'1f'; ST.isOverall=false;
+        ST.dir = ASC_DEFAULT.has(k) ? 'asc' : 'desc';
+        renderSidebar(); updateViewLabel();
+      }
       ST.page=1; renderHeader(); fetchPlayers();
     });
   });

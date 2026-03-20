@@ -230,37 +230,65 @@ def health():
 
 @app.route('/api/diag/dm')
 def diag_dm():
-    """Diagnostic — decision making top players with raw values."""
+    """Diagnostic — PnR BH and transition FGA distribution for playmaking-qualified players."""
     try:
         conn = get_conn()
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
             SELECT p.player_name, p.position_group,
-                   ps.gp, ps.ast, ps.touches, ps.drives,
-                   ps.touches / NULLIF(ps.gp, 0)      AS touches_pg,
-                   ps.drives  / NULLIF(ps.gp, 0)      AS drives_pg,
-                   ps.potential_ast / NULLIF(ps.gp,0) AS pot_ast_pg,
-                   ps.bad_pass_tov, ps.lost_ball_tov,
-                   ps.bad_pass_tov  / NULLIF(ps.gp,0) AS bp_pg,
-                   ps.lost_ball_tov / NULLIF(ps.gp,0) AS lb_pg,
-                   ps.tov,
-                   ps.pnr_bh_fga, ps.transition_fga,
-                   pm.bad_pass_tov_pg, pm.lost_ball_tov_pg,
-                   pm.decision_making_score
-            FROM player_metrics pm
-            JOIN player_seasons ps ON pm.player_id = ps.player_id
-                AND pm.season = ps.season AND pm.season_type = ps.season_type
-            JOIN players p ON pm.player_id = p.player_id
-            WHERE pm.season = %s AND pm.season_type = %s
+                   ps.gp, ps.ast,
+                   ps.touches / NULLIF(ps.gp, 0)       AS touches_pg,
+                   ps.drives  / NULLIF(ps.gp, 0)       AS drives_pg,
+                   ps.potential_ast / NULLIF(ps.gp, 0) AS pot_ast_pg,
+                   ps.pnr_bh_fga,
+                   ps.transition_fga,
+                   pm.decision_making_score,
+                   pm.lost_ball_tov_pg,
+                   pm.passing_score
+            FROM player_seasons ps
+            JOIN players p ON ps.player_id = p.player_id
+            LEFT JOIN player_metrics pm
+                ON ps.player_id = pm.player_id
+                AND ps.season = pm.season AND ps.season_type = pm.season_type
+            WHERE ps.season = %s AND ps.season_type = %s
               AND ps.min >= 1000
-              AND pm.decision_making_score IS NOT NULL
-            ORDER BY pm.decision_making_score DESC NULLS LAST
-            LIMIT 30
+              AND ps.ast >= 2.0
+              AND ps.gp >= 30
+              AND ps.potential_ast / NULLIF(ps.gp, 0) >= 3.0
+              AND ps.touches / NULLIF(ps.gp, 0) >= 40.0
+              AND ps.drives / NULLIF(ps.gp, 0) >= 4.0
+            ORDER BY ps.pnr_bh_fga DESC NULLS LAST
+            LIMIT 50
         """, (DEFAULT_SEASON, DEFAULT_SEASON_TYPE))
         rows = [dict(r) for r in cur.fetchall()]
+
+        # Summary counts
+        cur.execute("""
+            SELECT
+              COUNT(*) FILTER (WHERE ps.pnr_bh_fga >= 50)  AS pnr_50,
+              COUNT(*) FILTER (WHERE ps.pnr_bh_fga >= 30)  AS pnr_30,
+              COUNT(*) FILTER (WHERE ps.pnr_bh_fga >= 20)  AS pnr_20,
+              COUNT(*) FILTER (WHERE ps.transition_fga >= 50) AS trans_50,
+              COUNT(*) FILTER (WHERE ps.transition_fga >= 30) AS trans_30,
+              COUNT(*) FILTER (WHERE ps.transition_fga >= 20) AS trans_20,
+              COUNT(*) FILTER (WHERE ps.pnr_bh_fga >= 50 AND ps.transition_fga >= 50) AS both_50,
+              COUNT(*) FILTER (WHERE ps.pnr_bh_fga >= 30 AND ps.transition_fga >= 30) AS both_30,
+              COUNT(*) AS total_qualifying
+            FROM player_seasons ps
+            JOIN players p ON ps.player_id = p.player_id
+            WHERE ps.season = %s AND ps.season_type = %s
+              AND ps.min >= 1000
+              AND ps.ast >= 2.0
+              AND ps.gp >= 30
+              AND ps.potential_ast / NULLIF(ps.gp, 0) >= 3.0
+              AND ps.touches / NULLIF(ps.gp, 0) >= 40.0
+              AND ps.drives / NULLIF(ps.gp, 0) >= 4.0
+        """, (DEFAULT_SEASON, DEFAULT_SEASON_TYPE))
+        summary = dict(cur.fetchone())
+
         cur.close()
         conn.close()
-        return jsonify({'top_decision_makers': rows})
+        return jsonify({'summary': summary, 'players': rows})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 def migrate():

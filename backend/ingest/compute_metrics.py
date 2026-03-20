@@ -218,21 +218,29 @@ def compute_player_metrics(p):
     else:
         pot_ast_per_tov = None
 
-    # bad_pass_tov_pg_inv — raw bad pass rate inverted for Decision Making
-    # Lower bad pass rate = better decision making under pressure
-    bad_pass_tov_pg = bad_pass_pg if bad_pass_pg is not None else None
+    # bad_pass_tov and lost_ball_tov — normalized per 100 touches
+    # Raw per-game unfairly rewards low-usage players who rarely handle the ball.
+    # Per 100 touches accounts for how much a player actually has the ball,
+    # so a high-usage PG with 0.5 bad passes/g over 70 touches is properly
+    # compared to a wing with 0.2 bad passes/g over 20 touches.
+    touches_pg = s(p.get('touches'), 0) / gp if gp > 0 else 0
 
-    # Lost ball turnovers per game — live-ball turnovers from dribbling/handling
-    # Cascading fallbacks so this is never NULL for a qualifying ball handler
+    bad_pass_tov_pg = (bad_pass_pg / touches_pg * 100
+                       if bad_pass_pg is not None and touches_pg > 0 else None)
+
+    # Lost ball turnovers — also per 100 touches
     lost_ball_total = safe(p.get('lost_ball_tov'))
     if lost_ball_total is not None and gp > 0:
-        lost_ball_tov_pg = lost_ball_total / gp
+        lost_ball_raw_pg = lost_ball_total / gp
     elif bad_pass_total is not None and gp > 0:
-        lost_ball_tov_pg = max(0.0, tov_pg - (bad_pass_total / gp))
+        lost_ball_raw_pg = max(0.0, tov_pg - (bad_pass_total / gp))
     elif tov_pg > 0:
-        lost_ball_tov_pg = tov_pg
+        lost_ball_raw_pg = tov_pg
     else:
-        lost_ball_tov_pg = None
+        lost_ball_raw_pg = None
+
+    lost_ball_tov_pg = (lost_ball_raw_pg / touches_pg * 100
+                        if lost_ball_raw_pg is not None and touches_pg > 0 else None)
 
     # ── New derived metrics ───────────────────────────────────
     # Drive foul rate — how often drives result in fouls drawn
@@ -450,7 +458,6 @@ def compute_composites(metrics_list, seasons_map):
         ('secondary_ast_per75', 'm'),
         # Decision making (league-wide)
         ('lost_ball_tov_pg',    'm'),
-        ('bad_pass_tov_pg',     'm'),
         ('transition_ppp',      's'),
         ('pnr_bh_ppp',          's'),
         # Needed for inverted maps
@@ -492,10 +499,10 @@ def compute_composites(metrics_list, seasons_map):
     LG_CS_EFG_AVG = 0.535
 
     def pnr_bh_qualified(pid):
-        return s(seasons_map.get(pid, {}).get('pnr_bh_fga'), 0) >= 30
+        return s(seasons_map.get(pid, {}).get('pnr_bh_fga'), 0) >= 50
 
     def transition_qualified(pid):
-        return s(seasons_map.get(pid, {}).get('transition_fga'), 0) >= 20
+        return s(seasons_map.get(pid, {}).get('transition_fga'), 0) >= 50
 
     for pid in all_qualifying:
         ps = seasons_map.get(pid, {})
@@ -532,7 +539,6 @@ def compute_composites(metrics_list, seasons_map):
     # Inverted metrics: lower raw = better = higher percentile
     pct_lg['tov_pct_inv']         = {pid: round(100 - v, 1) for pid, v in pct_lg['tov_pct'].items()}
     pct_lg['lost_ball_tov_pg_inv'] = {pid: round(100 - v, 1) for pid, v in pct_lg['lost_ball_tov_pg'].items()}
-    pct_lg['bad_pass_tov_pg_inv']  = {pid: round(100 - v, 1) for pid, v in pct_lg['bad_pass_tov_pg'].items()}
 
     # def_iso_ppp, def_pnr_bh_ppp — lower PPP allowed = better
     for col in ['def_iso_ppp', 'def_pnr_bh_ppp']:
@@ -629,7 +635,6 @@ def compute_composites(metrics_list, seasons_map):
         # DECISION MAKING — unified playmaking gate
         ('decision_making_score', 'playmaking',
          [('lost_ball_tov_pg_inv', 'm'),
-          ('bad_pass_tov_pg_inv',  'm'),
           ('transition_ppp',       's'),
           ('pnr_bh_ppp',           's')],
          'lg'),
@@ -695,9 +700,13 @@ def compute_composites(metrics_list, seasons_map):
                 m[comp_name] = None
                 continue
             pct_maps = pct_lg if pct_key == 'lg' else pct_pos
-            min_m = 2 if comp_name in ('shooting_score', 'passing_score',
-                                        'creation_score', 'decision_making_score',
-                                        'shot_creation_score') else 1
+            if comp_name == 'decision_making_score':
+                min_m = 3
+            elif comp_name in ('shooting_score', 'passing_score',
+                               'creation_score', 'shot_creation_score'):
+                min_m = 2
+            else:
+                min_m = 1
             score = avg_pct(pid, cols_srcs, pct_maps, min_metrics=min_m)
 
             # Finishing requires paint presence

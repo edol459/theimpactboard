@@ -76,11 +76,13 @@ BASE_COLS = """
     -- Tracking (season totals used in some category views)
     ps.pull_up_efg_pct, ps.cs_efg_pct,
     ps.pull_up_fga, ps.cs_fga,
-    ps.iso_ppp, ps.pnr_bh_ppp, ps.pnr_roll_ppp, ps.transition_ppp,
+    ps.iso_ppp, ps.pnr_bh_ppp, ps.pnr_roll_ppp, ps.transition_ppp, ps.post_ppp,
     ps.def_iso_ppp, ps.def_pnr_bh_ppp,
     ps.drives, ps.drive_fga, ps.drive_fg_pct, ps.drive_pts, ps.drive_pf, ps.drive_passes, ps.drive_tov,
     ps.passes_made, ps.potential_ast, ps.ast_pts_created, ps.secondary_ast,
     ps.touches, ps.time_of_poss,
+    pm.drive_pts_per_drive,
+    pm.drive_foul_rate,
 
     -- Hustle (season totals)
     ps.deflections, ps.charges_drawn, ps.screen_assists,
@@ -207,6 +209,7 @@ def get_sort_col(sort_key):
         'gravity_score', 'gravity_onball_perimeter', 'gravity_offball_perimeter',
         'leverage_creation', 'leverage_full',
         'sq_avg_shot_quality', 'sq_fg_pct_above_expected',
+        'post_ppp', 'iso_ppp', 'pnr_bh_ppp', 'pnr_roll_ppp', 'transition_ppp',
     }
     if sort_key in pm_cols:
         return f'pm.{sort_key}'

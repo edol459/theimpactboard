@@ -244,11 +244,11 @@ def compute_player_metrics(p):
 
     # ── New derived metrics ───────────────────────────────────
     # Drive foul rate — how often drives result in fouls drawn
-    drive_foul_rate = div(drive_pf, drives) if drives > 0 else None
+    drive_foul_rate     = div(drive_pf, drives) if drive_pg >= 2.0 else None
 
     # Drive pts per drive — scoring efficiency on drives
     drive_pts_raw = s(p.get('drive_pts'))
-    drive_pts_per_drive = div(drive_pts_raw, drives) if drives > 0 else None
+    drive_pts_per_drive = div(drive_pts_raw, drives) if drive_pg >= 2.0 else None
 
     # TOV% — standard turnover rate formula
     tov_pct = div(tov_pg, fga + 0.44 * fta + tov_pg) if (fga + fta + tov_pg) > 0 else None

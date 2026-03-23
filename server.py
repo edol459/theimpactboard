@@ -79,6 +79,7 @@ BASE_COLS = """
     ps.iso_ppp, ps.pnr_bh_ppp, ps.pnr_roll_ppp, ps.transition_ppp, ps.post_ppp,
     ps.pnr_roll_poss, ps.post_poss,
     ps.def_iso_ppp, ps.def_pnr_bh_ppp,
+    ps.def_post_ppp, ps.def_spotup_ppp, ps.def_pnr_roll_ppp,
     ps.drives, ps.drive_fga, ps.drive_fg_pct, ps.drive_pts, ps.drive_pf, ps.drive_passes, ps.drive_tov,
     ps.passes_made, ps.potential_ast, ps.ast_pts_created, ps.secondary_ast,
     ps.touches, ps.time_of_poss,
@@ -222,6 +223,8 @@ def get_sort_col(sort_key):
         'leverage_creation', 'leverage_full', 'leverage_shooting',
         'leverage_defense', 'leverage_onball_def',
         'def_ws', 'off_ws', 'ws_48', 'matchup_def_fg_pct',
+        'def_iso_ppp', 'def_pnr_bh_ppp',
+        'def_post_ppp', 'def_spotup_ppp', 'def_pnr_roll_ppp',
         'sq_avg_shot_quality', 'sq_fg_pct_above_expected',
         'post_ppp', 'iso_ppp', 'pnr_bh_ppp', 'pnr_roll_ppp', 'transition_ppp',
     }
@@ -238,6 +241,31 @@ def index():
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     return resp
+
+
+@app.route('/api/win-correlations')
+def win_correlations():
+    """Return win correlation weights for the composite builder."""
+    import json as json_mod
+    season = request.args.get('season', DEFAULT_SEASON)
+    safe_season = season.replace('-', '_')
+    data_dir = os.path.join(os.path.dirname(__file__), 'backend', 'ingest', 'data')
+    path = os.path.join(data_dir, f'win_correlations_{safe_season}.json')
+    if not os.path.exists(path):
+        # Try the other season as fallback
+        fallback = os.path.join(data_dir, 'win_correlations_2025_26.json')
+        if os.path.exists(fallback):
+            path = fallback
+        else:
+            return jsonify({'weights': {}, 'correlations': {}, 'season': season})
+    try:
+        with open(path) as f:
+            data = json_mod.load(f)
+        resp = jsonify(data)
+        resp.headers['Cache-Control'] = 'public, max-age=3600'
+        return resp
+    except Exception as e:
+        return jsonify({'error': str(e), 'weights': {}}), 500
 
 
 @app.route('/api/health')
@@ -427,7 +455,7 @@ def get_players():
     min_min     = float(request.args.get('min', 1000))
     search      = request.args.get('search', '').strip()
     page        = max(1, int(request.args.get('page', 1)))
-    per_page    = min(100, int(request.args.get('per_page', 50)))
+    per_page    = min(600, int(request.args.get('per_page', 50)))
     offset      = (page - 1) * per_page
 
     # Sub-composite thresholds (adjustable via Filters drawer)

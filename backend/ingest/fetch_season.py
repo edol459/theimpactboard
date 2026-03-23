@@ -253,6 +253,9 @@ def fetch_all(season, season_type):
         ('syn_transition', 'Transition',   'offensive'),
         ('syn_iso_def',    'Isolation',    'defensive'),
         ('syn_pnr_def',    'PRBallHandler','defensive'),
+        ('syn_post_def',   'Postup',       'defensive'),
+        ('syn_spotup_def', 'Spotup',       'defensive'),
+        ('syn_roll_def',   'PRRollman',    'defensive'),
     ]:
         data[key] = fetch(f"Synergy — {play_type} ({grouping})",
             lambda pt=play_type, g=grouping: SynergyPlayTypes(
@@ -524,8 +527,11 @@ def build_player_rows(data, season, season_type):
         ('syn_post_off',   'POST_PPP',        None,             'POST_POSS',     None),
         ('syn_spotup',     'SPOTUP_PPP',      'SPOTUP_EFG_PCT', None,          None),
         ('syn_transition', 'TRANSITION_PPP',  None,             'TRANSITION_FGA', None),
-        ('syn_iso_def',    'DEF_ISO_PPP',     None,             None,          None),
-        ('syn_pnr_def',    'DEF_PNR_BH_PPP',  None,             None,          None),
+        ('syn_iso_def',    'DEF_ISO_PPP',        None, None,               None),
+        ('syn_pnr_def',    'DEF_PNR_BH_PPP',     None, None,               None),
+        ('syn_post_def',   'DEF_POST_PPP',        None, 'DEF_POST_POSS',    None),
+        ('syn_spotup_def', 'DEF_SPOTUP_PPP',      None, 'DEF_SPOTUP_POSS',  None),
+        ('syn_roll_def',   'DEF_PNR_ROLL_PPP',    None, 'DEF_PNR_ROLL_POSS',None),
     ]
 
     for key, ppp_col, efg_col, fga_col, tov_col in synergy_map:
@@ -838,8 +844,14 @@ def build_player_rows(data, season, season_type):
             'spotup_efg_pct': safe_float(row.get('SPOTUP_EFG_PCT')),
             'transition_ppp': safe_float(row.get('TRANSITION_PPP')),
             'transition_fga': safe_float(row.get('TRANSITION_FGA')),
-            'def_iso_ppp':    safe_float(row.get('DEF_ISO_PPP')),
-            'def_pnr_bh_ppp': safe_float(row.get('DEF_PNR_BH_PPP')),
+            'def_iso_ppp':      safe_float(row.get('DEF_ISO_PPP')),
+            'def_pnr_bh_ppp':   safe_float(row.get('DEF_PNR_BH_PPP')),
+            'def_post_ppp':     safe_float(row.get('DEF_POST_PPP')),
+            'def_post_poss':    safe_float(row.get('DEF_POST_POSS')),
+            'def_spotup_ppp':   safe_float(row.get('DEF_SPOTUP_PPP')),
+            'def_spotup_poss':  safe_float(row.get('DEF_SPOTUP_POSS')),
+            'def_pnr_roll_ppp': safe_float(row.get('DEF_PNR_ROLL_PPP')),
+            'def_pnr_roll_poss':safe_float(row.get('DEF_PNR_ROLL_POSS')),
 
             # Clutch
             'clutch_net_rating': safe_float(row.get('CLUTCH_NET_RATING')),

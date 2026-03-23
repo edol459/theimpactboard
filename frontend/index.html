@@ -65,12 +65,12 @@ header{
   position:relative;
 }
 .cat-tab:hover{color:var(--text2)}
-.cat-tab.active{color:var(--text);border-bottom-color:var(--accent)}
+.cat-tab.active{color:var(--text);border-bottom-color:var(--dot-color, var(--accent))}
 .cat-tab-dot{
   width:6px;height:6px;border-radius:50%;
   background:var(--text3);flex-shrink:0;transition:background .12s;
 }
-.cat-tab.active .cat-tab-dot{background:var(--accent)}
+.cat-tab.active .cat-tab-dot{background:var(--dot-color, var(--accent))}
 .cat-tab-sep{width:1px;height:18px;background:var(--border);margin:0 4px;flex-shrink:0}
 
 /* ── Body ────────────────────────────────── */
@@ -355,6 +355,138 @@ td.c-primary{min-width:140px}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 @keyframes rowIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:900px){.body{grid-template-columns:1fr}.sidebar{display:none}.drawer,.settings-drawer{width:100vw}}
+/* ── Composite Builder ───────────────────── */
+.builder-overlay{
+  position:fixed;inset:0;background:var(--bg);z-index:200;
+  display:none;flex-direction:row;overflow:hidden;
+}
+.builder-overlay.on{display:flex}
+.builder-panel{
+  width:340px;flex-shrink:0;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;background:var(--bg2);
+}
+.builder-panel-head{
+  padding:16px 18px 12px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.builder-panel-head h2{font-family:var(--fh);font-size:16px;font-weight:600;letter-spacing:.04em;color:var(--text)}
+.builder-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:2px 6px;border-radius:var(--r);transition:color .15s}
+.builder-close:hover{color:var(--text)}
+.builder-search{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+}
+.builder-search input{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);
+  font-size:12px;padding:6px 10px;border-radius:var(--r);outline:none;font-family:var(--fb);
+}
+.builder-search input:focus{border-color:var(--border3)}
+.builder-search input::placeholder{color:var(--text3)}
+.builder-cats{
+  display:flex;gap:4px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--border);
+}
+.builder-cat-btn{
+  font-size:10px;font-family:var(--fm);padding:3px 8px;border-radius:10px;
+  border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;
+  transition:all .15s;letter-spacing:.03em;
+}
+.builder-cat-btn:hover{border-color:var(--border3);color:var(--text2)}
+.builder-cat-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.builder-metric-list{flex:1;overflow-y:auto;padding:6px 0}
+.builder-metric-list::-webkit-scrollbar{width:3px}
+.builder-metric-list::-webkit-scrollbar-thumb{background:var(--border2)}
+.bm-item{
+  display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;
+  transition:background .1s;border-left:2px solid transparent;
+}
+.bm-item:hover{background:var(--bg3)}
+.bm-sub-header{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 14px 4px;
+  background:var(--sub-bg);
+  border-left:2px solid var(--sub-border);
+  margin:2px 0 0;
+}
+.bm-sub-cat{font-size:9px;font-family:var(--fm);font-weight:600;color:var(--sub-text);letter-spacing:.06em;text-transform:uppercase;opacity:.8}
+.bm-sub-name{font-size:10px;font-family:var(--fh);font-weight:600;color:var(--sub-text);letter-spacing:.04em}
+.bm-item.selected{border-left-color:var(--bm-sel-border, var(--accent));background:rgba(249,115,22,.04)}
+.bm-check{width:14px;height:14px;border:1.5px solid var(--border2);border-radius:3px;flex-shrink:0;transition:all .15s;display:flex;align-items:center;justify-content:center}
+.bm-item.selected .bm-check{background:var(--accent);border-color:var(--accent)}
+.bm-check-inner{width:8px;height:8px;background:#fff;border-radius:1px;opacity:0;transition:opacity .1s}
+.bm-item.selected .bm-check-inner{opacity:1}
+.bm-label{font-size:12px;color:var(--text2);flex:1;line-height:1.3}
+.bm-item.selected .bm-label{color:var(--text)}
+.bm-cat{font-size:10px;font-family:var(--fm);color:var(--text3)}
+.builder-selected{
+  border-top:1px solid var(--border);padding:10px 14px;
+  background:var(--bg);
+}
+.builder-selected-head{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;
+}
+.builder-selected-head span{font-size:11px;color:var(--text3);font-family:var(--fm)}
+.builder-chips{display:flex;flex-wrap:wrap;gap:5px;max-height:110px;overflow-y:auto}
+.b-chip{
+  display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:4px;padding:4px 8px;font-size:11px;color:var(--text2);
+}
+.b-chip .b-chip-label{font-family:var(--fm);color:var(--text);font-size:10px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.b-chip-weight{
+  width:36px;background:var(--bg);border:1px solid var(--border2);color:var(--accent);
+  font-family:var(--fm);font-size:10px;text-align:center;padding:2px 3px;border-radius:2px;outline:none;
+}
+.b-chip-remove{background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0;line-height:1;transition:color .1s}
+.b-chip-remove:hover{color:var(--red)}
+.builder-run{
+  margin:10px 14px 12px;padding:9px;background:var(--accent);color:#fff;border:none;
+  border-radius:var(--r);font-family:var(--fh);font-size:13px;font-weight:600;
+  letter-spacing:.05em;cursor:pointer;width:calc(100% - 28px);transition:background .15s;
+}
+.builder-run:hover{background:var(--accent2)}
+.builder-run:disabled{opacity:.4;cursor:default}
+/* Results */
+.builder-results{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.builder-results-head{
+  padding:14px 24px 10px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.builder-results-head h3{font-family:var(--fh);font-size:15px;font-weight:600;color:var(--text);letter-spacing:.04em}
+.builder-formula{font-size:11px;color:var(--text3);font-family:var(--fm);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.builder-pos-filter{display:flex;gap:4px}
+.builder-pos-btn{font-size:10px;font-family:var(--fm);padding:3px 7px;border-radius:3px;border:1px solid var(--border2);background:transparent;color:var(--text3);cursor:pointer;transition:all .15s}
+.builder-pos-btn:hover{color:var(--text2)}
+.builder-pos-btn.on{background:var(--bg3);color:var(--text);border-color:var(--border3)}
+.builder-table-wrap{flex:1;overflow-y:auto}
+.builder-table-wrap::-webkit-scrollbar{width:3px}
+.builder-table-wrap::-webkit-scrollbar-thumb{background:var(--border2)}
+.b-table{width:100%;border-collapse:collapse;font-size:12px}
+.b-table th{background:var(--bg2);color:var(--text3);font-weight:500;font-size:10px;font-family:var(--fm);text-align:left;padding:8px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:2}
+.b-table td{padding:8px 16px;border-bottom:1px solid var(--border);color:var(--text2)}
+.b-table tr:hover td{background:rgba(255,255,255,.02)}
+.b-table tr:last-child td{border-bottom:none}
+.b-rank{font-family:var(--fm);font-size:11px;color:var(--text3);width:32px}
+.b-rank.t1{color:var(--accent)}
+.b-rank.t2{color:#94a3b8}
+.b-rank.t3{color:#92400e}
+.b-pname{font-family:var(--fb);font-size:13px;color:var(--text);font-weight:500}
+.b-pos{font-size:10px;font-family:var(--fm);color:var(--text3);margin-left:6px}
+.b-score{font-family:var(--fm);font-size:13px;color:var(--accent);font-weight:500;text-align:right;width:60px}
+.b-bar-cell{width:180px}
+.b-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.b-bar-f{height:100%;background:var(--accent);border-radius:2px;transition:width .4s}
+.b-breakdown{font-size:10px;font-family:var(--fm);color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+.builder-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--text3);font-family:var(--fm);font-size:12px;gap:8px;
+}
+.b-mode-toggle{display:flex;border:1px solid var(--border2);border-radius:4px;overflow:hidden}
+.b-mode-btn{
+  font-size:10px;font-family:var(--fm);letter-spacing:.04em;
+  padding:4px 10px;background:transparent;border:none;color:var(--text3);cursor:pointer;
+  transition:all .15s;
+}
+.b-mode-btn.on{background:var(--accent);color:#fff}
+.b-mode-btn:not(.on):hover{color:var(--text2);background:var(--bg3)}
+.builder-result-count{font-size:11px;font-family:var(--fm);color:var(--text3);margin-left:auto}
 </style>
 </head>
 <body>
@@ -371,15 +503,17 @@ td.c-primary{min-width:140px}
 
 <!-- Category tab bar -->
 <div class="cat-bar" id="cat-bar">
-  <button class="cat-tab active" data-cat="scoring"><div class="cat-tab-dot"></div>Scoring</button>
+  <button class="cat-tab active" data-cat="scoring" style="--dot-color:#3b82f6"><div class="cat-tab-dot" style="background:#3b82f6"></div>Scoring</button>
   <div class="cat-tab-sep"></div>
-  <button class="cat-tab" data-cat="playmaking"><div class="cat-tab-dot"></div>Playmaking</button>
+  <button class="cat-tab" data-cat="playmaking" style="--dot-color:#22c55e"><div class="cat-tab-dot" style="background:#22c55e"></div>Playmaking</button>
   <div class="cat-tab-sep"></div>
-  <button class="cat-tab" data-cat="defense"><div class="cat-tab-dot"></div>Defense</button>
+  <button class="cat-tab" data-cat="defense" style="--dot-color:#ef4444"><div class="cat-tab-dot" style="background:#ef4444"></div>Defense</button>
   <div class="cat-tab-sep"></div>
-  <button class="cat-tab" data-cat="hustle"><div class="cat-tab-dot"></div>Hustle</button>
+  <button class="cat-tab" data-cat="hustle" style="--dot-color:#eab308"><div class="cat-tab-dot" style="background:#eab308"></div>Hustle</button>
   <div class="cat-tab-sep"></div>
   <button class="cat-tab" data-cat="metrics" style="--dot-color:var(--purple)"><div class="cat-tab-dot" style="background:var(--purple)"></div>Metrics</button>
+  <div class="cat-tab-sep"></div>
+  <button class="cat-tab" id="builder-tab" style="--dot-color:#f59e0b"><div class="cat-tab-dot" style="background:#f59e0b"></div>Builder</button>
 </div>
 
 <!-- Body -->
@@ -509,6 +643,73 @@ td.c-primary{min-width:140px}
   <div class="d-sec"><div class="d-sec-title">Hustle</div><div class="d-rows" id="d-hus"></div></div>
 </div>
 
+<!-- ── Composite Builder Overlay ───────────── -->
+<div class="builder-overlay" id="builder-overlay">
+  <!-- Left panel: metric picker -->
+  <div class="builder-panel">
+    <div class="builder-panel-head">
+      <h2>⚗ Composite Builder</h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="b-mode-toggle" id="b-mode-toggle" title="Impact Mode weights each metric by how strongly it predicts winning (Pearson r with Net Pts/100). Skill Mode uses flat percentile averages.">
+          <button class="b-mode-btn on" data-mode="impact">Impact</button>
+          <button class="b-mode-btn" data-mode="skill">Skill</button>
+        </div>
+        <button class="builder-close" id="builder-close">✕</button>
+      </div>
+    </div>
+    <div class="builder-search">
+      <input type="text" id="builder-search" placeholder="Search metrics…">
+    </div>
+    <div class="builder-cats" id="builder-cats"></div>
+    <div class="builder-metric-list" id="builder-metric-list"></div>
+    <div class="builder-selected">
+      <div class="builder-selected-head">
+        <span id="builder-sel-count">0 metrics selected</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="builder-clear-all" style="font-size:10px;font-family:var(--fm);background:none;border:none;color:var(--text3);cursor:pointer;padding:0;transition:color .15s" title="Clear all">Clear all</button>
+          <span style="font-size:10px;color:var(--text3);font-family:var(--fm)">Weight ×</span>
+        </div>
+      </div>
+      <div class="builder-chips" id="builder-chips"></div>
+    </div>
+    <button class="builder-run" id="builder-run" disabled>RUN COMPOSITE →</button>
+  </div>
+  <!-- Right panel: results -->
+  <div class="builder-results">
+    <div class="builder-results-head">
+      <h3>Results</h3>
+      <span class="builder-formula" id="builder-formula">Select metrics and run to see rankings</span>
+      <div class="builder-pos-filter" id="b-pos-filter">
+        <button class="builder-pos-btn on" data-pos="ALL">ALL</button>
+        <button class="builder-pos-btn" data-pos="G">G</button>
+        <button class="builder-pos-btn" data-pos="GF">GF</button>
+        <button class="builder-pos-btn" data-pos="F">F</button>
+        <button class="builder-pos-btn" data-pos="FC">FC</button>
+        <button class="builder-pos-btn" data-pos="C">C</button>
+      </div>
+      <span class="builder-result-count" id="b-result-count"></span>
+    </div>
+    <div class="builder-table-wrap">
+      <div class="builder-empty" id="builder-empty">
+        <div class="builder-empty-icon">⚗</div>
+        <div>Pick metrics on the left, then run</div>
+        <div style="font-size:10px;color:var(--text4)">Each metric contributes its league percentile × weight</div>
+      </div>
+      <table class="b-table" id="b-table" style="display:none">
+        <thead>
+          <tr>
+            <th class="b-rank" style="width:40px">#</th>
+            <th>Player</th>
+            <th style="width:180px">Score</th>
+            <th>Breakdown</th>
+          </tr>
+        </thead>
+        <tbody id="b-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin;
 const DEFAULTS = {
@@ -545,6 +746,7 @@ const NAV = {
           { key:'drive_foul_rate',     label:'Drive Foul Rate', fmt:'3f', badge:'FOUL'  },
           { key:'pnr_roll_ppp',        label:'Roll Man PPP',    fmt:'2f', badge:'ROLL'  },
           { key:'post_ppp',            label:'Post PPP',        fmt:'2f', badge:'POST'  },
+          { key:'transition_ppp',      label:'Transition PPP',  fmt:'2f', badge:'TRANS' },
         ],
         cols:['pts','fg_pct','paint_efg_vw','drive_pts_per_drive','pnr_roll_ppp'],
       },
@@ -674,11 +876,12 @@ const NAV = {
         key:'perimeter', label:'Perimeter',
         overall: { key:'perimeter_def_score', label:'Perimeter Def Avg Percentile', fmt:'1f', isOverall:true },
         metrics: [
-          { key:'def_delta_3pt',       label:'Def Delta 3PT',   fmt:'3f', badge:'3PT'  },
-          { key:'def_delta_overall',   label:'Def Delta',       fmt:'3f', badge:'DΔ'   },
-          { key:'def_disruption_rate', label:'Disruption/75',   fmt:'2f', badge:'DISR' },
-          { key:'contested_shots',     label:'Contested Shots', fmt:'1f', badge:'CONT' },
-          { key:'stl',                 label:'Steals',          fmt:'1f', badge:'STL'  },
+          { key:'def_delta_3pt',       label:'Def Delta 3PT',       fmt:'3f', badge:'3PT'  },
+          { key:'def_delta_overall',   label:'Def Delta',           fmt:'3f', badge:'DΔ'   },
+          { key:'def_disruption_rate', label:'Disruption/75',       fmt:'2f', badge:'DISR' },
+          { key:'contested_shots',     label:'Contested Shots',     fmt:'1f', badge:'CONT' },
+          { key:'stl',                 label:'Steals',              fmt:'1f', badge:'STL'  },
+          { key:'def_spotup_ppp',      label:'Def Spot-Up PPP',     fmt:'2f', badge:'DSU'  },
         ],
         cols:['stl','def_rating','def_delta_overall','def_delta_3pt','contested_shots'],
       },
@@ -686,10 +889,12 @@ const NAV = {
         key:'interior', label:'Interior',
         overall: { key:'interior_def_score', label:'Interior Def Avg Percentile', fmt:'1f', isOverall:true },
         metrics: [
-          { key:'rim_protection_score', label:'Rim Protection', fmt:'1f',  badge:'RIM'  },
-          { key:'def_delta_2pt',        label:'Def Delta 2PT',  fmt:'3f',  badge:'2PT'  },
-          { key:'dreb_pct',             label:'DREB %',         fmt:'pct', badge:'DRB%' },
-          { key:'blk',                  label:'Blocks',         fmt:'1f',  badge:'BLK'  },
+          { key:'rim_protection_score', label:'Rim Protection',     fmt:'1f',  badge:'RIM'  },
+          { key:'def_delta_2pt',        label:'Def Delta 2PT',      fmt:'3f',  badge:'2PT'  },
+          { key:'dreb_pct',             label:'DREB %',             fmt:'pct', badge:'DRB%' },
+          { key:'blk',                  label:'Blocks',             fmt:'1f',  badge:'BLK'  },
+          { key:'def_post_ppp',         label:'Def Post PPP',       fmt:'2f',  badge:'DPST' },
+          { key:'def_pnr_roll_ppp',     label:'Def Roll Man PPP',   fmt:'2f',  badge:'DROL' },
         ],
         cols:['blk','dreb_pct','def_rating','rim_protection_score'],
       },
@@ -697,9 +902,9 @@ const NAV = {
         key:'overall_def', label:'Overall',
         overall: null,
         metrics: [
-          { key:'leverage_defense',    label:'Leverage Defense',   fmt:'3f', badge:'LEVD' },
-          { key:'def_ws',              label:'Def Win Shares',     fmt:'2f', badge:'DWS'  },
-          { key:'matchup_def_fg_pct',  label:'Matchup FG% Allowed',fmt:'pct',badge:'MFGA' },
+          { key:'leverage_defense',   label:'Leverage Defense',    fmt:'3f', badge:'LEVD' },
+          { key:'def_ws',             label:'Def Win Shares',      fmt:'2f', badge:'DWS'  },
+          { key:'matchup_def_fg_pct', label:'Matchup FG% Allowed', fmt:'pct',badge:'MFGA' },
         ],
         cols:['stl','blk','dreb_pct','def_rating','leverage_defense'],
       },
@@ -870,8 +1075,13 @@ const COL_DEF = {
   gravity_offball_perimeter:{label:'FB-GRAV',fmt:'2f',cls:''},
   leverage_defense:{label:'LEV-D',fmt:'3f',cls:''},
   leverage_onball_def:{label:'OB-DEF',fmt:'3f',cls:''},
+  def_spotup_ppp:{label:'D-SU',fmt:'2f',cls:'lower-better'},
+  def_pnr_roll_ppp:{label:'D-ROLL',fmt:'2f',cls:'lower-better'},
   matchup_def_fg_pct:{label:'MU-FG%',fmt:'pct',cls:'lower-better'},
-  matchup_def_fg_pct:{formula:'DEF_FGM / DEF_FGA (LeagueSeasonMatchups, season totals)',desc:'Opponent FG% when guarded by this defender, aggregated across all matchups. Lower is better. Requires ≥ 50 DEF_FGA to qualify. Inverted percentile feeds into Defender Score.',source:'NBA Matchups'},
+  finishing_score:{formula:'Avg percentile of: Paint EFG+, Paint Scoring Rate, Pts/Drive, Drive Foul Rate, Roll Man PPP, Post PPP, Transition PPP. Min 1 of 7.',desc:'Finishing sub-composite (position-normalized). Transition PPP uses ≥ 2.0 FGA/g gate. Requires paint_efg_vw OR paint_scoring_rate non-NULL.',source:'Composite'},
+  def_post_ppp:{formula:'Post-up PPP allowed (Synergy, defensive)',desc:'Points per possession allowed on post-up plays. Lower is better — inverted percentile used in Interior Defense composite. Gate: ≥ 1.5 post poss/g.',source:'Synergy'},
+  def_spotup_ppp:{formula:'Spot-up PPP allowed (Synergy, defensive)',desc:'Points per possession allowed on catch-and-shoot / spot-up plays. Lower is better — inverted percentile in Perimeter Defense composite. Gate: ≥ 1.5 spotup poss/g.',source:'Synergy'},
+  def_pnr_roll_ppp:{formula:'PnR Roll Man PPP allowed (Synergy, defensive)',desc:'Points per possession allowed defending the roll man. Lower is better — inverted percentile in Interior Defense composite. Gate: ≥ 1.5 poss/g.',source:'Synergy'},
   def_ws:{label:'DWS',fmt:'2f',cls:''},
   off_ws:{label:'OWS',fmt:'2f',cls:''},
   ws_48:{label:'WS/48',fmt:'3f',cls:''},
@@ -1043,9 +1253,9 @@ const METRIC_INFO = {
   // Composites — percentile-averaging methodology
   creator_score:{formula:'Avg percentile of: Finishing score + Shooting score + Creation score',desc:'Overall Scoring composite. Average of sub-category percentile scores across Finishing, Shooting, and Shot Creation. Requires qualifying in all three.',source:'Composite'},
   playmaker_score:{formula:'Avg percentile of available sub-scores: Passing + Creation + Ball Handling',desc:'Overall Playmaking composite. Requires passing_score (gate: 2 AST/g + 3 pot AST/g + 30 GP, all positions). Creation averages in when available (gate: 3 pot AST/g + 40 touches/g + 30 GP). Ball Handling averages in when available (gate: 4 drives/g + 40 touches/g + 30 GP).',source:'Composite'},
-  defender_score:{formula:"Avg of available: Perimeter Def + Interior Def + Leverage Defense + Def Win Shares + Matchup FG% Allowed (inv) — all position-normalized",desc:"Overall Defense composite. Five signals: perimeter sub-score (shot defense, disruption, steals), interior sub-score (rim protection, blocks, DREB%), leverage_defense, def_ws, and matchup_def_fg_pct (inverted — lower FG% allowed = higher percentile). All position-normalized, each averages in when available.",source:"Composite"},
+  defender_score:{formula:"Avg of available: Perimeter Def + Interior Def + Leverage Defense + Def Win Shares + Matchup FG% Allowed (inv)",desc:"Overall Defense composite (position-normalized). Perimeter sub-score (delta 3PT/overall, disruption, contested shots, steals, spot-up coverage), interior sub-score (rim protection, blocks, DREB%, post/roll coverage), plus leverage_defense, def_ws, and matchup_def_fg_pct. All position-normalized.",source:"Composite"},
   hustle_score:{formula:'Avg percentile of: Activity score + Rebounding score',desc:'Overall Hustle composite (position-normalized). Average of Activity and Rebounding sub-scores.',source:'Composite'},
-  finishing_score:{formula:'Avg percentile (position-normalized) of: Paint EFG+, Paint Scoring Rate, Pts Per Drive, Drive Foul Rate, Roll Man PPP, Post PPP',desc:'Finishing composite — rim efficiency, drive scoring, and post/roll finishing. Position-normalized.',source:'Composite'},
+  finishing_score:{formula:'Avg percentile of: Paint EFG+, Paint Scoring Rate, Pts/Drive, Drive Foul Rate, Roll Man PPP, Post PPP, Transition PPP. Min 1 of 7.',desc:'Finishing sub-composite (position-normalized). Transition PPP uses ≥ 2.0 FGA/g gate. Requires paint_efg_vw OR paint_scoring_rate non-NULL.',source:'Composite'},
   shooting_score:{formula:'Avg percentile (league-wide) of: Spotup EFG%, All3 EFG+, Midrange EFG+, FG% Above Expected. Min 2 of 4 non-NULL.',desc:'Shooting sub-composite. FG% Above Expected (130 players, NBA Stats) measures shot-making quality independent of shot selection — being below expected hurts your percentile. Spotup only counted if above lg avg C&S EFG% (0.535).',source:'Composite'},
   shot_creation_score:{formula:'Avg percentile (league-wide) of: Unassisted FGM%, ISO PPP, Pull-Up EFG%, Drive FG%, USG%, TOV% (inv), Leverage Shooting. Min 2 of 7 non-NULL.',desc:'Shot Creation sub-composite (Scoring category). Self-creation ability plus shooting leverage impact (how much your presence moves team shooting on/off). Gate: min 2.0 drives/g.',source:'Composite'},
   creation_score:{formula:'Avg percentile (league-wide) of: Leverage Creation, AST Pts Created/G, FT AST/75. Min 2 of 3 non-NULL.',desc:'Playmaking Creation sub-composite. Style-agnostic — all three measure how much scoring you create for others regardless of method. Jokic, Draymond, and LeBron-types rank appropriately via FT AST and AST pts created. Gate: 3 pot AST/g + 40 touches/g + 30 GP.',source:'Composite'},
@@ -1733,7 +1943,452 @@ document.getElementById('min-min').addEventListener('input',e=>{
   clearTimeout(mt); mt=setTimeout(()=>{ST.minMin=parseInt(e.target.value)||0;ST.page=1;fetchPlayers();},400);
 });
 
-// ── Init ──────────────────────────────────
+// ── Composite Builder ─────────────────────
+const BUILDER = {
+  open: false,
+  selected: [],
+  allPlayers: [],
+  results: [],
+  posFilter: 'ALL',
+  catFilter: 'ALL',
+  search: '',
+  mode: 'impact',         // 'impact' | 'skill'
+  correlations: {},       // {metric_key: pearson_r}
+  weights: {},            // {metric_key: 0.1-1.0 normalized weight}
+  weightsLoaded: false,
+};
+
+// Build flat metric list from NAV
+// Each entry: {key, label, cat, catLabel, sub, subLabel}
+function buildMetricIndex() {
+  const seen = new Set();
+  const metrics = [];
+  const catLabels = {scoring:'Scoring',playmaking:'Playmaking',defense:'Defense',hustle:'Hustle',metrics:'Metrics'};
+
+  const SKIP = new Set(['creator_score','playmaker_score','defender_score','hustle_score',
+    'finishing_score','shooting_score','shot_creation_score','passing_score','creation_score',
+    'decision_making_score','perimeter_def_score','interior_def_score','activity_score',
+    'rebounding_score','three_and_d_score','overall_def_score']);
+
+  const addMetric = (key, label, catKey, subLabel) => {
+    if (!key || seen.has(key) || SKIP.has(key)) return;
+    seen.add(key);
+    metrics.push({key, label, cat: catKey, catLabel: catLabels[catKey] || catKey, subLabel: subLabel || ''});
+  };
+
+  for (const [catKey, cat] of Object.entries(NAV)) {
+    if (cat.flat) {
+      const fm = cat.flatMetrics;
+      for (const m of (fm || [])) {
+        if (m.isGroup && m.groupOptions) m.groupOptions.forEach(o => addMetric(o.key, o.label, catKey, 'External'));
+        else if (!m.soon) addMetric(m.key, m.label, catKey, 'Overall');
+      }
+    } else if (cat.subs) {
+      for (const sub of cat.subs) {
+        const mlist = sub.metrics || [];
+        for (const m of mlist) addMetric(m.key, m.label, catKey, sub.label);
+      }
+    }
+  }
+  return metrics;
+}
+
+let BUILDER_METRICS = [];
+
+function openBuilder() {
+  BUILDER.open = true;
+  document.getElementById('builder-overlay').classList.add('on');
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('builder-tab').classList.add('active');
+
+  if (!BUILDER_METRICS.length) BUILDER_METRICS = buildMetricIndex();
+  renderBuilderCats();
+  renderBuilderMetrics();
+  renderBuilderChips();
+
+  if (!BUILDER.allPlayers.length) fetchBuilderPlayers();
+  if (!BUILDER.weightsLoaded) fetchWinCorrelations();
+}
+
+async function fetchWinCorrelations() {
+  try {
+    const res = await fetch(`${API}/api/win-correlations?season=${ST.season}`);
+    const data = await res.json();
+    BUILDER.correlations  = data.correlations || {};
+    BUILDER.weights       = data.weights      || {};
+    BUILDER.weightsLoaded = true;
+    console.log(`Win correlations loaded: ${Object.keys(BUILDER.weights).length} metrics`);
+  } catch(e) {
+    console.warn('Could not load win correlations — skill mode only', e);
+  }
+}
+
+// Mode toggle
+document.getElementById('b-mode-toggle').querySelectorAll('.b-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    BUILDER.mode = btn.dataset.mode;
+    document.querySelectorAll('.b-mode-btn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    // Re-run if results exist
+    if (BUILDER.results.length) runBuilderComposite();
+  });
+});
+
+function closeBuilder() {
+  BUILDER.open = false;
+  document.getElementById('builder-overlay').classList.remove('on');
+}
+
+document.getElementById('builder-close').addEventListener('click', closeBuilder);
+document.getElementById('builder-tab').addEventListener('click', openBuilder);
+
+// Fetch all players (no pagination) for builder
+async function fetchBuilderPlayers() {
+  try {
+    const params = new URLSearchParams({
+      sort: 'creator_score', dir: 'desc', pos: 'ALL',
+      season: ST.season, min: 500, page: 1, per_page: 600,
+      min_ast_pg: 0, min_touches_pg: 0, min_drives_pg: 0,
+      min_paint_fga: 0, min_rim_fga: 0, min_3pt_fga: 0,
+    });
+    const res = await fetch(`${API}/api/players?${params}`);
+    const data = await res.json();
+    BUILDER.allPlayers = data.players || [];
+    console.log(`Builder loaded ${BUILDER.allPlayers.length} players`);
+  } catch(e) {
+    console.error('Builder fetch failed', e);
+  }
+}
+
+// Re-fetch builder data when season changes (handled in season change listener below)
+
+function renderBuilderCats() {
+  const cats = ['ALL', ...new Set(BUILDER_METRICS.map(m => m.catLabel))];
+  const catKeys = {Scoring:'scoring',Playmaking:'playmaking',Defense:'defense',Hustle:'hustle',Metrics:'metrics'};
+  const el = document.getElementById('builder-cats');
+  el.innerHTML = cats.map(c => {
+    const ck = catKeys[c];
+    const col = ck ? CAT_COLORS[ck] : null;
+    const isOn = BUILDER.catFilter === c;
+    const style = isOn && col
+      ? `background:${col.bg};border-color:${col.border};color:${col.text}`
+      : isOn ? '' : '';
+    return `<button class="builder-cat-btn ${isOn ? 'on' : ''}" data-cat="${c}" style="${style}">${c}</button>`;
+  }).join('');
+  el.querySelectorAll('.builder-cat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      BUILDER.catFilter = btn.dataset.cat;
+      renderBuilderCats();
+      renderBuilderMetrics();
+    });
+  });
+}
+
+// Category + subcategory color palette
+const CAT_COLORS = {
+  scoring:    { bg:'rgba(59,130,246,.12)',  text:'#3b82f6', border:'rgba(59,130,246,.25)' },
+  playmaking: { bg:'rgba(34,197,94,.12)',   text:'#22c55e', border:'rgba(34,197,94,.25)'  },
+  defense:    { bg:'rgba(239,68,68,.12)',   text:'#ef4444', border:'rgba(239,68,68,.25)'  },
+  hustle:     { bg:'rgba(234,179,8,.12)',   text:'#eab308', border:'rgba(234,179,8,.25)'  },
+  metrics:    { bg:'rgba(167,139,250,.12)', text:'#a78bfa', border:'rgba(167,139,250,.25)' },
+};
+
+function renderBuilderMetrics() {
+  const q = BUILDER.search.toLowerCase();
+  const list = document.getElementById('builder-metric-list');
+
+  const filtered = BUILDER_METRICS.filter(m => {
+    if (BUILDER.catFilter !== 'ALL' && m.catLabel !== BUILDER.catFilter) return false;
+    if (q && !m.label.toLowerCase().includes(q) && !m.key.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  if (!filtered.length) {
+    list.innerHTML = `<div style="padding:20px;text-align:center;font-size:11px;color:var(--text3);font-family:var(--fm)">No metrics found</div>`;
+    return;
+  }
+
+  // Group by cat → subLabel
+  const groups = {};
+  for (const m of filtered) {
+    const gk = `${m.cat}||${m.subLabel}`;
+    if (!groups[gk]) groups[gk] = {cat: m.cat, catLabel: m.catLabel, subLabel: m.subLabel, items: []};
+    groups[gk].items.push(m);
+  }
+
+  let html = '';
+  let lastCat = null;
+
+  for (const gk of Object.keys(groups)) {
+    const g = groups[gk];
+    const c = CAT_COLORS[g.cat] || CAT_COLORS.metrics;
+
+    // Cat separator if changed
+    if (g.cat !== lastCat) {
+      lastCat = g.cat;
+      if (html) html += `<div style="height:4px"></div>`;
+    }
+
+    // Subcategory header
+    html += `<div class="bm-sub-header" style="--sub-bg:${c.bg};--sub-text:${c.text};--sub-border:${c.border}">
+      <span class="bm-sub-cat">${g.catLabel}</span>
+      <span class="bm-sub-name">${g.subLabel}</span>
+    </div>`;
+
+    for (const m of g.items) {
+      const sel = BUILDER.selected.some(s => s.key === m.key);
+      html += `<div class="bm-item ${sel ? 'selected' : ''}" data-key="${m.key}" style="${sel ? `--bm-sel-border:${c.text}` : ''}">
+        <div class="bm-check" style="${sel ? `background:${c.text};border-color:${c.text}` : ''}"><div class="bm-check-inner"></div></div>
+        <div class="bm-label">${m.label}</div>
+      </div>`;
+    }
+  }
+
+  list.innerHTML = html;
+
+  list.querySelectorAll('.bm-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const key = item.dataset.key;
+      const idx = BUILDER.selected.findIndex(s => s.key === key);
+      if (idx >= 0) {
+        BUILDER.selected.splice(idx, 1);
+      } else {
+        const meta = BUILDER_METRICS.find(m => m.key === key);
+        BUILDER.selected.push({...meta, weight: 1});
+      }
+      renderBuilderMetrics();
+      renderBuilderChips();
+      document.getElementById('builder-run').disabled = BUILDER.selected.length === 0;
+    });
+  });
+}
+
+function renderBuilderChips() {
+  const el = document.getElementById('builder-chips');
+  const count = document.getElementById('builder-sel-count');
+  count.textContent = `${BUILDER.selected.length} metric${BUILDER.selected.length !== 1 ? 's' : ''} selected`;
+
+  if (!BUILDER.selected.length) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--text4);font-family:var(--fm);padding:4px 0">None yet — click metrics above</div>`;
+    return;
+  }
+
+  el.innerHTML = BUILDER.selected.map((m, i) => {
+    const c = CAT_COLORS[m.cat] || CAT_COLORS.metrics;
+    return `<div class="b-chip" data-i="${i}" style="border-color:${c.border}">
+      <span class="b-chip-label" title="${m.label}" style="color:${c.text}">${m.label}</span>
+      <input class="b-chip-weight" type="number" min="0.1" max="10" step="0.5" value="${m.weight}" data-i="${i}" title="Weight">
+      <button class="b-chip-remove" data-i="${i}">×</button>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.b-chip-weight').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const i = parseInt(inp.dataset.i);
+      BUILDER.selected[i].weight = Math.max(0.1, parseFloat(inp.value) || 1);
+    });
+  });
+  el.querySelectorAll('.b-chip-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.i);
+      BUILDER.selected.splice(i, 1);
+      renderBuilderMetrics();
+      renderBuilderChips();
+      document.getElementById('builder-run').disabled = BUILDER.selected.length === 0;
+    });
+  });
+}
+
+document.getElementById('builder-search').addEventListener('input', e => {
+  BUILDER.search = e.target.value;
+  renderBuilderMetrics();
+});
+
+// ── Position filter ────────────────────────
+document.getElementById('b-pos-filter').querySelectorAll('.builder-pos-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    BUILDER.posFilter = btn.dataset.pos;
+    document.querySelectorAll('.builder-pos-btn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    renderBuilderResults();
+  });
+});
+
+// ── Run composite ──────────────────────────
+document.getElementById('builder-clear-all').addEventListener('click', () => {
+  BUILDER.selected = [];
+  renderBuilderMetrics();
+  renderBuilderChips();
+  document.getElementById('builder-run').disabled = true;
+});
+
+document.getElementById('builder-run').addEventListener('click', runBuilderComposite);
+
+function runBuilderComposite() {
+  if (!BUILDER.selected.length) return;
+  if (!BUILDER.allPlayers.length) {
+    alert('Still loading player data, try again in a moment.');
+    return;
+  }
+
+  const metrics    = BUILDER.selected;
+  const isImpact   = BUILDER.mode === 'impact' && BUILDER.weightsLoaded;
+
+  // Pre-compute raw percentile maps for each selected metric
+  const vals = {};
+  for (const m of metrics) {
+    const raw = BUILDER.allPlayers
+      .map(p => parseFloat(p[m.key]))
+      .filter(v => !isNaN(v) && v !== null);
+    raw.sort((a, b) => a - b);
+    vals[m.key] = raw;
+  }
+
+  const LOWER_BETTER = new Set([
+    'tov','tov_pct','def_rating','def_iso_ppp','def_pnr_bh_ppp',
+    'def_post_ppp','def_spotup_ppp','def_pnr_roll_ppp',
+    'matchup_def_fg_pct','lost_ball_tov_pg','bad_pass_tov_pg',
+  ]);
+
+  function pctileOf(key, val) {
+    const arr = vals[key];
+    if (!arr || !arr.length || val === null || isNaN(parseFloat(val))) return null;
+    const n = parseFloat(val);
+    let lo = 0, hi = arr.length;
+    while (lo < hi) { const mid = (lo+hi)>>1; if(arr[mid] < n) lo=mid+1; else hi=mid; }
+    const pct = (lo / arr.length) * 100;
+    return LOWER_BETTER.has(key) ? 100 - pct : pct;
+  }
+
+  // Some NAV display keys differ from the underlying stat key in the correlations JSON
+  const KEY_ALIASES = {
+    'cs_efg_pct':        'spotup_efg_pct',
+    'all3_efg_vw':       'all3_efg_vw',
+    'midrange_efg_vw':   'midrange_efg_vw',
+    'above_break3_efg_vw': 'above_break3_efg_vw',
+    'corner3_efg_vw':    'corner3_efg_vw',
+    'sq_fg_pct_above_expected': 'sq_fg_pct_above_expected',
+    'lost_ball_tov_pg':  'lost_ball_tov_pg',
+    'bad_pass_tov_pg':   'bad_pass_tov_pg',
+    'def_delta_overall': 'def_delta_overall',
+    'def_delta_3pt':     'def_delta_3pt',
+    'def_delta_2pt':     'def_delta_2pt',
+  };
+
+  function winWeightFor(key) {
+    const lookup = KEY_ALIASES[key] || key;
+    return BUILDER.weights[lookup];
+  }
+
+  function corrFor(key) {
+    const lookup = KEY_ALIASES[key] || key;
+    return BUILDER.correlations[lookup];
+  }
+
+  function effectiveWeight(m) {
+    if (!isImpact) return m.weight;
+    const winW = winWeightFor(m.key);
+    return winW !== undefined ? m.weight * winW : m.weight * 0.1;
+  }
+
+  BUILDER.results = BUILDER.allPlayers.map(p => {
+    const breakdown = [];
+    let weightedSum = 0, totalWeight = 0;
+    for (const m of metrics) {
+      const pct = pctileOf(m.key, p[m.key]);
+      if (pct !== null) {
+        const w = effectiveWeight(m);
+        weightedSum += pct * w;
+        totalWeight += w;
+        const winW = winWeightFor(m.key);
+        const corr = corrFor(m.key);
+        breakdown.push({
+          label: m.label,
+          pct: pct.toFixed(1),
+          weight: m.weight,
+          winWeight: winW !== undefined ? winW.toFixed(3) : null,
+          corr: corr !== undefined ? corr.toFixed(2) : null,
+        });
+      }
+    }
+    const score = totalWeight > 0 ? weightedSum / totalWeight : null;
+    return {...p, _score: score, _breakdown: breakdown, _covered: breakdown.length};
+  }).filter(p => p._score !== null && p._covered >= Math.ceil(metrics.length / 2));
+
+  BUILDER.results.sort((a, b) => b._score - a._score);
+
+  // Build formula label
+  const modeLabel = isImpact ? '⚡ Impact' : '📊 Skill';
+  const parts = metrics.map(m => {
+    const corr = corrFor(m.key);
+    if (isImpact && corr !== undefined) {
+      return `${m.label} (r=${corr.toFixed(2)})`;
+    }
+    return m.weight !== 1 ? `${m.label} ×${m.weight}` : m.label;
+  });
+  document.getElementById('builder-formula').textContent = `${modeLabel}: ${parts.join(' + ')}`;
+
+  renderBuilderResults();
+}
+
+function renderBuilderResults() {
+  const posFilter = BUILDER.posFilter;
+  const filtered = BUILDER.results.filter(p =>
+    posFilter === 'ALL' || p.position_group === posFilter
+  );
+
+  const empty = document.getElementById('builder-empty');
+  const table = document.getElementById('b-table');
+  const tbody = document.getElementById('b-tbody');
+  const countEl = document.getElementById('b-result-count');
+
+  if (!filtered.length) {
+    empty.style.display = 'flex';
+    table.style.display = 'none';
+    countEl.textContent = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  table.style.display = 'table';
+  countEl.textContent = `${filtered.length} players`;
+
+  const maxScore = filtered[0]._score || 100;
+
+  tbody.innerHTML = filtered.map((p, i) => {
+    const rank = i + 1;
+    const rankCls = rank===1?'t1':rank===2?'t2':rank===3?'t3':'';
+    const barPct = (p._score / maxScore * 100).toFixed(1);
+    const bdText = p._breakdown.map(b => {
+      const isImpact = BUILDER.mode === 'impact' && BUILDER.weightsLoaded;
+      return isImpact && b.winWeight
+        ? `${b.label}: ${b.pct} (r-wt:${b.winWeight})`
+        : `${b.label}${b.weight !== 1 ? ` ×${b.weight}` : ''}: ${b.pct}`;
+    }).join(' · ');
+    return `<tr>
+      <td><div class="b-rank ${rankCls}">${rank}</div></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <img src="https://cdn.nba.com/headshots/nba/latest/1040x760/${p.player_id}.png"
+            onerror="this.style.opacity=0" alt=""
+            style="width:28px;height:21px;object-fit:cover;border-radius:2px;opacity:1">
+          <div>
+            <span class="b-pname">${p.player_name}</span>
+            <span class="b-pos">${p.position_group||''}</span>
+          </div>
+        </div>
+      </td>
+      <td class="b-bar-cell">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="b-bar" style="flex:1"><div class="b-bar-f" style="width:${barPct}%"></div></div>
+          <div class="b-score">${p._score.toFixed(1)}</div>
+        </div>
+      </td>
+      <td><div class="b-breakdown" title="${bdText}">${bdText}</div></td>
+    </tr>`;
+  }).join('');
+}
+
 fetch(`${API}/api/seasons`).then(r=>r.json()).then(seasons=>{
   if (!seasons || !seasons.length) return;
 
@@ -1760,7 +2415,8 @@ fetch(`${API}/api/seasons`).then(r=>r.json()).then(seasons=>{
   sel.addEventListener('change', () => {
     ST.season = sel.value;
     ST.page   = 1;
-    // Re-render sidebar so DARKO shows/hides based on season
+    // Re-fetch builder data too
+    if (BUILDER.open) { BUILDER.allPlayers = []; fetchBuilderPlayers(); }
     renderSidebar();
     updateViewLabel();
     renderHeader();

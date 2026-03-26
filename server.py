@@ -4,6 +4,7 @@ python server.py
 """
 
 import os
+import sys
 import math
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -12,6 +13,9 @@ import psycopg2
 import psycopg2.extras
 
 load_dotenv()
+
+# scoring_engine.py lives in backend/ingest — add to path for import
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend', 'ingest'))
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
 CORS(app)
@@ -854,6 +858,77 @@ def composite_weights():
 
     except Exception as e:
         return jsonify({'error': str(e), 'subcomp_weights': {}, 'catcomp_weights': {}}), 500
+
+
+@app.route('/api/builder', methods=['POST'])
+def builder():
+    """
+    Run a custom composite using the exact same methodology as compute_metrics.py.
+    Delegates entirely to scoring_engine.run_builder() — single source of truth.
+    """
+    import json as json_mod, os as os_mod
+    from backend.ingest.scoring_engine import run_builder
+
+    body       = request.get_json(force=True) or {}
+    selected   = body.get('selected', [])
+    mode       = body.get('mode', 'impact')
+    season     = body.get('season', DEFAULT_SEASON)
+    min_min    = float(body.get('min_min', 1000))
+
+    if not selected:
+        return jsonify({'error': 'No stats selected'}), 400
+
+    # ── Load percentile JSON ──────────────────────────────────
+    safe_season  = season.replace('-', '_')
+    data_dir     = os_mod.path.join(os_mod.path.dirname(__file__), 'backend', 'ingest', 'data')
+    pctile_path  = os_mod.path.join(data_dir, f'player_percentiles_{safe_season}.json')
+    weights_path = os_mod.path.join(data_dir, f'win_correlations_{safe_season}.json')
+
+    if not os_mod.path.exists(pctile_path):
+        return jsonify({'error': f'Percentile data not found for {season}. Run compute_metrics.py first.'}), 404
+
+    with open(pctile_path) as f:
+        pctile_data = json_mod.load(f)
+    raw_pctiles = pctile_data.get('percentiles', {})
+
+    # Split into lg / pos maps (engine expects {'lg': {...}, 'pos': {...}})
+    pct_maps = {'lg': {}, 'pos': {}}
+    for key, pmap in raw_pctiles.items():
+        if key.endswith('__pos'):
+            pct_maps['pos'][key[:-5]] = pmap   # strip __pos suffix
+        else:
+            pct_maps['lg'][key] = pmap
+
+    subcomp_weights = {}
+    if os_mod.path.exists(weights_path):
+        with open(weights_path) as f:
+            wdata = json_mod.load(f)
+        subcomp_weights = wdata.get('subcomp_weights', {})
+
+    # ── Load players from DB ──────────────────────────────────
+    try:
+        conn = get_conn()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT ps.player_id, ps.gp, ps.min, ps.min_per_game,
+                   ps.fga, ps.ast, ps.drives, ps.touches, ps.paint_touches,
+                   ps.potential_ast, ps.def_rim_fga, ps.pnr_bh_poss,
+                   p.player_name, p.position_group,
+                   ps.team_abbr
+            FROM player_seasons ps
+            JOIN players p ON ps.player_id = p.player_id
+            WHERE ps.season = %s AND ps.season_type = %s
+              AND ps.min >= %s AND ps.league = 'NBA'
+        """, (season, DEFAULT_SEASON_TYPE, min_min))
+        players = [dict(r) for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': f'DB error: {e}'}), 500
+
+    # ── Run via scoring engine ────────────────────────────────
+    results = run_builder(selected, players, pct_maps, subcomp_weights, mode=mode)
+    return jsonify({'results': results, 'season': season, 'mode': mode, 'n': len(results)})
 
 
 if __name__ == '__main__':

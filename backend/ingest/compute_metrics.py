@@ -62,66 +62,15 @@ ZONE_MIN_FGA_PG = {
 # Keys must match what compute_player_metrics() puts in the metrics dict
 # OR what seasons_map contains, and what the cols_srcs lists use.
 # For inverted stats (e.g. tov_pct used as tov_pct_inv), use the BASE key.
-SUBCOMP_STATS = {
-    'finishing_score': [
-        'paint_efg_vw', 'paint_scoring_rate', 'drive_pts_per_drive',
-        'drive_foul_rate', 'pnr_roll_ppp', 'post_ppp', 'transition_ppp',
-    ],
-    'shooting_score': [
-        'all3_efg_vw', 'midrange_efg_vw', 'sq_fg_pct_above_expected',
-    ],
-    'shot_creation_score': [
-        'pct_uast_fgm', 'iso_ppp', 'pull_up_efg_pct', 'drive_fg_pct',
-        'usg_pct', 'tov_pct', 'leverage_shooting',
-    ],
-    'passing_score': [
-        'pot_ast_per_tov', 'ast_pct', 'pass_quality_index',
-    ],
-    'creation_score': [
-        'leverage_creation', 'ast_pts_created_pg', 'ft_ast_per75',
-    ],
-    'decision_making_score': [
-        'lost_ball_tov_pg', 'pnr_bh_ppp',
-    ],
-    'perimeter_def_score': [
-        'def_delta_3pt', 'def_delta_overall', 'def_disruption_rate',
-        'contested_shots', 'stl', 'def_spotup_ppp',
-    ],
-    'interior_def_score': [
-        'rim_protection_score', 'def_delta_2pt', 'dreb_pct', 'blk',
-        'def_post_ppp', 'def_pnr_roll_ppp',
-    ],
-    'activity_score': [
-        'motor_score', 'hustle_composite', 'screen_assist_rate',
-    ],
-    'rebounding_score': [
-        'dreb_pct', 'oreb_pct', 'box_out_rate',
-    ],
-}
-
-# Category composites: maps category → sub-composite keys
-CATCOMP_STATS = {
-    'creator_score':   ['finishing_score', 'shooting_score', 'shot_creation_score'],
-    'playmaker_score': ['passing_score', 'creation_score', 'decision_making_score'],
-    'defender_score':  ['perimeter_def_score', 'interior_def_score'],
-    'hustle_score':    ['activity_score', 'rebounding_score'],
-}
-
-# Stats where lower raw value = better; flip sign before weighting
-LOWER_BETTER = {
-    'tov_pct', 'lost_ball_tov_pg', 'bad_pass_tov_pg',
-    'def_iso_ppp', 'def_pnr_bh_ppp', 'def_post_ppp',
-    'def_spotup_ppp', 'def_pnr_roll_ppp', 'matchup_def_fg_pct',
-}
-
-# Inverted col name → base stat key (for weight lookup)
-INVERT_MAP = {
-    'tov_pct_inv':          'tov_pct',
-    'lost_ball_tov_pg_inv': 'lost_ball_tov_pg',
-    'def_spotup_ppp_inv':   'def_spotup_ppp',
-    'def_post_ppp_inv':     'def_post_ppp',
-    'def_pnr_roll_ppp_inv': 'def_pnr_roll_ppp',
-}
+# ── Scoring methodology — imported from scoring_engine.py ───────────────────
+# scoring_engine.py is the single source of truth for all composite logic.
+# compute_metrics.py uses it for batch computation; server.py uses it for
+# the live /api/builder endpoint. Never duplicate these constants here.
+from scoring_engine import (
+    SUBCOMP_STATS, CATCOMP_STATS, LOWER_BETTER, INVERT_MAP,
+    SUB_COMPOSITES, DEFENDER_EXTRAS, SERVER_KEY_MAP,
+    passes_gate, score_subcomposites, score_categories,
+)
 
 
 # ── Utility ───────────────────────────────────────────────────
@@ -734,7 +683,27 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
             if key in seasons_map.get(pid, {}):
                 seasons_map[pid][ppp_col] = seasons_map[pid].pop(key)
 
-    pct_pos = {col: percentile_map(all_qualifying, col, src)
+    # Position-normalized percentiles: rank each player against their position group only.
+    # A guard who rebounds at an elite rate for a guard should rank in the 90s,
+    # not get buried by every center in the league.
+    def position_percentile_map(col, src):
+        """Compute percentile within each position group, combine into one map."""
+        result = {}
+        for pos_g, pids in pos_groups.items():
+            grp_vals = []
+            for pid in pids:
+                v = get_val(pid, col, src)
+                if v is not None and (col not in VW_METRICS or v != 0.0):
+                    grp_vals.append((pid, v))
+            if not grp_vals:
+                continue
+            sorted_grp = sorted(grp_vals, key=lambda x: x[1])
+            n = len(sorted_grp)
+            for i, (pid, _) in enumerate(sorted_grp):
+                result[pid] = round((i / (n - 1)) * 100, 1) if n > 1 else 50.0
+        return result
+
+    pct_pos = {col: position_percentile_map(col, src)
                for col, src in ALL_METRICS_POS}
 
     # Inverted percentile maps (lower raw = better = higher percentile)
@@ -748,106 +717,9 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
         if col in pct_pos:
             pct_pos[f'{col}_inv'] = {pid: round(100 - v, 1) for pid, v in pct_pos[col].items()}
 
-    def weighted_avg_pct(pid, cols_srcs, pct_maps, comp_name, min_metrics=1):
-        """
-        Weighted average of percentiles.
-        Resolves inverted col names (e.g. tov_pct_inv) to base key for weight lookup.
-        Falls back to weight=1.0 if no weight found.
-        """
-        comp_w = subcomp_weights.get(comp_name, {})
-        vals_weights = []
-        for col, src in cols_srcs:
-            pmap = pct_maps.get(col, {})
-            v    = pmap.get(pid)
-            if v is not None:
-                base_col = INVERT_MAP.get(col, col)
-                raw_w = comp_w.get(base_col)
-                w = raw_w if raw_w is not None else 1.0
-                vals_weights.append((v, w))
-        if len(vals_weights) < min_metrics:
-            return None
-        total_w = sum(w for _, w in vals_weights)
-        if total_w == 0:
-            return None
-        return round(sum(v * w for v, w in vals_weights) / total_w, 1)
+    # weighted_avg_pct and passes_gate imported from scoring_engine
 
-    def passes_gate(pid, gate_key):
-        """Sub-composite qualifying gates — volume per game only, no GP floor.
-        Storage conventions: ast, fga, pts = per-game averages (no /gp needed).
-        potential_ast, drives, touches, paint_touches, def_rim_fga = season totals (need /gp).
-        """
-        ps = seasons_map.get(pid, {})
-        gp = max(s(ps.get('gp'), 1), 1)
-        if gate_key == 'finishing':
-            return s(ps.get('paint_touches'), 0) / gp >= 3.0
-        if gate_key == 'shooting':
-            return s(ps.get('fga'), 0) >= 3.0
-        if gate_key == 'shot_creation':
-            return s(ps.get('drives'), 0) / gp >= 2.0
-        if gate_key == 'passing':
-            return (s(ps.get('ast'), 0) >= 1.5 and
-                    s(ps.get('potential_ast'), 0) / gp >= 3.0)
-        if gate_key == 'pm_creation':
-            return (s(ps.get('potential_ast'), 0) / gp >= 3.0 and
-                    s(ps.get('touches'), 0) / gp >= 40.0)
-        if gate_key == 'ball_handling':
-            return (s(ps.get('drives'), 0) / gp >= 4.0 and
-                    s(ps.get('touches'), 0) / gp >= 40.0)
-        if gate_key == 'interior_def':
-            return s(ps.get('def_rim_fga'), 0) / gp >= 2.5
-        return True
-
-    # ── Sub-composite definitions ─────────────────────────────
-    SUB_COMPOSITES = [
-        ('finishing_score', None,
-         [('paint_efg_vw', 'm'), ('paint_scoring_rate', 'm'),
-          ('drive_pts_per_drive', 'm'), ('drive_foul_rate', 'm'),
-          ('pnr_roll_ppp', 's'), ('post_ppp', 's'), ('transition_ppp', 's')],
-         'pos'),
-
-        ('shooting_score', 'shooting',
-         [('all3_efg_vw', 'm'),
-          ('midrange_efg_vw', 'm'), ('sq_fg_pct_above_expected', 's')],
-         'lg'),
-
-        ('shot_creation_score', 'shot_creation',
-         [('pct_uast_fgm', 's'), ('iso_ppp', 's'), ('pull_up_efg_pct', 's'),
-          ('drive_fg_pct', 's'), ('usg_pct', 's'), ('tov_pct_inv', 'm'),
-          ('leverage_shooting', 's')],
-         'lg'),
-
-        ('passing_score', 'passing',
-         [('pot_ast_per_tov', 'm'), ('ast_pct', 's'), ('pass_quality_index', 'm')],
-         'lg'),
-
-        ('creation_score', 'pm_creation',
-         [('leverage_creation', 's'), ('ast_pts_created_pg', 'm'), ('ft_ast_per75', 'm')],
-         'lg'),
-
-        ('decision_making_score', 'ball_handling',
-         [('lost_ball_tov_pg_inv', 'm'), ('pnr_bh_ppp', 's')],
-         'lg'),
-
-        ('perimeter_def_score', None,
-         [('def_delta_3pt', 'm'), ('def_delta_overall', 'm'),
-          ('def_disruption_rate', 'm'), ('contested_shots', 's'),
-          ('stl', 's'), ('def_spotup_ppp_inv', 's')],
-         'pos'),
-
-        ('interior_def_score', 'interior_def',
-         [('rim_protection_score', 'm'), ('def_delta_2pt', 'm'),
-          ('dreb_pct', 's'), ('blk', 's'),
-          ('def_post_ppp_inv', 's'), ('def_pnr_roll_ppp_inv', 's')],
-         'pos'),
-
-        ('activity_score', None,
-         [('motor_score', 'm'), ('hustle_composite', 'm'), ('screen_assist_rate', 'm')],
-         'pos'),
-
-        ('rebounding_score', None,
-         [('dreb_pct', 's'), ('oreb_pct', 's'), ('box_out_rate', 'm')],
-         'pos'),
-    ]
+    # SUB_COMPOSITES imported from scoring_engine
 
     # ── Score each player ─────────────────────────────────────
     for m in metrics_list:
@@ -857,87 +729,15 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
         # No minimum-minutes hard cutoff — stat-level volume gates handle eligibility.
 
 
-        # Sub-composites
-        for comp_name, gate_key, cols_srcs, pct_key in SUB_COMPOSITES:
-            if gate_key and not passes_gate(pid, gate_key):
-                m[comp_name] = None
-                continue
-            pct_maps = pct_lg if pct_key == 'lg' else pct_pos
-            # Require min(2, n_stats-1) so losing one individually-gated
-            # stat never nulls the entire sub-composite.
-            # 2-stat composites need 1; 3+-stat composites need 2.
-            n_stats = len(cols_srcs)
-            min_m = 1 if n_stats <= 2 else 2
+        # ── Sub-composites (via scoring_engine) ──────────────
+        pct_maps_dict = {'lg': pct_lg, 'pos': pct_pos}
+        ps = seasons_map.get(pid, {})
+        subcomp_scores = score_subcomposites(pid, ps, pct_maps_dict, subcomp_weights)
+        m.update(subcomp_scores)
 
-            score = weighted_avg_pct(pid, cols_srcs, pct_maps, comp_name, min_metrics=min_m)
-
-            if comp_name == 'finishing_score' and score is not None:
-                has_paint = (pct_pos.get('paint_efg_vw', {}).get(pid) is not None or
-                             pct_pos.get('paint_scoring_rate', {}).get(pid) is not None)
-                if not has_paint:
-                    score = None
-
-            if comp_name == 'passing_score' and score is not None:
-                if pct_lg.get('pot_ast_per_tov', {}).get(pid) is None:
-                    score = None
-
-            m[comp_name] = score
-
-        # ── Category composites (win-correlation weighted) ────
-        def flat_cat_score(sub_names):
-            """Flat unweighted average of available sub-composite scores.
-            Sub-composites already encode win-correlation via raw |r| weights."""
-            available = [safe(m.get(sn)) for sn in sub_names if safe(m.get(sn)) is not None]
-            if not available:
-                return None
-            return round(sum(available) / len(available), 1)
-
-        # Playmaker — best 2 of the 3 available sub-composites.
-        # Requires passing_score (the core signal). If all 3 are present,
-        # the lowest is dropped so ball handling never penalises a player
-        # who simply does not run PnR-BH as their primary role.
-        _pm_all = [(v, n) for n, v in [
-            ('passing',    safe(m.get('passing_score'))),
-            ('creation',   safe(m.get('creation_score'))),
-            ('ball_handling', safe(m.get('decision_making_score'))),
-        ] if v is not None]
-        # Must have passing_score
-        if not any(n == 'passing' for _, n in _pm_all):
-            m['playmaker_score'] = None
-        elif len(_pm_all) == 1:
-            m['playmaker_score'] = round(_pm_all[0][0], 1)
-        else:
-            # Take best 2 by value
-            top2 = sorted(_pm_all, key=lambda x: x[0], reverse=True)[:2]
-            m['playmaker_score'] = round(sum(v for v, _ in top2) / 2, 1)
-
-        # Creator — requires shot_creation_score
-        # Creator — best 2 of available sub-scores, requires shot_creation_score.
-        # If all 3 qualify, the lowest is dropped so a weak dimension never
-        # penalises a specialist (e.g. a pure shooter with low finishing).
-        _cr_subs = [(safe(m.get(sn)), sn) for sn in
-                    ['shot_creation_score', 'finishing_score', 'shooting_score']]
-        _cr_avail = [(v, n) for v, n in _cr_subs if v is not None]
-        if not any(n == 'shot_creation_score' for _, n in _cr_avail) or len(_cr_avail) < 2:
-            m['creator_score'] = None
-        else:
-            top2 = sorted(_cr_avail, key=lambda x: x[0], reverse=True)[:2]
-            m['creator_score'] = round(sum(v for v, _ in top2) / 2, 1)
-
-        # Defender — flat average of sub-scores + extra signals, no anchors
-        def_vals = []
-        for sub in ['perimeter_def_score', 'interior_def_score']:
-            v = safe(m.get(sub))
-            if v is not None: def_vals.append(v)
-        for extra_col in ['leverage_defense', 'def_ws']:
-            pct = pct_pos.get(extra_col, {}).get(pid)
-            if pct is not None: def_vals.append(pct)
-        matchup_pct = pct_pos.get('matchup_def_fg_pct_inv', {}).get(pid)
-        if matchup_pct is not None: def_vals.append(matchup_pct)
-        m['defender_score'] = round(sum(def_vals) / len(def_vals), 1) if def_vals else None
-
-        # Hustle
-        m['hustle_score'] = flat_cat_score(['activity_score', 'rebounding_score'])
+        # ── Category composites (via scoring_engine) ──────────
+        cat_scores = score_categories(subcomp_scores, pid, pct_maps_dict)
+        m.update(cat_scores)
 
         # Three-and-D
         pdef  = safe(m.get('perimeter_def_score'))
@@ -996,6 +796,27 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
                 pid = m['player_id']
                 m[f'{pctile_name}_pctile'] = (round((rank_map[pid] / n) * 100, 1)
                                               if pid in rank_map else None)
+
+    # ── Save percentile maps to JSON for Builder ────────────────
+    # pct_lg and pct_pos contain every stat's pre-computed percentile
+    # for every player, with all gates and VW logic already applied.
+    # The Builder reads this instead of recomputing client-side.
+    out_dir = os.path.join(os.path.dirname(__file__), 'data')
+    os.makedirs(out_dir, exist_ok=True)
+    pctile_path = os.path.join(
+        out_dir, f'player_percentiles_{season.replace("-","_")}.json'
+    )
+    # Merge pct_lg and pct_pos into one map: {stat: {pid: pctile}}
+    # Convert pid keys to strings for JSON
+    merged_pctiles = {}
+    for stat, pmap in pct_lg.items():
+        merged_pctiles[stat] = {str(pid): v for pid, v in pmap.items()}
+    for stat, pmap in pct_pos.items():
+        # pos-normalized stats stored with '_pos' suffix to distinguish
+        merged_pctiles[f'{stat}__pos'] = {str(pid): v for pid, v in pmap.items()}
+    with open(pctile_path, 'w') as f:
+        json.dump({'season': season, 'percentiles': merged_pctiles}, f)
+    print(f"  Saved percentiles → {pctile_path}")
 
     return metrics_list
 

@@ -1,98 +1,41 @@
-"""
-Show Curry's exact percentile rank for each shooting stat.
-python backend/ingest/check_curry_pctiles.py
-"""
-import os
+import psycopg2, os
 from dotenv import load_dotenv
 load_dotenv()
-import psycopg2, psycopg2.extras
 
 conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+cur = conn.cursor()
 
-SEASON      = os.getenv('NBA_SEASON',      '2024-25')
-SEASON_TYPE = os.getenv('NBA_SEASON_TYPE', 'Regular Season')
+cur.execute("""
+    SELECT p.player_name, p.position_group,
+           ps.gravity_score,
+           ps.gravity_onball_perimeter,
+           ps.gravity_offball_perimeter,
+           ps.gravity_onball_interior,
+           ps.gravity_offball_interior
+    FROM player_seasons ps
+    JOIN players p ON ps.player_id = p.player_id
+    WHERE ps.season = '2025-26' AND ps.season_type = 'Regular Season'
+      AND ps.gravity_score IS NOT NULL
+      AND ps.min >= 1000
+    ORDER BY ps.gravity_score DESC
+    LIMIT 15
+""")
+rows = cur.fetchall()
+print(f"Players with gravity data: checking...")
+print(f"{'Player':<25} {'POS':<5} {'Overall':>8} {'OnBall-P':>9} {'OffBall-P':>10} {'OnBall-I':>9} {'OffBall-I':>10}")
+for r in rows:
+    print(f"{r[0]:<25} {r[1]:<5} {str(r[2]):>8} {str(r[3]):>9} {str(r[4]):>10} {str(r[5]):>9} {str(r[6]):>10}")
 
-SHOOTING_STATS = [
-    ('spotup_efg_pct',           'ps', 'cs_fga',       4.0),
-    ('pull_up_efg_pct',          'ps', 'pull_up_fga',   1.5),
-    ('all3_efg_vw',              'pm', None,            None),
-    ('midrange_efg_vw',          'pm', None,            None),
-    ('sq_fg_pct_above_expected', 'ps', None,            None),
-]
-
-print(f"\n── CURRY PERCENTILE IN EACH SHOOTING STAT ───────────────")
-print(f"{'Stat':<28} {'CurryVal':>9} {'Pool':>5} {'CurryRank':>10} {'Pctile':>7}")
-print("─" * 65)
-
-for stat, tbl, gate_col, gate_min in SHOOTING_STATS:
-    # Build pool query
-    if gate_col and gate_min:
-        gate_clause = f"AND ps.{gate_col}/NULLIF(ps.gp,0) >= {gate_min}"
-    else:
-        gate_clause = ""
-
-    tbl_ref = "pm" if tbl == "pm" else "ps"
-
-    # Get all values in pool (ordered)
-    cur.execute(f"""
-        SELECT p.player_name, {tbl_ref}.{stat} AS val, ps.gp,
-               ps.cs_fga, ps.pull_up_fga
-        FROM player_metrics pm
-        JOIN player_seasons ps ON pm.player_id = ps.player_id
-            AND pm.season = ps.season AND pm.season_type = ps.season_type
-        JOIN players p ON pm.player_id = p.player_id
-        WHERE pm.season = %s AND pm.season_type = %s
-          AND {tbl_ref}.{stat} IS NOT NULL
-          {gate_clause}
-        ORDER BY {tbl_ref}.{stat} ASC
-    """, (SEASON, SEASON_TYPE))
-
-    rows = cur.fetchall()
-    pool_size = len(rows)
-
-    # Find Curry
-    curry_val = None
-    curry_rank = None
-    for i, r in enumerate(rows):
-        if 'Curry' in (r['player_name'] or '') and 'Stephen' in (r['player_name'] or ''):
-            curry_val = float(r['val'])
-            curry_rank = i + 1  # 1-indexed from bottom
-            break
-
-    if curry_val is not None:
-        pctile = (curry_rank - 1) / max(pool_size - 1, 1) * 100
-        print(f"  {stat:<26} {curry_val:>9.4f} {pool_size:>5} {curry_rank:>5}/{pool_size:<5} {pctile:>6.1f}p")
-    else:
-        print(f"  {stat:<26} {'NULL':>9} {pool_size:>5} {'N/A':>10} {'N/A':>7}")
-
-# Also show top 5 in each stat so we know who's beating him
-print(f"\n── TOP 10 IN EACH SHOOTING STAT ─────────────────────────")
-for stat, tbl, gate_col, gate_min in SHOOTING_STATS:
-    if gate_col and gate_min:
-        gate_clause = f"AND ps.{gate_col}/NULLIF(ps.gp,0) >= {gate_min}"
-    else:
-        gate_clause = ""
-    tbl_ref = "pm" if tbl == "pm" else "ps"
-
-    cur.execute(f"""
-        SELECT p.player_name, {tbl_ref}.{stat} AS val
-        FROM player_metrics pm
-        JOIN player_seasons ps ON pm.player_id = ps.player_id
-            AND pm.season = ps.season AND pm.season_type = ps.season_type
-        JOIN players p ON pm.player_id = p.player_id
-        WHERE pm.season = %s AND pm.season_type = %s
-          AND {tbl_ref}.{stat} IS NOT NULL
-          {gate_clause}
-        ORDER BY {tbl_ref}.{stat} DESC
-        LIMIT 10
-    """, (SEASON, SEASON_TYPE))
-    rows = cur.fetchall()
-    names = [f"{r['player_name']} ({float(r['val']):.3f})" for r in rows]
-    print(f"\n  {stat}:")
-    for i, n in enumerate(names, 1):
-        marker = " ◄" if 'Curry' in n else ""
-        print(f"    {i:>2}. {n}{marker}")
-
-cur.close()
-conn.close()
+# Check how many have data
+cur.execute("""
+    SELECT 
+        COUNT(*) FILTER (WHERE gravity_score IS NOT NULL) as has_overall,
+        COUNT(*) FILTER (WHERE gravity_onball_perimeter IS NOT NULL) as has_onball_p,
+        COUNT(*) FILTER (WHERE gravity_offball_perimeter IS NOT NULL) as has_offball_p,
+        COUNT(*) FILTER (WHERE gravity_onball_interior IS NOT NULL) as has_onball_i,
+        COUNT(*) FILTER (WHERE gravity_offball_interior IS NOT NULL) as has_offball_i
+    FROM player_seasons
+    WHERE season = '2025-26' AND season_type = 'Regular Season'
+""")
+r = cur.fetchone()
+print(f"\nCoverage: overall={r[0]}, onball_p={r[1]}, offball_p={r[2]}, onball_i={r[3]}, offball_i={r[4]}")

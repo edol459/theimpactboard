@@ -595,6 +595,8 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
         ('def_iso_ppp', 's'), ('def_pnr_bh_ppp', 's'),
         ('def_post_ppp', 's'), ('def_spotup_ppp', 's'), ('def_pnr_roll_ppp', 's'),
         ('transition_ppp', 's'),
+        ('gravity_onball_perimeter', 's'), ('gravity_offball_perimeter', 's'),
+        ('gravity_onball_interior', 's'), ('gravity_offball_interior', 's'),
     ]
     ALL_METRICS_POS = [
         ('paint_efg_vw', 'm'), ('paint_scoring_rate', 'm'),
@@ -747,7 +749,7 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
 
         # ── Impact Score ──────────────────────────────────────
         cat_scores = [safe(m.get(cn)) for cn in
-                      ['creator_score', 'playmaker_score', 'defender_score', 'hustle_score']]
+                      ['creator_score', 'playmaker_score', 'defender_score', 'intangibles_score']]
         cat_avail  = [v for v in cat_scores if v is not None]
         m['impact_score'] = round(sum(cat_avail) / len(cat_avail), 1) if cat_avail else None
 
@@ -763,7 +765,7 @@ def compute_composites(metrics_list, seasons_map, season, season_type,
         ('creator',     'creator_score',       'm', False),
         ('defender',    'defender_score',      'm', True),
         ('three_and_d', 'three_and_d_score',   'm', False),
-        ('hustle',      'hustle_score',        'm', False),
+        ('intangibles', 'intangibles_score',   'm', False),
     ]
     for pctile_name, col, src, pos_norm in pctile_cols:
         if pos_norm:

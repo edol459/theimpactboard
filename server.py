@@ -139,12 +139,12 @@ BASE_COLS = """
     pm.creator_score,
     pm.defender_score,
     pm.three_and_d_score,
-    pm.hustle_score,
+    pm.intangibles_score,
     pm.playmaker_pctile,
     pm.creator_pctile,
     pm.defender_pctile,
     pm.three_and_d_pctile,
-    pm.hustle_pctile,
+    pm.intangibles_pctile,
     pm.ts_pct_pctile,
     pm.net_rating_pctile,
     pm.shooting_score,
@@ -210,7 +210,7 @@ def get_sort_col(sort_key):
         'screen_assist_rate', 'loose_ball_rate', 'hustle_composite', 'motor_score',
         'creation_load', 'dribble_pressure_idx', 'cs_fga_rate', 'bpm_computed',
         'playmaker_score', 'creator_score', 'defender_score', 'three_and_d_score',
-        'hustle_score',
+        'intangibles_score',
         'finishing_score', 'shooting_score', 'shot_creation_score',
         'passing_score', 'creation_score', 'decision_making_score',
         'gravity_creation',
@@ -704,7 +704,7 @@ def get_leaders():
     composites = [
         ('playmaker_score', 'pm'), ('creator_score', 'pm'),
         ('defender_score',  'pm'), ('three_and_d_score', 'pm'),
-        ('hustle_score',    'pm'),
+        ('intangibles_score',    'pm'),
     ]
     result = {}
     try:

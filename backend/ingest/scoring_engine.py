@@ -49,13 +49,17 @@ SUBCOMP_STATS = {
     'rebounding_score': [
         'dreb_pct', 'oreb_pct', 'box_out_rate',
     ],
+    'gravity_score': [
+        'gravity_onball_perimeter', 'gravity_offball_perimeter',
+        'gravity_onball_interior', 'gravity_offball_interior',
+    ],
 }
 
 CATCOMP_STATS = {
     'creator_score':   ['finishing_score', 'shooting_score', 'shot_creation_score'],
     'playmaker_score': ['passing_score', 'creation_score', 'decision_making_score'],
     'defender_score':  ['perimeter_def_score', 'interior_def_score'],
-    'hustle_score':    ['activity_score', 'rebounding_score'],
+    'intangibles_score': ['activity_score', 'rebounding_score', 'gravity_score'],
 }
 
 # Stats where lower raw = better; stored in pct maps as _inv (already flipped)
@@ -144,6 +148,11 @@ SUB_COMPOSITES = [
     ('rebounding_score', None,
      [('dreb_pct', 's'), ('oreb_pct', 's'), ('box_out_rate', 'm')],
      'pos'),
+
+    ('gravity_score', None,
+     [('gravity_onball_perimeter', 's'), ('gravity_offball_perimeter', 's'),
+      ('gravity_onball_interior', 's'), ('gravity_offball_interior', 's')],
+     'lg'),
 ]
 
 # Defender extra signals beyond the two sub-composites
@@ -372,9 +381,9 @@ def score_categories(subcomp_scores, pid, pct_maps):
         if v is not None: def_vals.append(v)
     cat['defender_score'] = round(sum(def_vals) / len(def_vals), 1) if def_vals else None
 
-    # ── Hustle: flat avg
-    _hus = [v for v in [g('activity_score'), g('rebounding_score')] if v is not None]
-    cat['hustle_score'] = round(sum(_hus) / len(_hus), 1) if _hus else None
+    # ── Intangibles: flat avg of activity, rebounding, gravity
+    _int = [v for v in [g('activity_score'), g('rebounding_score'), g('gravity_score')] if v is not None]
+    cat['intangibles_score'] = round(sum(_int) / len(_int), 1) if _int else None
 
     return cat
 
@@ -499,10 +508,10 @@ def run_builder(selected_keys, players, pct_maps, subcomp_weights, mode='impact'
         # Determine which categories are fully represented by selected subcomps
         active_subcomps = set(subcomp_scores.keys())
         CATCOMP_SUBCOMPS = {
-            'creator_score':   {'finishing_score', 'shooting_score', 'shot_creation_score'},
-            'playmaker_score': {'passing_score', 'creation_score', 'decision_making_score'},
-            'defender_score':  {'perimeter_def_score', 'interior_def_score'},
-            'hustle_score':    {'activity_score', 'rebounding_score'},
+            'creator_score':     {'finishing_score', 'shooting_score', 'shot_creation_score'},
+            'playmaker_score':   {'passing_score', 'creation_score', 'decision_making_score'},
+            'defender_score':    {'perimeter_def_score', 'interior_def_score'},
+            'intangibles_score': {'activity_score', 'rebounding_score', 'gravity_score'},
         }
         # A category is "triggered" if ANY of its sub-composites are selected.
         # Use the category score (with best-2-of-3 etc.) when the selected

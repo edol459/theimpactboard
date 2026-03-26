@@ -581,7 +581,7 @@ td.c-primary{min-width:140px}
   <div class="cat-tab-sep"></div>
   <button class="cat-tab" data-cat="defense" style="--dot-color:#ef4444"><div class="cat-tab-dot" style="background:#ef4444"></div>Defense</button>
   <div class="cat-tab-sep"></div>
-  <button class="cat-tab" data-cat="hustle" style="--dot-color:#eab308"><div class="cat-tab-dot" style="background:#eab308"></div>Hustle</button>
+  <button class="cat-tab" data-cat="hustle" style="--dot-color:#eab308"><div class="cat-tab-dot" style="background:#eab308"></div>Intangibles</button>
   <div class="cat-tab-sep"></div>
   <button class="cat-tab" data-cat="metrics" style="--dot-color:var(--purple)"><div class="cat-tab-dot" style="background:var(--purple)"></div>Metrics</button>
   <div class="cat-tab-sep"></div>
@@ -1050,15 +1050,15 @@ const NAV = {
   },
 
   hustle: {
-    label: 'Hustle',
-    overall: { key:'hustle_score', label:'Hustle Avg Percentile', fmt:'1f', isOverall:true },
+    label: 'Intangibles',
+    overall: { key:'intangibles_score', label:'Intangibles Avg Percentile', fmt:'1f', isOverall:true },
     subs: [
       {
-        key:'activity', label:'Activity',
-        overall: { key:'activity_score', label:'Activity Avg Percentile', fmt:'1f', isOverall:true },
+        key:'activity', label:'Hustle',
+        overall: { key:'activity_score', label:'Hustle Avg Percentile', fmt:'1f', isOverall:true },
         metrics: [
-          { key:'hustle_composite', label:'Hustle Comp',   fmt:'2f', badge:'COMP' },
-          { key:'screen_assist_rate',label:'Scr AST Pts/75',fmt:'2f',badge:'SCR'  },
+          { key:'hustle_composite',  label:'Hustle Comp',      fmt:'2f', badge:'COMP' },
+          { key:'screen_assist_rate',label:'Scr AST Pts/75',   fmt:'2f', badge:'SCR'  },
         ],
         cols:['deflections','charges_drawn','stl','hustle_composite'],
       },
@@ -1071,6 +1071,17 @@ const NAV = {
           { key:'box_out_rate', label:'Box Out / 75', fmt:'2f',  badge:'BOX'  },
         ],
         cols:['dreb_pct','oreb_pct','box_outs','box_out_rate'],
+      },
+      {
+        key:'gravity', label:'Gravity',
+        overall: { key:'gravity_score', label:'Gravity Avg Percentile', fmt:'1f', isOverall:true },
+        metrics: [
+          { key:'gravity_onball_perimeter',  label:'On-Ball Perimeter',  fmt:'2f', badge:'OBP' },
+          { key:'gravity_offball_perimeter', label:'Off-Ball Perimeter', fmt:'2f', badge:'FBP' },
+          { key:'gravity_onball_interior',   label:'On-Ball Interior',   fmt:'2f', badge:'OBI' },
+          { key:'gravity_offball_interior',  label:'Off-Ball Interior',  fmt:'2f', badge:'FBI' },
+        ],
+        cols:['gravity_score','gravity_onball_perimeter','gravity_offball_perimeter','gravity_onball_interior'],
       },
       {
         key:'hustle_extras', label:'Extras',
@@ -1087,7 +1098,7 @@ const NAV = {
         cols:['deflections','charges_drawn','screen_assists','loose_balls','box_outs'],
       },
     ],
-    cols:['deflections','charges_drawn','screen_assists','loose_balls','box_outs'],
+    cols:['gravity_score','hustle_composite','dreb_pct','oreb_pct'],
   },
 
   metrics: {
@@ -1372,7 +1383,7 @@ const METRIC_INFO = {
   creator_score:{formula:'Flat avg of available sub-scores: Finishing + Shooting + Shot Creation',desc:'Overall Scoring composite. Requires shot_creation_score. Shooting: Pull-Up EFG%, All3 EFG+, Midrange EFG+, FG% Above Expected. C&S EFG% is display-only in Extras.',source:'Composite'},
   playmaker_score:{formula:'Best 2 of available sub-scores: Passing + Creation + Ball Handling',desc:'Overall Playmaking composite. Requires passing_score (gate: 1.5 AST/g + 3 pot AST/g). Takes the best 2 of however many sub-scores qualify — ball handling never penalises a player who does not run PnR-BH.',source:'Composite'},
   defender_score:{formula:'Flat avg of available inputs: Perimeter Def + Interior Def + Leverage Defense + Def Win Shares + Matchup FG% (inv)',desc:'Overall Defense composite. Flat unweighted average of all non-null inputs. No anchors. Sub-composites are win-corr weighted internally.',source:'Composite'},
-  hustle_score:{formula:'Flat avg of sub-scores: Activity + Rebounding',desc:'Overall Hustle composite. Flat unweighted average of activity_score and rebounding_score. Sub-scores are win-corr weighted internally.',source:'Composite'},
+  intangibles_score:{formula:'Flat avg of sub-scores: Activity + Rebounding',desc:'Overall Hustle composite. Flat unweighted average of activity_score and rebounding_score. Sub-scores are win-corr weighted internally.',source:'Composite'},
   finishing_score:{formula:'Win-corr weighted avg of: Paint EFG+, Paint Scoring Rate, Pts/Drive, Drive Foul Rate, Roll Man PPP, Post PPP, Transition PPP',desc:'Finishing sub-composite (position-normalized). Each stat weighted by raw |r| with net_pts100. Min 2 of 7 non-null. Gate: 3 paint touches/g. Requires paint_efg_vw OR paint_scoring_rate non-null.',source:'Composite'},
   shooting_score:{formula:'Win-corr weighted avg of: All3 EFG+, Midrange EFG+, FG% Above Expected',desc:'Shooting sub-composite (league-wide). Stats weighted by raw |r| with net_pts100. Min 2 of 3 non-null. Gate: 3 FGA/g. Catch & Shoot EFG% is display-only in Extras.',source:'Composite'},
   shot_creation_score:{formula:'Win-corr weighted avg of: Unassisted FGM%, ISO PPP, Drive FG%, USG%, TOV% (inv), Leverage Shooting',desc:'Shot Creation sub-composite. Stats weighted by raw |r| with net_pts100. Min 2 of 6 non-null. Gate: 2 drives/g. Pull-Up EFG% moved to Shooting composite.',source:'Composite'},
@@ -1387,7 +1398,7 @@ const METRIC_INFO = {
 
 // ── Composite key sets for weight tooltip ─
 const CATCOMP_KEYS = new Set([
-  'creator_score','playmaker_score','defender_score','hustle_score',
+  'creator_score','playmaker_score','defender_score','intangibles_score',
 ]);
 const SUBCOMP_KEYS = new Set([
   'finishing_score','shooting_score','shot_creation_score',
@@ -1935,7 +1946,7 @@ async function openDrawer(playerId) {
       {key:'creator_score',label:'Scoring',val:m.creator_score},
       {key:'playmaker_score',label:'Playmaking',val:m.playmaker_score},
       {key:'defender_score',label:'Defense',val:m.defender_score},
-      {key:'hustle_score',label:'Hustle',val:m.hustle_score},
+      {key:'intangibles_score',label:'Hustle',val:m.hustle_score},
     ];
     const best=scores.reduce((b,c)=>parseFloat(c.val||0)>parseFloat(b.val||0)?c:b,scores[0]);
     document.getElementById('d-scores').innerHTML=scores.map(c=>{
@@ -2032,8 +2043,8 @@ const DONUT_PALETTE=[
 
 function buildMetricIndex(){
   const seen=new Set(); const metrics=[];
-  const catLabels={scoring:'Scoring',playmaking:'Playmaking',defense:'Defense',hustle:'Hustle',metrics:'Metrics'};
-  const SKIP=new Set(['creator_score','playmaker_score','defender_score','hustle_score',
+  const catLabels={scoring:'Scoring',playmaking:'Playmaking',defense:'Defense',hustle:'Intangibles',metrics:'Metrics'};
+  const SKIP=new Set(['creator_score','playmaker_score','defender_score','intangibles_score',
     'finishing_score','shooting_score','shot_creation_score','passing_score','creation_score',
     'decision_making_score','perimeter_def_score','interior_def_score','activity_score',
     'rebounding_score','three_and_d_score','overall_def_score']);
@@ -2138,7 +2149,7 @@ const CAT_COLORS={
 
 function renderBuilderCats(){
   const cats=['ALL',...new Set(BUILDER_METRICS.map(m=>m.catLabel))];
-  const catKeys={Scoring:'scoring',Playmaking:'playmaking',Defense:'defense',Hustle:'hustle',Metrics:'metrics'};
+  const catKeys={Scoring:'scoring',Playmaking:'playmaking',Defense:'defense',Intangibles:'hustle',Metrics:'metrics'};
   const el=document.getElementById('builder-cats');
   el.innerHTML=cats.map(c=>{
     const ck=catKeys[c]; const col=ck?CAT_COLORS[ck]:null; const isOn=BUILDER.catFilter===c;

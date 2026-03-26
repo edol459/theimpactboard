@@ -103,6 +103,12 @@ migrations = [
     ("player_seasons",  "lost_ball_tov",               "REAL"),
     # ── PnR ballhandler possessions ─────────────────────────────────────────
     ("player_seasons",  "pnr_bh_poss",                "REAL"),
+    # ── Intangibles category (replaces hustle_score) ─────────────────────────
+    ("player_metrics",  "gravity_score",              "REAL"),
+    ("player_metrics",  "intangibles_score",          "REAL"),
+    ("player_metrics",  "intangibles_pctile",         "REAL"),
+    ("player_metrics",  "activity_score",             "REAL"),
+    ("player_metrics",  "rebounding_score",           "REAL"),
 ]
 
 print(f"\nRunning migrations...")

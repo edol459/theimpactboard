@@ -66,14 +66,8 @@ nav {
   z-index: 100;
 }
 
-.nav-wordmark {
-  font-family: var(--ff-serif);
-  font-size: 20px;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-  text-decoration: none;
-  flex-shrink: 0;
-}
+.nav-wordmark span { color: var(--orange); }
+
 .nav-links { display: flex; gap: 2px; }
 .nav-link {
   font-family: var(--ff-mono);
@@ -407,7 +401,7 @@ nav {
 <body>
 
 <nav>
-  <a class="nav-wordmark" href="/">ydkball</a>
+  <a class="nav-wordmark" href="/">ydk<span>ball</span></a>
   <div class="nav-links">
     <a class="nav-link" href="/stats.html">Stats</a>
     <a class="nav-link" href="/builder.html">Builder</a>

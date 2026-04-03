@@ -271,6 +271,12 @@ def fetch_all(season, season_type):
             measure_type_detailed_defense="Advanced",
             clutch_time="Last 5 Minutes",
             ahead_behind="Ahead or Behind", point_diff=5))
+    data['clutch_base'] = fetch("Clutch Base Stats",
+        lambda: LeagueDashPlayerClutch(season=season,
+            season_type_all_star=season_type,
+            measure_type_detailed_defense="Base",
+            clutch_time="Last 5 Minutes",
+            ahead_behind="Ahead or Behind", point_diff=5))
 
     # Synergy
     for key, play_type, grouping in [
@@ -539,6 +545,12 @@ def build_player_rows(data, season, season_type):
         cl_sub = clutch[cl_cols].copy()
         cl_sub.columns = ['PLAYER_ID'] + [f'CLUTCH_{c}' for c in cl_sub.columns[1:]]
         merged = merged.merge(cl_sub, on='PLAYER_ID', how='left')
+
+    clutch_base = data.get('clutch_base', pd.DataFrame())
+    if not clutch_base.empty and 'FGM' in clutch_base.columns:
+        cb_sub = clutch_base[['PLAYER_ID', 'FGM']].copy()
+        cb_sub.columns = ['PLAYER_ID', 'CLUTCH_FGM']
+        merged = merged.merge(cb_sub, on='PLAYER_ID', how='left')
 
     # Synergy — pick PPP per play type
     synergy_map = [
@@ -860,6 +872,7 @@ def build_player_rows(data, season, season_type):
             'clutch_ts_pct':     safe_float(row.get('CLUTCH_TS_PCT')),
             'clutch_usg_pct':    safe_float(row.get('CLUTCH_USG_PCT')),
             'clutch_min':        safe_float(row.get('CLUTCH_MIN')),
+            'clutch_fgm':        round(safe_float(row.get('CLUTCH_FGM')) / gp, 2) if safe_float(row.get('CLUTCH_FGM')) is not None and gp > 0 else None,
 
             # Closest defender shooting
             # VT = Very Tight 0-2ft, TG = Tight 2-4ft, OP = Open 4-6ft, WO = Wide Open 6ft+
@@ -1008,11 +1021,205 @@ def upsert_shot_zones(conn, df, season):
     print(f"  ✅ Upserted {len(rows)} shot zone rows")
 
 
+# ── Targeted group updaters ────────────────────────────────────
+# Each function fetches a specific group of endpoints and does a
+# direct UPDATE on only those columns — safe to run without a full ingest.
+
+def _targeted_update(conn, updates, sql):
+    """Execute a list of update tuples against a parameterised SQL statement."""
+    if not updates:
+        print("  ⚠️  No rows to update")
+        return
+    cur = conn.cursor()
+    cur.executemany(sql, updates)
+    conn.commit()
+    cur.close()
+    print(f"  ✅ Updated {len(updates)} rows")
+
+
+def update_group_clutch(season, season_type):
+    print("\nUpdating clutch stats...")
+    clutch_adv  = fetch("Clutch Advanced Stats",
+        lambda: LeagueDashPlayerClutch(season=season,
+            season_type_all_star=season_type,
+            measure_type_detailed_defense="Advanced",
+            clutch_time="Last 5 Minutes",
+            ahead_behind="Ahead or Behind", point_diff=5))
+    clutch_base = fetch("Clutch Base Stats",
+        lambda: LeagueDashPlayerClutch(season=season,
+            season_type_all_star=season_type,
+            measure_type_detailed_defense="Base",
+            clutch_time="Last 5 Minutes",
+            ahead_behind="Ahead or Behind", point_diff=5))
+
+    if clutch_adv.empty:
+        print("  ❌ No clutch data returned")
+        return
+
+    # Build adv lookup by player_id
+    adv_map = {safe_int(r['PLAYER_ID']): r for _, r in clutch_adv.iterrows() if safe_int(r.get('PLAYER_ID'))}
+    # Build base lookup by player_id — FGM is per-game (endpoint default)
+    base_map = {}
+    if not clutch_base.empty and 'FGM' in clutch_base.columns:
+        base_map = {safe_int(r['PLAYER_ID']): r for _, r in clutch_base.iterrows() if safe_int(r.get('PLAYER_ID'))}
+
+    updates = []
+    for pid, adv in adv_map.items():
+        base = base_map.get(pid, {})
+        gp   = safe_int(adv.get('GP'))
+        fgm  = safe_float(base.get('FGM'))
+        fgm_pg = round(fgm / gp, 2) if (fgm is not None and gp and gp > 0) else None
+        updates.append((
+            safe_float(adv.get('NET_RATING')),
+            safe_float(adv.get('TS_PCT')),
+            safe_float(adv.get('USG_PCT')),
+            safe_float(adv.get('MIN')),
+            fgm_pg,
+            pid, season, season_type,
+        ))
+
+    conn = psycopg2.connect(DATABASE_URL)
+    _targeted_update(conn, updates, """
+        UPDATE player_seasons SET
+            clutch_net_rating = %s,
+            clutch_ts_pct     = %s,
+            clutch_usg_pct    = %s,
+            clutch_min        = %s,
+            clutch_fgm        = %s
+        WHERE player_id = %s AND season = %s AND season_type = %s
+    """)
+    conn.close()
+
+
+def update_group_tracking(season, season_type):
+    print("\nUpdating tracking stats...")
+    data = {}
+    for key, measure in [
+        ('drives',     'Drives'),
+        ('passing',    'Passing'),
+        ('pullup',     'PullUpShot'),
+        ('catchshoot', 'CatchShoot'),
+        ('post',       'PostTouch'),
+        ('speed',      'SpeedDistance'),
+        ('def_track',  'Defense'),
+    ]:
+        data[key] = fetch(f"Tracking — {measure}",
+            lambda m=measure: LeagueDashPtStats(season=season,
+                season_type_all_star=season_type,
+                per_mode_simple="Totals",
+                pt_measure_type=m, player_or_team="Player"))
+    data['touches'] = fetch_tracking_endpoint("Tracking — Touches",
+        lambda: LeagueDashPtStats(season=season,
+            season_type_all_star=season_type,
+            per_mode_simple="Totals",
+            pt_measure_type="Touches", player_or_team="Player"))
+
+    # Re-use build_player_rows with only tracking data + a minimal base stub
+    # by injecting the tracking frames into a partial data dict then doing a
+    # targeted UPDATE via the existing merge logic in build_player_rows.
+    # Simpler: run through build_player_rows requires base game logs for player IDs.
+    # Instead fetch a lightweight base to get player list.
+    data['base'] = fetch("Game Logs — Base (player list)",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Base"))
+
+    print("  Building rows...")
+    _, season_rows = build_player_rows(data, season, season_type)
+    if not season_rows:
+        print("  ❌ No rows built")
+        return
+
+    conn = psycopg2.connect(DATABASE_URL)
+    tracking_cols = [
+        'drives','drive_fga','drive_fgm','drive_fg_pct','drive_pts',
+        'drive_ast','drive_tov','drive_passes','drive_pf',
+        'passes_made','passes_received','ast_pts_created','potential_ast',
+        'secondary_ast','ft_ast','touches','time_of_poss',
+        'avg_sec_per_touch','avg_drib_per_touch',
+        'elbow_touches','post_touches','paint_touches',
+        'pull_up_fga','pull_up_fgm','pull_up_fg_pct',
+        'pull_up_fg3a','pull_up_fg3_pct','pull_up_efg_pct',
+        'cs_fga','cs_fgm','cs_fg_pct','cs_fg3a','cs_fg3_pct','cs_efg_pct',
+        'post_touch_fga','post_touch_fg_pct','post_touch_pts',
+        'post_touch_ast','post_touch_tov',
+        'dist_miles','dist_miles_off','dist_miles_def',
+        'avg_speed','avg_speed_off','avg_speed_def',
+    ]
+    set_clause = ', '.join(f"{c} = %s" for c in tracking_cols)
+    sql = f"UPDATE player_seasons SET {set_clause} WHERE player_id = %s AND season = %s AND season_type = %s"
+    updates = [
+        tuple(r.get(c) for c in tracking_cols) + (r['player_id'], r['season'], r['season_type'])
+        for r in season_rows
+    ]
+    _targeted_update(conn, updates, sql)
+    conn.close()
+
+
+def update_group_synergy(season, season_type):
+    print("\nUpdating synergy stats...")
+    data = {'base': fetch("Game Logs — Base (player list)",
+        lambda: PlayerGameLogs(season_nullable=season,
+            season_type_nullable=season_type, league_id_nullable="00",
+            measure_type_player_game_logs_nullable="Base"))}
+    for key, play_type, grouping in [
+        ('syn_iso_off',    'Isolation',    'offensive'),
+        ('syn_pnr_off',    'PRBallHandler','offensive'),
+        ('syn_pnr_roll',   'PRRollman',    'offensive'),
+        ('syn_post_off',   'Postup',       'offensive'),
+        ('syn_spotup',     'Spotup',       'offensive'),
+        ('syn_transition', 'Transition',   'offensive'),
+        ('syn_iso_def',    'Isolation',    'defensive'),
+        ('syn_pnr_def',    'PRBallHandler','defensive'),
+        ('syn_post_def',   'Postup',       'defensive'),
+        ('syn_spotup_def', 'Spotup',       'defensive'),
+        ('syn_roll_def',   'PRRollman',    'defensive'),
+    ]:
+        data[key] = fetch(f"Synergy — {play_type} ({grouping})",
+            lambda pt=play_type, g=grouping: SynergyPlayTypes(
+                season=season, season_type_all_star=season_type,
+                per_mode_simple="PerGame", play_type_nullable=pt,
+                type_grouping_nullable=g, player_or_team_abbreviation="P"))
+
+    _, season_rows = build_player_rows(data, season, season_type)
+    if not season_rows:
+        print("  ❌ No rows built")
+        return
+
+    conn = psycopg2.connect(DATABASE_URL)
+    syn_cols = [
+        'iso_ppp','iso_fga','iso_efg_pct','iso_tov_pct',
+        'pnr_bh_ppp','pnr_bh_fga','pnr_bh_poss',
+        'pnr_roll_ppp','pnr_roll_poss',
+        'post_ppp','post_poss','spotup_ppp','spotup_efg_pct',
+        'transition_ppp','transition_fga',
+        'def_iso_ppp','def_pnr_bh_ppp','def_post_ppp',
+        'def_spotup_ppp','def_pnr_roll_ppp',
+    ]
+    set_clause = ', '.join(f"{c} = %s" for c in syn_cols)
+    sql = f"UPDATE player_seasons SET {set_clause} WHERE player_id = %s AND season = %s AND season_type = %s"
+    updates = [
+        tuple(r.get(c) for c in syn_cols) + (r['player_id'], r['season'], r['season_type'])
+        for r in season_rows
+    ]
+    _targeted_update(conn, updates, sql)
+    conn.close()
+
+
+GROUP_UPDATERS = {
+    'clutch':   update_group_clutch,
+    'tracking': update_group_tracking,
+    'synergy':  update_group_synergy,
+}
+
+
 # ── Main ──────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--season',      default=SEASON)
     parser.add_argument('--season-type', default=SEASON_TYPE)
+    parser.add_argument('--only', choices=list(GROUP_UPDATERS.keys()),
+                        help='Update only a specific group of stats')
     args = parser.parse_args()
 
     season      = args.season
@@ -1021,6 +1228,11 @@ def main():
     print(f"\nThe Impact Board — Season Ingestion")
     print(f"Season: {season} | Type: {season_type}")
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+
+    if args.only:
+        GROUP_UPDATERS[args.only](season, season_type)
+        print(f"\n✅ Done: {args.only} | {season} {season_type}")
+        return
 
     data = fetch_all(season, season_type)
 

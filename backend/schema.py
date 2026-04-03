@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS player_seasons (
     -- Clutch (last 5 min ±5)
     clutch_net_rating REAL, clutch_ts_pct REAL,
     clutch_usg_pct    REAL, clutch_min    REAL,
+    clutch_fgm        REAL,
 
     -- On/Off (filled by fetch_external.py)
     on_net_rating   REAL, off_net_rating REAL, on_off_diff REAL,

@@ -117,6 +117,8 @@ migrations = [
     # ── ASAP Score ───────────────────────────────────────────────────────────
     ("player_metrics",  "asap_score",                 "REAL"),
     ("player_metrics",  "asap_pctile",                "REAL"),
+    # ── Clutch base stats ────────────────────────────────────────────────────
+    ("player_seasons",  "clutch_fgm",                 "REAL"),
 ]
 
 print(f"\nRunning migrations...")
@@ -125,9 +127,12 @@ print(f"{'─'*50}")
 for table, col, dtype in migrations:
     sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {dtype}"
     try:
+        cur.execute("SAVEPOINT migration_step")
         cur.execute(sql)
+        cur.execute("RELEASE SAVEPOINT migration_step")
         print(f"  ✅  {table}.{col} ({dtype})")
     except Exception as e:
+        cur.execute("ROLLBACK TO SAVEPOINT migration_step")
         print(f"  ❌  {table}.{col} — {e}")
 
 conn.commit()

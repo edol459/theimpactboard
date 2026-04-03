@@ -1513,18 +1513,60 @@ const STAT_CATS = {
       },
       clutch: {
         label: 'Clutch',
-        defaultSort: 'clutch_net_rating',
+        defaultSort: 'clutch_fgm',
         cols: [
           ...BASE_COLS,
-          { key: 'clutch_net_rating', label: 'Clutch NRtg', fmt: '1f' },
-          { key: 'clutch_ts_pct',     label: 'Clutch TS%',  fmt: 'pct' },
-          { key: 'clutch_usg_pct',    label: 'Clutch USG%', fmt: 'pct' },
-          { key: 'clutch_min',        label: 'Clutch MIN',  fmt: '1f' },
+          { key: 'clutch_fgm',        label: 'Clutch FGM/G', fmt: '1f' },
+          { key: 'clutch_net_rating', label: 'Clutch NRtg',  fmt: '1f' },
+          { key: 'clutch_ts_pct',     label: 'Clutch TS%',   fmt: 'pct' },
+          { key: 'clutch_usg_pct',    label: 'Clutch USG%',  fmt: 'pct' },
+          { key: 'clutch_min',        label: 'Clutch MIN',   fmt: '1f' },
           { key: 'off_rating',        label: 'ORtg',        fmt: '1f' },
           { key: 'def_rating',        label: 'DRtg',        fmt: '1f' },
           { key: 'net_rating',        label: 'NRtg',        fmt: '1f' },
           { key: 'ts_pct',            label: 'TS%',         fmt: 'pct' },
           { key: 'usg_pct',           label: 'USG%',        fmt: 'pct' },
+        ]
+      },
+      leverage: {
+        label: 'Leverage',
+        defaultSort: 'leverage_full',
+        cols: [
+          ...BASE_COLS,
+          { key: 'leverage_full',        label: 'Full',         fmt: '2f' },
+          { key: 'leverage_offense',     label: 'Offense',      fmt: '2f' },
+          { key: 'leverage_defense',     label: 'Defense',      fmt: '2f' },
+          { key: 'leverage_shooting',    label: 'Shooting',     fmt: '2f' },
+          { key: 'leverage_creation',    label: 'Creation',     fmt: '2f' },
+          { key: 'leverage_turnovers',   label: 'Turnovers',    fmt: '2f' },
+          { key: 'leverage_rebounds',    label: 'Rebounds',     fmt: '2f' },
+          { key: 'leverage_onball_def',  label: 'On-Ball Def',  fmt: '2f' },
+        ]
+      },
+      gravity: {
+        label: 'Gravity',
+        defaultSort: 'gravity_score',
+        cols: [
+          ...BASE_COLS,
+          { key: 'gravity_score',              label: 'Gravity',          fmt: '2f' },
+          { key: 'gravity_onball_perimeter',   label: 'On-Ball Perim',    fmt: '2f' },
+          { key: 'gravity_offball_perimeter',  label: 'Off-Ball Perim',   fmt: '2f' },
+          { key: 'gravity_onball_interior',    label: 'On-Ball Interior', fmt: '2f' },
+          { key: 'gravity_offball_interior',   label: 'Off-Ball Interior',fmt: '2f' },
+        ]
+      },
+      shot_difficulty: {
+        label: 'Shot Difficulty',
+        defaultSort: 'sq_avg_shot_quality',
+        cols: [
+          ...BASE_COLS,
+          { key: 'sq_avg_shot_quality',      label: 'Avg Shot Quality',    fmt: '2f' },
+          { key: 'sq_fg_pct_above_expected', label: 'FG% Above Expected',  fmt: 'pct' },
+          { key: 'sq_avg_defender_distance', label: 'Avg Def Distance',    fmt: '1f' },
+          { key: 'sq_avg_defender_pressure', label: 'Avg Def Pressure',    fmt: '2f' },
+          { key: 'sq_avg_shooter_speed',     label: 'Avg Shooter Speed',   fmt: '1f' },
+          { key: 'sq_avg_made_quality',      label: 'Made Shot Quality',   fmt: '2f' },
+          { key: 'sq_avg_missed_quality',    label: 'Missed Shot Quality', fmt: '2f' },
         ]
       },
     }
@@ -1901,6 +1943,17 @@ const STAT_CATS = {
 };
 
 // ── Contextual stat filters (min thresholds; empty = no filter) ─
+const BASE_STAT_FILTERS = [
+  { id: 'base_fgm',  key: 'fgm',          label: 'Min FGM/G',  scale: 'per_game' },
+  { id: 'base_pts',  key: 'pts',           label: 'Min PPG',    scale: 'per_game' },
+  { id: 'base_apg',  key: 'ast',           label: 'Min APG',    scale: 'per_game' },
+  { id: 'base_rpg',  key: 'reb',           label: 'Min RPG',    scale: 'per_game' },
+  { id: 'base_spg',  key: 'stl',           label: 'Min SPG',    scale: 'per_game' },
+  { id: 'base_bpg',  key: 'blk',           label: 'Min BPG',    scale: 'per_game' },
+  { id: 'base_3pm',  key: 'fg3m',          label: 'Min 3PM/G',  scale: 'per_game' },
+  { id: 'base_mpg',  key: 'min_per_game',  label: 'Min MPG',    scale: 'raw' },
+];
+
 const DEFAULT_CONTEXT_FILTERS = [
   { id: 'gp', key: 'gp', label: 'Min GP', scale: 'raw' },
   { id: 'mpg', key: 'min_per_game', label: 'Min MPG', scale: 'raw' },
@@ -1928,6 +1981,19 @@ const CONTEXT_FILTERS = {
       { id: 'mpg', key: 'min_per_game', label: 'Min MPG', scale: 'raw' },
       { id: 'clutch_min', key: 'clutch_min', label: 'Min clutch MIN/g', scale: 'raw' },
       { id: 'clutch_nrtg', key: 'clutch_net_rating', label: 'Min clutch NRtg', scale: 'raw' },
+    ],
+    leverage: [
+      { id: 'gp', key: 'gp', label: 'Min GP', scale: 'raw' },
+      { id: 'mpg', key: 'min_per_game', label: 'Min MPG', scale: 'raw' },
+    ],
+    gravity: [
+      { id: 'gp', key: 'gp', label: 'Min GP', scale: 'raw' },
+      { id: 'mpg', key: 'min_per_game', label: 'Min MPG', scale: 'raw' },
+    ],
+    shot_difficulty: [
+      { id: 'gp', key: 'gp', label: 'Min GP', scale: 'raw' },
+      { id: 'mpg', key: 'min_per_game', label: 'Min MPG', scale: 'raw' },
+      { id: 'sq_fga', key: 'fga', label: 'Min FGA/G', scale: 'per_game' },
     ],
   },
   general: {
@@ -2070,8 +2136,11 @@ const CONTEXT_FILTERS = {
 
 function getContextFilters(cat, group) {
   const list = CONTEXT_FILTERS[cat]?.[group];
-  if (list && list.length) return list;
-  return DEFAULT_CONTEXT_FILTERS;
+  const contextFilters = (list && list.length) ? list : DEFAULT_CONTEXT_FILTERS;
+  // Append base filters, skipping any whose id already appears in the context list
+  const seen = new Set(contextFilters.map(f => f.id));
+  const extras = BASE_STAT_FILTERS.filter(f => !seen.has(f.id));
+  return [...contextFilters, ...extras];
 }
 
 function getFilterPlayerValue(p, def) {

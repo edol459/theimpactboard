@@ -100,45 +100,7 @@ nav {
   margin-bottom: 10px; transition: border-color 0.15s;
 }
 .ctrl-select:focus { border-color: var(--orange); }
-.btn-load {
-  width: 100%; font-family: var(--ff-mono); font-size: 11px;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  background: var(--ink); color: var(--paper);
-  border: none; border-radius: 6px; padding: 10px;
-  cursor: pointer; transition: background 0.15s;
-}
-.btn-load:hover:not(:disabled) { background: var(--orange); }
-.btn-load:disabled { background: var(--rule); color: var(--ink4); cursor: not-allowed; }
 
-.lev-toggle-row {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.lev-toggle-label {
-  font-family: var(--ff-mono); font-size: 10px;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--ink3); line-height: 1.3;
-}
-.lev-toggle-label small {
-  display: block; font-size: 9px; color: var(--ink4);
-  letter-spacing: 0.03em; text-transform: none;
-}
-/* Toggle pill */
-.toggle-pill {
-  position: relative; width: 34px; height: 18px; flex-shrink: 0;
-}
-.toggle-pill input { opacity: 0; width: 0; height: 0; position: absolute; }
-.toggle-track {
-  position: absolute; inset: 0; border-radius: 9px;
-  background: var(--rule); cursor: pointer; transition: background 0.2s;
-}
-.toggle-pill input:checked ~ .toggle-track { background: var(--orange); }
-.toggle-track::after {
-  content: ''; position: absolute;
-  width: 12px; height: 12px; border-radius: 50%; background: #fff;
-  top: 3px; left: 3px; transition: transform 0.2s;
-}
-.toggle-pill input:checked ~ .toggle-track::after { transform: translateX(16px); }
 
 .players-scroll { flex: 1; overflow-y: auto; padding: 12px 10px; }
 .players-scroll-label {
@@ -389,17 +351,6 @@ table.wt tbody td.td-lineup { text-align: left; }
         <option value="2024-25">2024–25</option>
         <option value="2023-24">2023–24</option>
       </select>
-      <div class="lev-toggle-row">
-        <div class="lev-toggle-label">
-          Leverage filter
-          <small>removes 4th-qtr blowout stints</small>
-        </div>
-        <label class="toggle-pill">
-          <input type="checkbox" id="lev-toggle" checked>
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <button class="btn-load" id="btn-load" disabled>Load roster →</button>
     </div>
     <div class="players-scroll" id="players-scroll">
       <div class="state-msg" style="padding:40px 16px;flex:0;">
@@ -442,11 +393,8 @@ const TEAMS = [
 let roster     = [];
 let allLineups = [];
 let selected   = new Set();
-let levFilter  = true;   // default ON
-
 const teamSel       = document.getElementById('team-select');
 const seasonSel     = document.getElementById('season-select');
-const btnLoad       = document.getElementById('btn-load');
 const playersScroll = document.getElementById('players-scroll');
 const sidebarFooter = document.getElementById('sidebar-footer');
 const selCount      = document.getElementById('sel-count');
@@ -459,16 +407,9 @@ TEAMS.forEach(t => {
   o.textContent = `${t.abbr} — ${t.name}`;
   teamSel.appendChild(o);
 });
-teamSel.addEventListener('change', () => { btnLoad.disabled = !teamSel.value; });
-
-const levToggle = document.getElementById('lev-toggle');
-levToggle.addEventListener('change', () => {
-  levFilter = levToggle.checked;
-  if (selected.size) buildWOWY();
-});
 
 // ── Load ───────────────────────────────────────────────────────
-btnLoad.addEventListener('click', async () => {
+async function loadRoster() {
   const team   = teamSel.value;
   const season = seasonSel.value;
   if (!team) return;
@@ -477,8 +418,6 @@ btnLoad.addEventListener('click', async () => {
   roster     = [];
   allLineups = [];
 
-  btnLoad.disabled = true;
-  btnLoad.textContent = 'Loading…';
   sidebarFooter.style.display = 'none';
   playersScroll.innerHTML = `<div class="state-msg" style="padding:40px 16px;flex:0;"><span class="spin"></span></div>`;
   setMain('spin', 'Fetching lineup data…');
@@ -497,11 +436,11 @@ btnLoad.addEventListener('click', async () => {
   } catch(e) {
     playersScroll.innerHTML = `<div class="state-msg" style="padding:40px 16px;flex:0;color:var(--red)">⚠ ${e.message}</div>`;
     setMain('icon', '⚠', e.message);
-  } finally {
-    btnLoad.disabled = !teamSel.value;
-    btnLoad.textContent = 'Load roster →';
   }
-});
+}
+
+teamSel.addEventListener('change', loadRoster);
+seasonSel.addEventListener('change', () => { if (teamSel.value) loadRoster(); });
 
 // ── Player grid ────────────────────────────────────────────────
 function renderGrid() {
@@ -568,12 +507,6 @@ function buildWOWY() {
   const selArr = [...selected];
   const subsets = allSubsets(selArr);
 
-  // When leverage filter is on, use _lev columns; fall back to base if lev data missing
-  const minKey  = levFilter ? 'min_lev'  : 'min';
-  const ortgKey = levFilter ? 'ortg_lev' : 'ortg';
-  const drtgKey = levFilter ? 'drtg_lev' : 'drtg';
-  const netKey  = levFilter ? 'net_lev'  : 'net';
-
   const rows = subsets.map(onSet => {
     const offSet = new Set(selArr.filter(p => !onSet.has(p)));
 
@@ -585,27 +518,20 @@ function buildWOWY() {
 
     if (!matching.length) return null;
 
-    // When lev filter is on, exclude lineups with no leverage minutes
-    const usable = levFilter
-      ? matching.filter(l => l[minKey] != null && l[minKey] > 0)
-      : matching;
-
-    if (!usable.length) return null;
-
-    const totalMin = usable.reduce((s, l) => s + (l[minKey] || 0), 0);
+    const totalMin = matching.reduce((s, l) => s + (l.min || 0), 0);
     const wavg = key => {
-      const coveredMin = usable.reduce((s, l) => l[key] != null ? s + (l[minKey] || 0) : s, 0);
+      const coveredMin = matching.reduce((s, l) => l[key] != null ? s + (l.min || 0) : s, 0);
       if (!coveredMin) return null;
-      const val = usable.reduce((s, l) => l[key] != null ? s + l[key] * (l[minKey] || 0) : s, 0);
+      const val = matching.reduce((s, l) => l[key] != null ? s + l[key] * (l.min || 0) : s, 0);
       return Math.round((val / coveredMin) * 10) / 10;
     };
 
     return {
       onSet,
       min:  Math.round(totalMin),
-      ortg: wavg(ortgKey),
-      drtg: wavg(drtgKey),
-      net:  wavg(netKey),
+      ortg: wavg('ortg'),
+      drtg: wavg('drtg'),
+      net:  wavg('net'),
     };
   }).filter(Boolean);
 
@@ -650,7 +576,7 @@ function renderResults(rows) {
   main.innerHTML = `
     <div class="results-head">
       <div class="results-title">On/Off Combinations</div>
-      <div class="results-meta">Min-weighted · ${season} · Reg Season · ${levFilter ? 'Leverage filter on' : 'All minutes'} · ${rows.length} combination${rows.length!==1?'s':''}</div>
+      <div class="results-meta">Min-weighted · ${season} · Reg Season · ${rows.length} combination${rows.length!==1?'s':''}</div>
     </div>
     <div class="sel-strip">
       <span class="sel-strip-label">Selected</span>

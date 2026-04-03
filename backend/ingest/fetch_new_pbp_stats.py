@@ -16,6 +16,7 @@ import os
 import sys
 import time
 import json
+import argparse
 from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
@@ -24,11 +25,19 @@ import psycopg2.extras
 
 load_dotenv()
 
-DATABASE_URL  = os.getenv('DATABASE_URL')
-SEASON        = os.getenv('NBA_SEASON',      '2024-25')
-SEASON_TYPE   = os.getenv('NBA_SEASON_TYPE', 'Regular Season')
-DELAY         = 1.8
-PROGRESS_FILE = 'bad_pass_progress.json'
+DATABASE_URL = os.getenv('DATABASE_URL')
+DELAY        = 1.8
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--season',      default=os.getenv('NBA_SEASON', '2024-25'))
+parser.add_argument('--season-type', default=os.getenv('NBA_SEASON_TYPE', 'Regular Season'))
+args = parser.parse_args()
+
+SEASON      = args.season
+SEASON_TYPE = args.season_type
+
+season_slug   = SEASON.replace('-', '_')
+PROGRESS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'pbp_progress_{season_slug}.json')
 
 if not DATABASE_URL:
     print("❌ DATABASE_URL not set.")
@@ -50,7 +59,7 @@ def load_progress():
     if os.path.exists(PROGRESS_FILE):
         with open(PROGRESS_FILE) as f:
             return json.load(f)
-    return {'processed_games': [], 'player_counts': {}}
+    return {'processed_games': []}
 
 
 def save_progress(progress):
@@ -99,10 +108,8 @@ def process_game_pbp(game_id):
         pbp = PlayByPlayV3(game_id=game_id).get_data_frames()[0]
 
         results = {
-            'bad_pass_tov': defaultdict(int),
-            # Future PBP stats can be added here:
-            # 'lost_ball_tov': defaultdict(int),
-            # 'off_foul_tov': defaultdict(int),
+            'bad_pass_tov':  defaultdict(int),
+            'lost_ball_tov': defaultdict(int),
         }
 
         for _, row in pbp.iterrows():
@@ -120,12 +127,8 @@ def process_game_pbp(game_id):
 
             if sub == 'Bad Pass':
                 results['bad_pass_tov'][pid] += 1
-
-            # Uncomment when ready:
-            # elif sub == 'Lost Ball':
-            #     results['lost_ball_tov'][pid] += 1
-            # elif sub == 'Offensive Foul':
-            #     results['off_foul_tov'][pid] += 1
+            elif sub == 'Lost Ball':
+                results['lost_ball_tov'][pid] += 1
 
         # Convert defaultdicts to regular dicts
         return {k: dict(v) for k, v in results.items()}
@@ -136,8 +139,9 @@ def process_game_pbp(game_id):
 
 def update_db(stat_totals, season, season_type):
     """
-    Write accumulated PBP stat totals to player_seasons.
-    stat_totals: {stat_name: {player_id: total_count}}
+    Increment PBP stat counts in player_seasons by the new-game delta.
+    stat_totals: {stat_name: {player_id: new_game_count}}
+    Uses += so the DB is the source of truth — no risk of overwriting season data.
     """
     conn = psycopg2.connect(DATABASE_URL)
     cur  = conn.cursor()
@@ -155,7 +159,7 @@ def update_db(stat_totals, season, season_type):
         for pid, count in player_counts.items():
             cur.execute(f"""
                 UPDATE player_seasons
-                SET {stat_name} = %s
+                SET {stat_name} = COALESCE({stat_name}, 0) + %s
                 WHERE player_id = %s AND season = %s AND season_type = %s
             """, (count, pid, season, season_type))
             if cur.rowcount > 0:
@@ -172,16 +176,14 @@ def main():
     print(f"Season: {SEASON} {SEASON_TYPE}")
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
 
-    # Load existing progress (contains all previously processed games + counts)
+    # Progress file only tracks which game IDs have been processed.
+    # The DB is the source of truth for accumulated totals.
     progress = load_progress()
     processed_games = progress.get('processed_games', [])
-    existing_counts = {
-        'bad_pass_tov': {int(k): v for k, v in progress.get('player_counts', {}).items()}
-    }
 
     print(f"Previously processed: {len(processed_games)} games")
 
-    # Find new games
+    # Find new games (last 2 days, not yet processed)
     new_games = get_new_game_ids(SEASON, SEASON_TYPE, processed_games)
 
     if not new_games:
@@ -190,8 +192,8 @@ def main():
 
     print(f"\nProcessing {len(new_games)} new games...")
 
-    # Accumulate new game data
-    new_counts = {'bad_pass_tov': defaultdict(int)}
+    # Accumulate counts only for new games
+    new_counts = {'bad_pass_tov': defaultdict(int), 'lost_ball_tov': defaultdict(int)}
     failed     = []
 
     for i, game_id in enumerate(new_games):
@@ -208,23 +210,15 @@ def main():
 
         processed_games.append(game_id)
         print(f"  [{i+1}/{len(new_games)}] {game_id} ✅ "
-              f"({sum(result['bad_pass_tov'].values())} bad passes)")
+              f"({sum(result['bad_pass_tov'].values())} bad passes, "
+              f"{sum(result['lost_ball_tov'].values())} lost balls)")
 
-    # Merge new counts into existing totals
-    merged_counts = {'bad_pass_tov': dict(existing_counts['bad_pass_tov'])}
-    for stat_name, counts in new_counts.items():
-        for pid, count in counts.items():
-            merged_counts[stat_name][pid] = merged_counts[stat_name].get(pid, 0) + count
+    # Save updated processed game IDs
+    save_progress({'processed_games': processed_games})
 
-    # Save updated progress
-    save_progress({
-        'processed_games': processed_games,
-        'player_counts':   {str(k): v for k, v in merged_counts['bad_pass_tov'].items()}
-    })
-
-    # Write to DB
+    # Increment DB totals by new-game counts only
     print(f"\nWriting to database...")
-    updates = update_db(merged_counts, SEASON, SEASON_TYPE)
+    updates = update_db(new_counts, SEASON, SEASON_TYPE)
     print(f"  ✅ {updates} player-stat rows updated")
 
     if failed:
@@ -232,7 +226,6 @@ def main():
 
     print(f"\n✅ Incremental PBP update complete")
     print(f"   {len(new_games) - len(failed)} games processed")
-    print(f"   {len(merged_counts['bad_pass_tov'])} players with bad pass data")
 
 
 if __name__ == "__main__":

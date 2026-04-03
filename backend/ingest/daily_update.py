@@ -6,17 +6,16 @@ python backend/ingest/daily_update.py
 Runs the full update pipeline in order:
   1.  fetch_players.py         — sync players table (names, positions, active status)
   2.  fetch_season.py          — re-fetch all season aggregate stats
-  3.  fetch_new_pbp_stats.py   — incremental PBP for new games only
-  4.  fetch_bad_pass_tov.py    — bad pass turnovers (separate endpoint)
-  5.  fetch_lost_ball_tov.py   — lost ball turnovers (separate endpoint)
-  6.  fetch_closest_defender.py — closest defender shot data
-  7.  fetch_matchups.py        — opponent-adjusted matchup defensive metric
-  8.  fetch_nba_stats.py       — gravity, shot quality, leverage
-  9.  fetch_darko.py           — DARKO DPM (darko.app)
-  10. fetch_lebron.py          — LEBRON + O/D-LEBRON + WAR (fanspo.com)
-  11. fetch_net_pts.py         — Net Points per 100 (ESPN via S3)
-  12. compute_metrics.py       — recompute all derived metrics
-  13. compute_pctiles.py       — recompute percentiles for Builder
+  3.  fetch_new_pbp_stats.py   — incremental PBP for new games only (bad pass + lost ball TOV)
+  4.  fetch_closest_defender.py — closest defender shot data
+  5.  fetch_matchups.py        — opponent-adjusted matchup defensive metric
+  6.  fetch_nba_stats.py       — gravity, shot quality, leverage
+  7.  fetch_darko.py           — DARKO DPM (darko.app)
+  8.  fetch_lebron.py          — LEBRON + O/D-LEBRON + WAR (fanspo.com)
+  9.  fetch_net_pts.py         — Net Points per 100 (ESPN via S3)
+  10. fetch_lineups.py         — 5-man lineup data for On/Off tool
+  11. compute_metrics.py       — recompute all derived metrics
+  12. compute_pctiles.py       — recompute percentiles for Builder
 """
 
 import os
@@ -79,10 +78,11 @@ def main():
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
 
-    base = os.path.join(
+    base         = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         'ingest'
     )
+    base_backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     season_args = ['--season', season, '--season-type', season_type]
 
@@ -101,17 +101,7 @@ def main():
         ),
         (
             'fetch_new_pbp_stats.py',
-            'Incremental PBP stats',
-            season_args,
-        ),
-        (
-            'fetch_bad_pass_tov.py',
-            'Bad pass turnovers',
-            season_args,
-        ),
-        (
-            'fetch_lost_ball_tov.py',
-            'Lost ball turnovers',
+            'Incremental PBP stats (bad pass + lost ball TOV)',
             season_args,
         ),
         (
@@ -145,6 +135,12 @@ def main():
             'Net Points per 100',
             season_args,
         ),
+        # ── On/Off ────────────────────────────────────────────
+        (
+            os.path.join(base_backend, 'fetch_lineups.py'),
+            'Lineup & roster data (On/Off)',
+            ['--season', season],
+        ),
         # ── Compute ───────────────────────────────────────────
         (
             'compute_metrics.py',
@@ -160,7 +156,7 @@ def main():
 
     failed_steps = []
     for script_name, label, args in steps:
-        path = os.path.join(base, script_name)
+        path = script_name if os.path.isabs(script_name) else os.path.join(base, script_name)
         if not os.path.exists(path):
             print(f"\n⚠️  Skipping '{label}' — {script_name} not found")
             continue

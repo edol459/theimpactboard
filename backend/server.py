@@ -104,7 +104,15 @@ def get_players():
         "def_iso_ppp", "def_pnr_bh_ppp", "def_post_ppp",
         "def_spotup_ppp", "def_pnr_roll_ppp",
         "drive_fgm", "pull_up_fgm", "cs_fgm",
-        "clutch_net_rating", "clutch_ts_pct", "def_ws",
+        "clutch_net_rating", "clutch_ts_pct", "clutch_fgm", "def_ws",
+        "gravity_score", "gravity_onball_perimeter", "gravity_offball_perimeter",
+        "gravity_onball_interior", "gravity_offball_interior",
+        "leverage_full", "leverage_offense", "leverage_defense",
+        "leverage_shooting", "leverage_creation", "leverage_turnovers",
+        "leverage_rebounds", "leverage_onball_def",
+        "sq_avg_shot_quality", "sq_fg_pct_above_expected",
+        "sq_avg_defender_distance", "sq_avg_defender_pressure",
+        "sq_avg_shooter_speed", "sq_avg_made_quality", "sq_avg_missed_quality",
         "darko_dpm", "darko_odpm", "darko_ddpm", "darko_box",
         "lebron", "o_lebron", "d_lebron", "war",
         "net_pts100", "o_net_pts100", "d_net_pts100",
@@ -180,7 +188,15 @@ def get_players():
                 ps.transition_ppp, ps.transition_fga,
                 ps.def_iso_ppp, ps.def_pnr_bh_ppp, ps.def_post_ppp,
                 ps.def_spotup_ppp, ps.def_pnr_roll_ppp,
-                ps.clutch_net_rating, ps.clutch_ts_pct, ps.clutch_usg_pct, ps.clutch_min,
+                ps.clutch_net_rating, ps.clutch_ts_pct, ps.clutch_usg_pct, ps.clutch_min, ps.clutch_fgm,
+                ps.gravity_score, ps.gravity_onball_perimeter, ps.gravity_offball_perimeter,
+                ps.gravity_onball_interior, ps.gravity_offball_interior,
+                ps.leverage_full, ps.leverage_offense, ps.leverage_defense,
+                ps.leverage_shooting, ps.leverage_creation, ps.leverage_turnovers,
+                ps.leverage_rebounds, ps.leverage_onball_def,
+                ps.sq_avg_shot_quality, ps.sq_fg_pct_above_expected,
+                ps.sq_avg_defender_distance, ps.sq_avg_defender_pressure,
+                ps.sq_avg_shooter_speed, ps.sq_avg_made_quality, ps.sq_avg_missed_quality,
                 ps.darko_dpm, ps.darko_odpm, ps.darko_ddpm, ps.darko_box,
                 ps.lebron, ps.o_lebron, ps.d_lebron, ps.war,
                 ps.net_pts100, ps.o_net_pts100, ps.d_net_pts100
@@ -1050,8 +1066,7 @@ def get_onoff():
         roster_rows = cur.fetchall()
 
         cur.execute("""
-            SELECT player_ids, min, ortg, drtg, net, gp,
-                   min_lev, ortg_lev, drtg_lev, net_lev
+            SELECT player_ids, min, ortg, drtg, net, gp
             FROM team_lineups
             WHERE team_abbr = %s AND season = %s
         """, (team_abbr, season))
@@ -1081,10 +1096,6 @@ def get_onoff():
                 "drtg":     r["drtg"],
                 "net":      r["net"],
                 "gp":       r["gp"],
-                "min_lev":  r["min_lev"],
-                "ortg_lev": r["ortg_lev"],
-                "drtg_lev": r["drtg_lev"],
-                "net_lev":  r["net_lev"],
             }
             for r in lineup_rows
         ]

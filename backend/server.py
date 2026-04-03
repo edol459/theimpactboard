@@ -40,6 +40,15 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
+
+from auth import auth_bp, init_oauth, login_required, current_user
+from datetime import timedelta
+
+app.secret_key = os.getenv("SECRET_KEY")
+app.permanent_session_lifetime = timedelta(days=60)
+init_oauth(app)
+app.register_blueprint(auth_bp)
+
 # ── /api/seasons ─────────────────────────────────────────────
 
 @app.route("/api/seasons")
@@ -377,11 +386,59 @@ def run_builder():
 
 """
 ADD THESE ROUTES TO backend/server.py
-Paste them before the `if __name__ == "__main__":` block.
+Paste them before the `
+
+if __name__ == "__main__":` block.
 """
 
 import requests as _requests
+import threading as _threading
 from datetime import datetime as _dt
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# ── Past-date cache (immutable data — cache forever) ─────────────
+_past_sb_cache: dict = {}   # date -> payload dict
+
+# ── Today's scoreboard — kept fresh by background poller ─────────
+_today_sb = {"games": [], "date": "", "raw": []}
+_today_sb_lock = _threading.Lock()
+
+def _compute_game_today():
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+    from datetime import datetime, timedelta
+    now_et = datetime.now(ZoneInfo('America/New_York'))
+    if now_et.hour < 6:
+        return (now_et - timedelta(days=1)).strftime('%Y-%m-%d')
+    return now_et.strftime('%Y-%m-%d')
+
+def _poll_today_scoreboard():
+    """Background thread: refresh today's scoreboard every 30 s."""
+    while True:
+        try:
+            game_today = _compute_game_today()
+            url  = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+            resp = _requests.get(url, headers=_CDN_HEADERS, timeout=12)
+            resp.raise_for_status()
+            data      = resp.json()
+            raw_games = data.get("scoreboard", {}).get("games", [])
+            cdn_date  = data.get("scoreboard", {}).get("gameDate", "")
+
+            if cdn_date == game_today:
+                games = [_norm_cdn_game(g) for g in raw_games]
+                with _today_sb_lock:
+                    _today_sb["games"] = games
+                    _today_sb["date"]  = cdn_date
+                    _today_sb["raw"]   = raw_games
+            # If CDN is behind, leave existing cache intact until it catches up
+        except Exception:
+            pass
+        _threading.Event().wait(30)
+
+# Start the background poller as a daemon thread on import
+_threading.Thread(target=_poll_today_scoreboard, daemon=True, name="SBPoller").start()
 
 # Headers for NBA CDN (live data — boxscore/pbp proxy)
 _CDN_HEADERS = {
@@ -390,6 +447,28 @@ _CDN_HEADERS = {
     "Origin":     "https://www.nba.com",
     "Accept":     "application/json, text/plain, */*",
 }
+
+
+def _fetch_boxscores_parallel(game_ids, timeout=8):
+    """Fetch CDN boxscores for multiple game IDs in parallel.
+    Returns a dict mapping game_id -> box dict (or None on failure)."""
+    def _fetch_one(gid):
+        try:
+            url  = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gid}.json"
+            resp = _requests.get(url, headers=_CDN_HEADERS, timeout=timeout)
+            if resp.status_code == 200:
+                return gid, resp.json().get("game", {})
+        except Exception:
+            pass
+        return gid, None
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(game_ids), 12)) as pool:
+        futures = {pool.submit(_fetch_one, gid): gid for gid in game_ids}
+        for fut in as_completed(futures):
+            gid, box = fut.result()
+            results[gid] = box
+    return results
 
 
 def _norm_cdn_game(g):
@@ -425,99 +504,182 @@ def _norm_cdn_game(g):
 @app.route("/api/scoreboard")
 def get_scoreboard():
     """
-    No ?date  → today via NBA live CDN (fast, always current).
-    ?date=YYYY-MM-DD → historical via nba_api ScoreboardV2
-                       (same library powering the stats pipeline — handles auth).
+    No ?date  → today via NBA live CDN (falls back to ScoreboardV3 if CDN is behind).
+    ?date=YYYY-MM-DD → historical via nba_api ScoreboardV3.
+    "Today" switches at 6 AM ET: before 6 AM ET shows previous day's games.
+    Final games are upserted into the games table automatically.
     """
     date = request.args.get("date", "").strip()
 
-    if not date:
-        # ── Today: live CDN ───────────────────────────────────────
-        try:
-            url  = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
-            resp = _requests.get(url, headers=_CDN_HEADERS, timeout=12)
-            resp.raise_for_status()
-            data       = resp.json()
-            raw_games  = data.get("scoreboard", {}).get("games", [])
-            games      = [_norm_cdn_game(g) for g in raw_games]
-            board_date = data.get("scoreboard", {}).get("gameDate", "")
-            return jsonify({"games": games, "date": board_date})
-        except Exception as e:
-            return jsonify({"error": str(e), "games": [], "date": ""}), 200
-
-    # ── Historical: get game IDs from ScoreboardV2, scores from CDN boxscore ──
-    # ScoreboardV2 gives us the game list but PTS is always null for past games.
-    # The CDN boxscore (same source the game detail page uses) has the final scores.
+    # Compute game-day "today" with 6 AM ET cutoff (needed in both branches)
     try:
-        from nba_api.stats.endpoints import scoreboardv2
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo
+    from datetime import datetime as _dt_now
+    _et = ZoneInfo('America/New_York')
+    _now_et = _dt_now.now(_et)
+    if _now_et.hour < 6:
+        _game_today = (_now_et - timedelta(days=1)).strftime('%Y-%m-%d')
+    else:
+        _game_today = _now_et.strftime('%Y-%m-%d')
 
-        dt = _dt.strptime(date, "%Y-%m-%d")
-        board = scoreboardv2.ScoreboardV2(
-            game_date=dt.strftime("%m/%d/%Y"),
+    if not date:
+        # ── Serve from background poller cache (always up-to-date) ──
+        with _today_sb_lock:
+            games    = list(_today_sb["games"])
+            sb_date  = _today_sb["date"]
+            raw      = list(_today_sb["raw"])
+
+        if sb_date == _game_today:
+            # Upsert any newly final games
+            final_games = [g for g in raw if g.get("gameStatus") == 3]
+            if final_games:
+                _upsert_scoreboard_games(final_games, sb_date)
+            return jsonify({"games": games, "date": sb_date})
+
+        # Poller hasn't populated yet or CDN is behind — fall through to ScoreboardV3
+        date = _game_today
+
+    # ── Historical/today: ScoreboardV3 + CDN boxscores ───────────
+    is_past = date < _game_today
+
+    # Past dates are immutable — cache forever
+    if is_past and date in _past_sb_cache:
+        return jsonify(_past_sb_cache[date])
+
+    try:
+        from nba_api.stats.endpoints import scoreboardv3
+
+        dt    = _dt.strptime(date, "%Y-%m-%d")
+        board = scoreboardv3.ScoreboardV3(
+            game_date=dt.strftime("%Y-%m-%d"),
             league_id="00",
-            day_offset=0,
         )
         gh_df = board.game_header.get_data_frame()
 
         if gh_df.empty:
             return jsonify({"games": [], "date": date})
 
-        # Fetch CDN boxscore for each game to get final scores
-        games = []
-        for _, row in gh_df.iterrows():
-            gid = str(row.get("GAME_ID", ""))
-            if not gid:
-                continue
+        rows = [(str(row.get("gameId", "") or row.get("GAME_ID", "")), row)
+                for _, row in gh_df.iterrows()
+                if row.get("gameId") or row.get("GAME_ID")]
 
-            # Try CDN boxscore for this game
+        # Fetch all boxscores in parallel
+        gids = [gid for gid, _ in rows]
+        boxscores = _fetch_boxscores_parallel(gids) if gids else {}
+
+        games = []
+        for gid, row in rows:
+            box = boxscores.get(gid)
+
             away_abbr = home_abbr = ""
             away_score = home_score = 0
             away_wins = away_losses = home_wins = home_losses = None
 
-            try:
-                box_url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gid}.json"
-                box_resp = _requests.get(box_url, headers=_CDN_HEADERS, timeout=8)
-                if box_resp.status_code == 200:
-                    box = box_resp.json().get("game", {})
-                    away = box.get("awayTeam", {})
-                    home = box.get("homeTeam", {})
-                    away_abbr  = away.get("teamTricode", "")
-                    home_abbr  = home.get("teamTricode", "")
-                    away_score = int(away.get("score", 0) or 0)
-                    home_score = int(home.get("score", 0) or 0)
-                    away_wins  = away.get("wins")
-                    away_losses = away.get("losses")
-                    home_wins  = home.get("wins")
-                    home_losses = home.get("losses")
-                else:
-                    # Boxscore not on CDN — derive team abbrs from GAMECODE
-                    # GAMECODE format: "20260329/LACMIL"
-                    code = str(row.get("GAMECODE", "") or "")
-                    if "/" in code:
-                        teams = code.split("/")[1]
-                        # visitor is first 3 chars, home is last 3
-                        away_abbr = teams[:3] if len(teams) >= 6 else ""
-                        home_abbr = teams[3:6] if len(teams) >= 6 else ""
-            except Exception:
-                pass
+            if box:
+                away        = box.get("awayTeam", {})
+                home        = box.get("homeTeam", {})
+                away_abbr   = away.get("teamTricode", "")
+                home_abbr   = home.get("teamTricode", "")
+                away_score  = int(away.get("score", 0) or 0)
+                home_score  = int(home.get("score", 0) or 0)
+                away_wins   = away.get("wins")
+                away_losses = away.get("losses")
+                home_wins   = home.get("wins")
+                home_losses = home.get("losses")
+                if is_past:
+                    _upsert_game_from_boxscore(gid, box)
+            else:
+                code = str(row.get("gameCode", "") or row.get("GAMECODE", "") or "")
+                if "/" in code:
+                    teams = code.split("/")[1]
+                    away_abbr = teams[:3] if len(teams) >= 6 else ""
+                    home_abbr = teams[3:6] if len(teams) >= 6 else ""
 
-            # All past-date games are final
+            if is_past:
+                game_status_id   = 3
+                game_status_text = "Final"
+            else:
+                raw_status = row.get("gameStatus", row.get("GAME_STATUS_ID", 1))
+                game_status_id   = int(raw_status or 1)
+                game_status_text = str(row.get("gameStatusText", row.get("GAME_STATUS_TEXT", "")) or "")
+
             games.append({
                 "gameId":         gid,
-                "gameStatus":     3,
-                "gameStatusText": "Final",
+                "gameStatus":     game_status_id,
+                "gameStatusText": game_status_text,
                 "period":         0,
                 "gameClock":      "",
-                "gameTimeUTC":    "",
-                "away": {"abbr": away_abbr, "score": away_score, "wins": away_wins, "losses": away_losses},
-                "home": {"abbr": home_abbr, "score": home_score, "wins": home_wins, "losses": home_losses},
+                "gameTimeUTC":    str(row.get("gameTimeUTC", row.get("GAME_TIME_UTC", "")) or ""),
+                "away": {"abbr": away_abbr, "score": away_score,
+                         "wins": away_wins, "losses": away_losses},
+                "home": {"abbr": home_abbr, "score": home_score,
+                         "wins": home_wins, "losses": home_losses},
             })
 
-        return jsonify({"games": games, "date": date})
+        payload = {"games": games, "date": date}
+        if is_past:
+            _past_sb_cache[date] = payload
+        return jsonify(payload)
 
     except Exception as e:
         return jsonify({"error": str(e), "games": [], "date": date}), 200
-
+ 
+ 
+def _upsert_scoreboard_games(raw_games: list, board_date: str):
+    """
+    Upsert a batch of final games from the CDN scoreboard payload.
+    Called in-process — fast because it's a single DB round-trip per game.
+    """
+    try:
+        from datetime import datetime as _dt3
+        game_date = _dt3.strptime(board_date, "%Y-%m-%d").date() if board_date else None
+    except Exception:
+        from datetime import date as _date3
+        game_date = _date3.today()
+ 
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        for g in raw_games:
+            gid  = g.get("gameId", "")
+            away = g.get("awayTeam", {})
+            home = g.get("homeTeam", {})
+            if not gid:
+                continue
+            try:
+                cur.execute("""
+                    INSERT INTO games (
+                        game_id, season, season_type, game_date,
+                        home_team_abbr, away_team_abbr,
+                        home_score, away_score, status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Final')
+                    ON CONFLICT (game_id) DO UPDATE SET
+                        home_score = EXCLUDED.home_score,
+                        away_score = EXCLUDED.away_score,
+                        status     = 'Final',
+                        updated_at = NOW()
+                    WHERE games.status != 'Final'
+                       OR games.home_score IS NULL
+                """, (
+                    gid,
+                    os.getenv("NBA_SEASON", "2025-26"),
+                    os.getenv("NBA_SEASON_TYPE", "Regular Season"),
+                    game_date,
+                    home.get("teamTricode", ""),
+                    away.get("teamTricode", ""),
+                    int(home.get("score", 0) or 0),
+                    int(away.get("score", 0) or 0),
+                ))
+            except Exception:
+                conn.rollback()
+                continue
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass  # Never break the main response
 
 # ── /api/top-performers?date=YYYY-MM-DD ──────────────────────────
 @app.route("/api/top-performers")
@@ -545,22 +707,20 @@ def get_top_performers():
     else:
         # Get game IDs for this historical date
         try:
-            from nba_api.stats.endpoints import scoreboardv2
+            from nba_api.stats.endpoints import scoreboardv3
             dt = _dt.strptime(date, "%Y-%m-%d")
-            board  = scoreboardv2.ScoreboardV2(
-                game_date=dt.strftime("%m/%d/%Y"),
+            board = scoreboardv3.ScoreboardV3(
+                game_date=dt.strftime("%Y-%m-%d"),
                 league_id="00",
-                day_offset=0,
             )
             gh_df = board.game_header.get_data_frame()
-            raw_games  = [{"gameId": str(r["GAME_ID"]), "gamecode": str(r.get("GAMECODE",""))}
-                          for _, r in gh_df.iterrows() if r.get("GAME_ID")]
+            raw_games = [{"gameId": str(r.get("gameId", "") or r.get("GAME_ID", ""))}
+                         for _, r in gh_df.iterrows()
+                         if r.get("gameId") or r.get("GAME_ID")]
             actual_date = date
         except Exception as e:
             return jsonify({"error": str(e), "players": [], "date": date}), 200
 
-    # For today, raw_games are CDN dicts; for historical they're our dicts
-    # Normalise to just game_id strings
     def get_gid(g):
         return g.get("gameId") or g.get("GAME_ID") or ""
 
@@ -568,49 +728,43 @@ def get_top_performers():
     if not game_ids:
         return jsonify({"players": [], "date": actual_date})
 
-    # Fetch boxscore for each game and collect player lines
+    # Fetch all boxscores in parallel, then collect player lines
+    boxscores = _fetch_boxscores_parallel(game_ids)
     all_players = []
-    for gid in game_ids:
-        try:
-            box_url  = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{gid}.json"
-            box_resp = _requests.get(box_url, headers=_CDN_HEADERS, timeout=8)
-            if box_resp.status_code != 200:
-                continue
-            box  = box_resp.json().get("game", {})
-            away = box.get("awayTeam", {})
-            home = box.get("homeTeam", {})
-            away_abbr = away.get("teamTricode", "")
-            home_abbr = home.get("teamTricode", "")
-            matchup   = f"{away_abbr} @ {home_abbr}"
-
-            for team, abbr in [(away, away_abbr), (home, home_abbr)]:
-                for p in team.get("players", []):
-                    s   = p.get("statistics", {})
-                    min_str = s.get("minutes", "PT0M0.00S")
-                    # Skip DNP / zero-minute players
-                    try:
-                        mins = float(min_str.replace("PT","").replace("S","").split("M")[0]) if min_str else 0
-                    except Exception:
-                        mins = 0
-                    if mins < 1:
-                        continue
-
-                    pts = int(s.get("points", 0) or 0)
-                    reb = int(s.get("reboundsTotal", 0) or 0)
-                    ast = int(s.get("assists", 0) or 0)
-                    all_players.append({
-                        "player_id": p.get("personId"),
-                        "name":      p.get("name", ""),
-                        "team":      abbr,
-                        "matchup":   matchup,
-                        "game_id":   gid,
-                        "pts":       pts,
-                        "reb":       reb,
-                        "ast":       ast,
-                        "total":     pts + reb + ast,
-                    })
-        except Exception:
+    for gid, box in boxscores.items():
+        if not box:
             continue
+        away = box.get("awayTeam", {})
+        home = box.get("homeTeam", {})
+        away_abbr = away.get("teamTricode", "")
+        home_abbr = home.get("teamTricode", "")
+        matchup   = f"{away_abbr} @ {home_abbr}"
+
+        for team, abbr in [(away, away_abbr), (home, home_abbr)]:
+            for p in team.get("players", []):
+                s       = p.get("statistics", {})
+                min_str = s.get("minutes", "PT0M0.00S")
+                try:
+                    mins = float(min_str.replace("PT","").replace("S","").split("M")[0]) if min_str else 0
+                except Exception:
+                    mins = 0
+                if mins < 1:
+                    continue
+
+                pts = int(s.get("points", 0) or 0)
+                reb = int(s.get("reboundsTotal", 0) or 0)
+                ast = int(s.get("assists", 0) or 0)
+                all_players.append({
+                    "player_id": p.get("personId"),
+                    "name":      p.get("name", ""),
+                    "team":      abbr,
+                    "matchup":   matchup,
+                    "game_id":   gid,
+                    "pts":       pts,
+                    "reb":       reb,
+                    "ast":       ast,
+                    "total":     pts + reb + ast,
+                })
 
     # Sort by total desc, take top 5
     all_players.sort(key=lambda x: x["total"], reverse=True)
@@ -770,17 +924,78 @@ def preview_page():
 
 # ── /api/live/boxscore/<game_id> ──────────────────────────────────
 @app.route("/api/live/boxscore/<game_id>")
+@app.route("/api/live/boxscore/<game_id>")
 def get_live_boxscore(game_id):
-    """Proxy NBA CDN live boxscore."""
+    """Proxy NBA CDN live boxscore + auto-upsert completed games."""
     try:
-        url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        url  = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
         resp = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        return jsonify(data.get("game", data))
+        game = data.get("game", data)
+ 
+        # Auto-upsert if game is final (status 3)
+        if game.get("gameStatus") == 3:
+            _upsert_game_from_boxscore(game_id, game)
+ 
+        return jsonify(game)
     except Exception as e:
         return jsonify({"error": str(e)}), 404
-
+ 
+ 
+def _upsert_game_from_boxscore(game_id: str, game: dict):
+    """
+    Upsert a completed game into the games table from CDN boxscore data.
+    Silently swallows errors so it never breaks the main response.
+    """
+    try:
+        away = game.get("awayTeam", {})
+        home = game.get("homeTeam", {})
+        away_abbr  = away.get("teamTricode", "")
+        home_abbr  = home.get("teamTricode", "")
+        away_score = int(away.get("score", 0) or 0)
+        home_score = int(home.get("score", 0) or 0)
+ 
+        # Parse game date from gameTimeUTC or gameId
+        # gameId format: 0022501109 — first 8 chars after leading 00 = season/type,
+        # remainder doesn't encode date. Use gameTimeUTC instead.
+        game_time_utc = game.get("gameTimeUTC", "")
+        if game_time_utc:
+            from datetime import datetime as _dt2
+            game_date = _dt2.fromisoformat(game_time_utc.replace("Z", "+00:00")).date()
+        else:
+            # Fallback: today's date (close enough for recent games)
+            from datetime import date as _date2
+            game_date = _date2.today()
+ 
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO games (
+                game_id, season, season_type, game_date,
+                home_team_abbr, away_team_abbr,
+                home_score, away_score, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Final')
+            ON CONFLICT (game_id) DO UPDATE SET
+                home_score     = EXCLUDED.home_score,
+                away_score     = EXCLUDED.away_score,
+                status         = 'Final',
+                updated_at     = NOW()
+            WHERE games.status != 'Final'
+               OR games.home_score IS NULL
+        """, (
+            game_id,
+            os.getenv("NBA_SEASON", "2025-26"),
+            os.getenv("NBA_SEASON_TYPE", "Regular Season"),
+            game_date,
+            home_abbr, away_abbr,
+            home_score, away_score,
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass  # Never break the main response
 
 # ── /api/live/pbp/<game_id> ───────────────────────────────────────
 @app.route("/api/live/pbp/<game_id>")
@@ -816,92 +1031,69 @@ def stats_page():
 
 @app.route("/api/onoff")
 def get_onoff():
-    import time, math
-    import pandas as pd
-    from nba_api.stats.endpoints import LeagueDashLineups, CommonTeamRoster
-
-    _TEAM_IDS = {
-        "ATL":1610612737,"BOS":1610612738,"BKN":1610612751,"CHA":1610612766,
-        "CHI":1610612741,"CLE":1610612739,"DAL":1610612742,"DEN":1610612743,
-        "DET":1610612765,"GSW":1610612744,"HOU":1610612745,"IND":1610612754,
-        "LAC":1610612746,"LAL":1610612747,"MEM":1610612763,"MIA":1610612748,
-        "MIL":1610612749,"MIN":1610612750,"NOP":1610612740,"NYK":1610612752,
-        "OKC":1610612760,"ORL":1610612753,"PHI":1610612755,"PHX":1610612756,
-        "POR":1610612757,"SAC":1610612758,"SAS":1610612759,"TOR":1610612761,
-        "UTA":1610612762,"WAS":1610612764,
-    }
-
     team_abbr = request.args.get("team", "").upper()
     season    = request.args.get("season", "2025-26")
 
     if not team_abbr:
         return jsonify({"error": "team param required"}), 400
-    team_id = _TEAM_IDS.get(team_abbr)
-    if not team_id:
-        return jsonify({"error": f"Unknown team: {team_abbr}"}), 404
-
-    def safe(v):
-        try:
-            f = float(v)
-            return None if math.isnan(f) or math.isinf(f) else round(f, 1)
-        except Exception:
-            return None
 
     try:
-        # Roster
-        roster = []
-        try:
-            r_df = CommonTeamRoster(team_id=team_id, season=season).get_data_frames()[0]
-            time.sleep(0.6)
-            for _, row in r_df.iterrows():
-                roster.append({
-                    "player_id":   str(int(row["PLAYER_ID"])),
-                    "player_name": str(row["PLAYER"]),
-                    "number":      str(row.get("NUM", "")),
-                    "position":    str(row.get("POSITION", "")),
-                })
-        except Exception:
-            pass
+        conn = get_conn()
+        cur  = conn.cursor()
 
-        # Fetch only 5-man lineups — one call, covers everything
-        ep = LeagueDashLineups(
-            team_id_nullable=team_id,
-            group_quantity=5,
-            season=season,
-            season_type_all_star="Regular Season",
-            measure_type_detailed_defense="Advanced",
-            per_mode_detailed="Totals",   # Totals so we can weight-average ratings
-            timeout=60,
-        )
-        time.sleep(0.6)
-        df = ep.get_data_frames()[0]
+        cur.execute("""
+            SELECT player_id, player_name, number, position
+            FROM team_rosters
+            WHERE team_abbr = %s AND season = %s
+            ORDER BY player_name
+        """, (team_abbr, season))
+        roster_rows = cur.fetchall()
 
-        if df.empty:
-            return jsonify({"error": "No lineup data returned"}), 502
+        cur.execute("""
+            SELECT player_ids, min, ortg, drtg, net, gp,
+                   min_lev, ortg_lev, drtg_lev, net_lev
+            FROM team_lineups
+            WHERE team_abbr = %s AND season = %s
+        """, (team_abbr, season))
+        lineup_rows = cur.fetchall()
 
-        # Parse player IDs from GROUP_ID ("-pid1-pid2-pid3-pid4-pid5-")
-        def parse_ids(gid):
-            return set(p for p in str(gid).split("-") if p.strip())
+        cur.close()
+        conn.close()
 
-        lineups = []
-        for _, row in df.iterrows():
-            pids = parse_ids(row["GROUP_ID"])
-            mins = float(row["MIN"]) if pd.notna(row.get("MIN")) else 0.0
-            # MIN in Totals mode is already in minutes (decimal)
-            lineups.append({
-                "pids":  list(pids),
-                "min":   mins,
-                "ortg":  safe(row.get("OFF_RATING")),
-                "drtg":  safe(row.get("DEF_RATING")),
-                "net":   safe(row.get("NET_RATING")),
-                "gp":    int(row["GP"]) if pd.notna(row.get("GP")) else 0,
-            })
+        if not roster_rows and not lineup_rows:
+            return jsonify({"error": f"No data found for {team_abbr} {season}. Run fetch_lineups.py first."}), 404
+
+        roster = [
+            {
+                "player_id":   r["player_id"],
+                "player_name": r["player_name"],
+                "number":      r["number"] or "",
+                "position":    r["position"] or "",
+            }
+            for r in roster_rows
+        ]
+
+        lineups = [
+            {
+                "pids":     list(r["player_ids"]),
+                "min":      r["min"],
+                "ortg":     r["ortg"],
+                "drtg":     r["drtg"],
+                "net":      r["net"],
+                "gp":       r["gp"],
+                "min_lev":  r["min_lev"],
+                "ortg_lev": r["ortg_lev"],
+                "drtg_lev": r["drtg_lev"],
+                "net_lev":  r["net_lev"],
+            }
+            for r in lineup_rows
+        ]
 
         return jsonify({
-            "team":     team_abbr,
-            "season":   season,
-            "roster":   roster,
-            "lineups":  lineups,
+            "team":    team_abbr,
+            "season":  season,
+            "roster":  roster,
+            "lineups": lineups,
         })
 
     except Exception as exc:
@@ -914,9 +1106,855 @@ def get_onoff():
 def onoff_page():
     return app.send_static_file("onoff.html")
 
+
+
+"""
+NothingButNet — Reviews API Routes (v2)
+=========================================
+Replaces the original reviews_routes.py paste-in in server.py.
+
+Changes from v1:
+- Profanity/slur filter on review submit
+- Admin endpoints (delete any review, list all reviews)
+- Admin check reads ADMIN_GOOGLE_IDS from .env
+- /api/games/<id>/reviews supports offset for load-more
+- GET /api/reviews/recent supports offset for load-more
+"""
+
+import re as _re
+import os as _os
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ADMIN — read from env
+# ADMIN_GOOGLE_IDS=id1,id2,id3  (comma-separated Google sub IDs)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _get_admin_ids():
+    raw = _os.getenv("ADMIN_GOOGLE_IDS", "")
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+def _is_admin(user: dict) -> bool:
+    if not user:
+        return False
+    return user.get("google_id") in _get_admin_ids()
+
+def _admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = current_user()
+        if not user:
+            return jsonify({"error": "Authentication required"}), 401
+        if not _is_admin(user):
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PROFANITY FILTER
+# Loose filter — blocks slurs and hate speech, not general profanity.
+# Add terms as lowercase; checked as whole words and substrings of
+# compound words (e.g. "xxxword" in "xxxwordhere").
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Core list — racial/ethnic/sexual slurs and hate speech terms.
+# Stored as a tuple so it's not trivially enumerable in source.
+_BLOCKED = (
+    "nigger","nigga","chink","spic","wetback","kike","faggot","fag",
+    "dyke","tranny","retard","cunt","gook","towelhead","sandnigger",
+    "raghead","beaner","zipperhead","cracker","honky","cripple",
+    "spastic","mongoloid","trannies","shemale","ladyboy","fags",
+    "kikes","niggers","chinks","spics","wetbacks","faggots","dykes",
+    "retards","cunts","gooks",
+)
+
+_BLOCKED_PATTERN = _re.compile(
+    r'(' + '|'.join(_re.escape(w) for w in _BLOCKED) + r')',
+    _re.IGNORECASE
+)
+
+def _contains_slur(text: str) -> bool:
+    """Return True if text contains a blocked term."""
+    if not text:
+        return False
+    # Normalise: collapse repeated chars (e.g. "niiiigger" → "nigger")
+    normalised = _re.sub(r'(.)\1{2,}', r'\1\1', text.lower())
+    # Strip common leet substitutions
+    normalised = normalised.replace('3', 'e').replace('0', 'o').replace('1', 'i').replace('@', 'a')
+    return bool(_BLOCKED_PATTERN.search(normalised))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# HELPERS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _format_review(r: dict) -> dict:
+    return {
+        "id":           r["id"],
+        "game_id":      r["game_id"],
+        "user_id":      r["user_id"],
+        "display_name": r.get("display_name", ""),
+        "avatar_url":   r.get("avatar_url", ""),
+        "rating":       r["rating"],
+        "stars":        r["rating"] / 2,
+        "review_text":  r.get("review_text"),
+        "created_at":   str(r.get("created_at", "")),
+        "updated_at":   str(r.get("updated_at", "")),
+    }
+
+
+def _format_game(g: dict) -> dict:
+    avg_stars = None
+    if g.get("review_count", 0) > 0:
+        avg_stars = round(g["bayesian_rating"] / 2, 2)
+    return {
+        "game_id":        g["game_id"],
+        "season":         g["season"],
+        "season_type":    g["season_type"],
+        "game_date":      str(g["game_date"]),
+        "home_team_abbr": g["home_team_abbr"],
+        "away_team_abbr": g["away_team_abbr"],
+        "home_score":     g["home_score"],
+        "away_score":     g["away_score"],
+        "status":         g["status"],
+        "review_count":   g.get("review_count", 0),
+        "avg_stars":      avg_stars,
+        "bayesian_rating": g.get("bayesian_rating"),
+    }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/games
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/games")
+def get_games():
+    season      = request.args.get("season",      "2025-26")
+    season_type = request.args.get("season_type", "Regular Season")
+    team        = request.args.get("team",        "").upper().strip()
+    sort        = request.args.get("sort",        "date")
+    direction   = "ASC" if request.args.get("dir", "desc").lower() == "asc" else "DESC"
+    limit       = min(int(request.args.get("limit", 50)), 100)
+    offset      = int(request.args.get("offset", 0))
+    reviewed_by = request.args.get("reviewed_by")
+
+    SORT_MAP = {
+        "date":    "g.game_date",
+        "rating":  "g.bayesian_rating",
+        "reviews": "g.review_count",
+    }
+    order_col = SORT_MAP.get(sort, "g.game_date")
+
+    filters = ["g.season = %s", "g.season_type = %s", "g.status = 'Final'"]
+    params  = [season, season_type]
+
+    if team:
+        filters.append("(g.home_team_abbr = %s OR g.away_team_abbr = %s)")
+        params += [team, team]
+
+    if reviewed_by:
+        filters.append("""
+            EXISTS (
+                SELECT 1 FROM game_reviews gr
+                WHERE gr.game_id = g.game_id AND gr.user_id = %s
+            )
+        """)
+        params.append(int(reviewed_by))
+
+    where = " AND ".join(filters)
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"""
+            SELECT g.*
+            FROM games g
+            WHERE {where}
+            ORDER BY {order_col} {direction} NULLS LAST
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
+        games = [_format_game(dict(r)) for r in cur.fetchall()]
+
+        cur.execute(f"SELECT COUNT(*) FROM games g WHERE {where}", params)
+        total = cur.fetchone()["count"]
+
+        cur.close(); conn.close()
+        return jsonify({"games": games, "total": total, "limit": limit, "offset": offset})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/games/<game_id>
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/games/<game_id>")
+def get_game(game_id):
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("SELECT * FROM games WHERE game_id = %s", (game_id,))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if not row:
+            return jsonify({"error": "Game not found"}), 404
+        return jsonify({"game": _format_game(dict(row))})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/games/<game_id>/reviews
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/games/<game_id>/reviews")
+def get_game_reviews(game_id):
+    limit  = min(int(request.args.get("limit", 20)), 100)
+    offset = int(request.args.get("offset", 0))
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT gr.*, u.display_name, u.avatar_url
+            FROM game_reviews gr
+            JOIN users u ON gr.user_id = u.id
+            WHERE gr.game_id = %s
+            ORDER BY gr.created_at DESC
+            LIMIT %s OFFSET %s
+        """, (game_id, limit, offset))
+        reviews = [_format_review(dict(r)) for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) FROM game_reviews WHERE game_id = %s", (game_id,))
+        total = cur.fetchone()["count"]
+        cur.close(); conn.close()
+        return jsonify({"reviews": reviews, "total": total, "has_more": offset + len(reviews) < total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# POST /api/games/<game_id>/reviews  — submit/update
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/games/<game_id>/reviews", methods=["POST"])
+@login_required
+def submit_review(game_id):
+    user = current_user()
+    body = request.get_json() or {}
+
+    rating = body.get("rating")
+    if rating is None or not isinstance(rating, int) or not (1 <= rating <= 10):
+        return jsonify({"error": "rating must be an integer 1–10"}), 400
+
+    review_text = body.get("review_text", "").strip() or None
+
+    # ── Profanity filter ──────────────────────────────────────────
+    if review_text and _contains_slur(review_text):
+        return jsonify({"error": "Your review contains language that isn't allowed. Please edit and resubmit."}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        cur.execute("SELECT game_id FROM games WHERE game_id = %s", (game_id,))
+        if not cur.fetchone():
+            cur.close(); conn.close()
+            return jsonify({"error": "Game not found"}), 404
+
+        cur.execute("""
+            INSERT INTO game_reviews (user_id, game_id, rating, review_text)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id, game_id) DO UPDATE SET
+                rating      = EXCLUDED.rating,
+                review_text = EXCLUDED.review_text,
+                updated_at  = NOW()
+            RETURNING *
+        """, (user["id"], game_id, rating, review_text))
+
+        review = dict(cur.fetchone())
+        review["display_name"] = user["display_name"]
+        review["avatar_url"]   = user["avatar_url"]
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"review": _format_review(review)}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DELETE /api/games/<game_id>/reviews  — user deletes own review
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/games/<game_id>/reviews", methods=["DELETE"])
+@login_required
+def delete_review(game_id):
+    user = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            DELETE FROM game_reviews
+            WHERE user_id = %s AND game_id = %s
+            RETURNING id
+        """, (user["id"], game_id))
+        deleted = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        if not deleted:
+            return jsonify({"error": "Review not found"}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DELETE /api/admin/reviews/<review_id>  — admin deletes any review
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/admin/reviews/<int:review_id>", methods=["DELETE"])
+@_admin_required
+def admin_delete_review(review_id):
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM game_reviews WHERE id = %s RETURNING id", (review_id,))
+        deleted = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        if not deleted:
+            return jsonify({"error": "Review not found"}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/admin/reviews  — paginated list of all reviews
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/admin/reviews")
+@_admin_required
+def admin_list_reviews():
+    limit  = min(int(request.args.get("limit", 50)), 200)
+    offset = int(request.args.get("offset", 0))
+    q      = request.args.get("q", "").strip()   # search review text
+
+    filters = []
+    params  = []
+    if q:
+        filters.append("(gr.review_text ILIKE %s OR u.display_name ILIKE %s)")
+        params += [f"%{q}%", f"%{q}%"]
+
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"""
+            SELECT
+                gr.id, gr.game_id, gr.rating, gr.review_text,
+                gr.created_at,
+                u.id AS user_id, u.display_name, u.email,
+                g.game_date, g.home_team_abbr, g.away_team_abbr,
+                g.home_score, g.away_score
+            FROM game_reviews gr
+            JOIN users u ON gr.user_id = u.id
+            JOIN games g ON gr.game_id = g.game_id
+            {where}
+            ORDER BY gr.created_at DESC
+            LIMIT %s OFFSET %s
+        """, params + [limit, offset])
+        rows = cur.fetchall()
+
+        cur.execute(f"""
+            SELECT COUNT(*) FROM game_reviews gr
+            JOIN users u ON gr.user_id = u.id
+            JOIN games g ON gr.game_id = g.game_id
+            {where}
+        """, params)
+        total = cur.fetchone()["count"]
+
+        cur.close(); conn.close()
+
+        result = []
+        for r in rows:
+            d = dict(r)
+            result.append({
+                "id":           d["id"],
+                "game_id":      d["game_id"],
+                "rating":       d["rating"],
+                "stars":        d["rating"] / 2,
+                "review_text":  d["review_text"],
+                "created_at":   str(d["created_at"]),
+                "user_id":      d["user_id"],
+                "display_name": d["display_name"],
+                "email":        d["email"],
+                "game_date":    str(d["game_date"]),
+                "home_team_abbr": d["home_team_abbr"],
+                "away_team_abbr": d["away_team_abbr"],
+                "home_score":   d["home_score"],
+                "away_score":   d["away_score"],
+                "matchup":      f"{d['away_team_abbr']} @ {d['home_team_abbr']}",
+            })
+
+        return jsonify({"reviews": result, "total": total,
+                        "has_more": offset + len(result) < total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/reviews/top-games
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/top-games")
+def get_top_rated_games():
+    season      = request.args.get("season",      "2025-26")
+    season_type = request.args.get("season_type", "Regular Season")
+    min_reviews = int(request.args.get("min_reviews", 1))
+    limit       = min(int(request.args.get("limit", 25)), 100)
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT *
+            FROM games
+            WHERE season = %s
+              AND season_type = %s
+              AND status = 'Final'
+              AND review_count >= %s
+            ORDER BY bayesian_rating DESC NULLS LAST
+            LIMIT %s
+        """, (season, season_type, min_reviews, limit))
+        games = [_format_game(dict(r)) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"games": games})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/reviews/recent
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/recent")
+def get_recent_reviews():
+    limit  = min(int(request.args.get("limit", 20)), 100)
+    offset = int(request.args.get("offset", 0))
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT
+                gr.id, gr.game_id, gr.rating, gr.review_text,
+                gr.created_at, gr.updated_at,
+                u.id AS user_id, u.display_name, u.avatar_url,
+                g.game_date, g.home_team_abbr, g.away_team_abbr,
+                g.home_score, g.away_score
+            FROM game_reviews gr
+            JOIN users u  ON gr.user_id = u.id
+            JOIN games g  ON gr.game_id = g.game_id
+            ORDER BY gr.created_at DESC
+            LIMIT %s OFFSET %s
+        """, (limit, offset))
+        rows = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM game_reviews")
+        total = cur.fetchone()["count"]
+        cur.close(); conn.close()
+        result = []
+        for r in rows:
+            d = dict(r)
+            result.append({
+                **_format_review(d),
+                "game_date":      str(d["game_date"]),
+                "home_team_abbr": d["home_team_abbr"],
+                "away_team_abbr": d["away_team_abbr"],
+                "home_score":     d["home_score"],
+                "away_score":     d["away_score"],
+            })
+        return jsonify({"reviews": result, "total": total,
+                        "has_more": offset + len(result) < total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/users/<user_id>/reviews
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/users/<int:user_id>/reviews")
+def get_user_reviews(user_id):
+    limit  = min(int(request.args.get("limit", 20)), 100)
+    offset = int(request.args.get("offset", 0))
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT
+                gr.*, u.display_name, u.avatar_url,
+                g.game_date, g.home_team_abbr, g.away_team_abbr,
+                g.home_score, g.away_score
+            FROM game_reviews gr
+            JOIN users u ON gr.user_id = u.id
+            JOIN games g ON gr.game_id = g.game_id
+            WHERE gr.user_id = %s
+            ORDER BY g.game_date DESC
+            LIMIT %s OFFSET %s
+        """, (user_id, limit, offset))
+        rows = cur.fetchall()
+        cur.execute("SELECT COUNT(*) FROM game_reviews WHERE user_id = %s", (user_id,))
+        total = cur.fetchone()["count"]
+        cur.close(); conn.close()
+        result = []
+        for r in rows:
+            d = dict(r)
+            result.append({
+                **_format_review(d),
+                "game_date":      str(d["game_date"]),
+                "home_team_abbr": d["home_team_abbr"],
+                "away_team_abbr": d["away_team_abbr"],
+                "home_score":     d["home_score"],
+                "away_score":     d["away_score"],
+            })
+        return jsonify({"reviews": result, "total": total})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# get_user_profile moved to profile_routes.py
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/admin/check  — confirm admin status (for frontend)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/admin/check")
+def admin_check():
+    user = current_user()
+    return jsonify({"is_admin": _is_admin(user)})
+
+
+# ── Page routes ───────────────────────────────────────────────────
+@app.route("/reviews")
+@app.route("/reviews.html")
+def reviews_page():
+    return app.send_static_file("reviews.html")
+
+@app.route("/admin")
+@app.route("/admin.html")
+def admin_page():
+    return app.send_static_file("admin.html")
+
 # ── Run ───────────────────────────────────────────────────────
 
+
+# ── Profile & Friends routes ──────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PATCH /api/me/display-name
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/me/display-name", methods=["PATCH"])
+@login_required
+def update_display_name():
+    user = current_user()
+    body = request.get_json() or {}
+    name = body.get("display_name", "").strip()
+
+    if not name:
+        return jsonify({"error": "display_name is required"}), 400
+    if len(name) > 40:
+        return jsonify({"error": "Display name must be 40 characters or fewer"}), 400
+    # Basic sanity: printable chars only
+    if not all(c.isprintable() for c in name):
+        return jsonify({"error": "Invalid characters in display name"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE users SET display_name = %s, display_name_set = TRUE, updated_at = NOW()
+            WHERE id = %s
+            RETURNING id, display_name, display_name_set
+        """, (name, user["id"]))
+        row = dict(cur.fetchone())
+        conn.commit()
+        cur.close(); conn.close()
+
+        # Update session so nav shows new name immediately
+        from flask import session
+        if "user" in session:
+            session["user"]["display_name"] = name
+            session.modified = True
+
+        return jsonify({"ok": True, "display_name": row["display_name"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/users/<user_id>/profile  (public)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/users/<int:user_id>/profile")
+def get_user_profile(user_id):
+    viewer = current_user()  # may be None
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        cur.execute("""
+            SELECT id, display_name, avatar_url, display_name_set, created_at
+            FROM users WHERE id = %s
+        """, (user_id,))
+        user = cur.fetchone()
+        if not user:
+            cur.close(); conn.close()
+            return jsonify({"error": "User not found"}), 404
+
+        cur.execute("""
+            SELECT
+                COUNT(*)                             AS total_reviews,
+                ROUND(AVG(rating)::numeric, 2)       AS avg_rating,
+                COUNT(*) FILTER (WHERE rating = 10)  AS five_star_count,
+                COUNT(*) FILTER (WHERE rating <= 2)  AS half_star_count
+            FROM game_reviews WHERE user_id = %s
+        """, (user_id,))
+        stats = dict(cur.fetchone())
+
+        # Rating distribution (1–10 buckets → displayed as ½–5 stars)
+        cur.execute("""
+            SELECT rating, COUNT(*) AS cnt
+            FROM game_reviews WHERE user_id = %s
+            GROUP BY rating ORDER BY rating
+        """, (user_id,))
+        dist = {r["rating"]: r["cnt"] for r in cur.fetchall()}
+
+        # Friend status relative to viewer
+        friend_status = None
+        if viewer and viewer["id"] != user_id:
+            cur.execute("""
+                SELECT status, sender_id FROM friendships
+                WHERE (sender_id = %s AND receiver_id = %s)
+                   OR (sender_id = %s AND receiver_id = %s)
+            """, (viewer["id"], user_id, user_id, viewer["id"]))
+            fs = cur.fetchone()
+            if fs:
+                if fs["status"] == "accepted":
+                    friend_status = "friends"
+                elif fs["sender_id"] == viewer["id"]:
+                    friend_status = "request_sent"
+                else:
+                    friend_status = "request_received"
+
+        # Friend count
+        cur.execute("""
+            SELECT COUNT(*) FROM friendships
+            WHERE (sender_id = %s OR receiver_id = %s) AND status = 'accepted'
+        """, (user_id, user_id))
+        friend_count = cur.fetchone()["count"]
+
+        cur.close(); conn.close()
+
+        return jsonify({
+            "user": {
+                "id":               user["id"],
+                "display_name":     user["display_name"],
+                "avatar_url":       user["avatar_url"],
+                "display_name_set": user["display_name_set"],
+                "member_since":     str(user["created_at"]),
+            },
+            "stats": {
+                "total_reviews":   int(stats["total_reviews"] or 0),
+                "avg_rating":      round(float(stats["avg_rating"] or 0) / 2, 2),
+                "five_star_count": int(stats["five_star_count"] or 0),
+                "half_star_count": int(stats["half_star_count"] or 0),
+                "distribution":    dist,
+            },
+            "friend_count":  friend_count,
+            "friend_status": friend_status,  # null if viewing own profile or not logged in
+            "is_own":        viewer and viewer["id"] == user_id,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/users/search?q=<name>
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/users/search")
+@login_required
+def search_users():
+    q     = request.args.get("q", "").strip()
+    limit = min(int(request.args.get("limit", 10)), 20)
+    me    = current_user()
+
+    if len(q) < 2:
+        return jsonify({"users": []})
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT id, display_name, avatar_url
+            FROM users
+            WHERE display_name ILIKE %s AND id != %s
+            ORDER BY display_name
+            LIMIT %s
+        """, (f"%{q}%", me["id"], limit))
+        users = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"users": users})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/friends  — my friends + pending requests
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/friends")
+@login_required
+def get_friends():
+    me = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        # Accepted friends
+        cur.execute("""
+            SELECT u.id, u.display_name, u.avatar_url,
+                   f.created_at AS friends_since
+            FROM friendships f
+            JOIN users u ON u.id = CASE
+                WHEN f.sender_id = %s THEN f.receiver_id
+                ELSE f.sender_id END
+            WHERE (f.sender_id = %s OR f.receiver_id = %s)
+              AND f.status = 'accepted'
+            ORDER BY u.display_name
+        """, (me["id"], me["id"], me["id"]))
+        friends = [dict(r) for r in cur.fetchall()]
+
+        # Pending — received (I need to accept/decline)
+        cur.execute("""
+            SELECT u.id, u.display_name, u.avatar_url, f.id AS friendship_id
+            FROM friendships f
+            JOIN users u ON u.id = f.sender_id
+            WHERE f.receiver_id = %s AND f.status = 'pending'
+            ORDER BY f.created_at DESC
+        """, (me["id"],))
+        received = [dict(r) for r in cur.fetchall()]
+
+        # Pending — sent (waiting on them)
+        cur.execute("""
+            SELECT u.id, u.display_name, u.avatar_url, f.id AS friendship_id
+            FROM friendships f
+            JOIN users u ON u.id = f.receiver_id
+            WHERE f.sender_id = %s AND f.status = 'pending'
+            ORDER BY f.created_at DESC
+        """, (me["id"],))
+        sent = [dict(r) for r in cur.fetchall()]
+
+        cur.close(); conn.close()
+        return jsonify({
+            "friends":          friends,
+            "requests_received": received,
+            "requests_sent":    sent,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# POST /api/friends/<user_id>  — send friend request
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/friends/<int:target_id>", methods=["POST"])
+@login_required
+def send_friend_request(target_id):
+    me = current_user()
+    if me["id"] == target_id:
+        return jsonify({"error": "Can't friend yourself"}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        # Check they exist
+        cur.execute("SELECT id FROM users WHERE id = %s", (target_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "User not found"}), 404
+        # Check no existing relationship
+        cur.execute("""
+            SELECT id, status FROM friendships
+            WHERE (sender_id = %s AND receiver_id = %s)
+               OR (sender_id = %s AND receiver_id = %s)
+        """, (me["id"], target_id, target_id, me["id"]))
+        existing = cur.fetchone()
+        if existing:
+            if existing["status"] == "accepted":
+                return jsonify({"error": "Already friends"}), 409
+            return jsonify({"error": "Request already exists"}), 409
+
+        cur.execute("""
+            INSERT INTO friendships (sender_id, receiver_id, status)
+            VALUES (%s, %s, 'pending') RETURNING id
+        """, (me["id"], target_id))
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"ok": True, "status": "request_sent"}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PATCH /api/friends/<user_id>  — accept friend request
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/friends/<int:target_id>", methods=["PATCH"])
+@login_required
+def accept_friend_request(target_id):
+    me = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE friendships SET status = 'accepted', updated_at = NOW()
+            WHERE sender_id = %s AND receiver_id = %s AND status = 'pending'
+            RETURNING id
+        """, (target_id, me["id"]))
+        updated = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        if not updated:
+            return jsonify({"error": "No pending request found"}), 404
+        return jsonify({"ok": True, "status": "friends"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DELETE /api/friends/<user_id>  — remove friend or decline/cancel request
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/friends/<int:target_id>", methods=["DELETE"])
+@login_required
+def remove_friend(target_id):
+    me = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            DELETE FROM friendships
+            WHERE (sender_id = %s AND receiver_id = %s)
+               OR (sender_id = %s AND receiver_id = %s)
+            RETURNING id
+        """, (me["id"], target_id, target_id, me["id"]))
+        deleted = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        if not deleted:
+            return jsonify({"error": "No relationship found"}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Page routes ───────────────────────────────────────────────────
+@app.route("/profile")
+@app.route("/profile/")
+def own_profile():
+    return app.send_static_file("profile.html")
+
+@app.route("/profile/<int:user_id>")
+def user_profile(user_id):
+    return app.send_static_file("profile.html")
+
+
 if __name__ == "__main__":
-    port  = int(os.getenv("PORT", 5000))
-    debug = os.getenv("FLASK_ENV") == "development"
-    app.run(host="0.0.0.0", port=port, debug=debug)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)

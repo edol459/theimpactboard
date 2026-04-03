@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile — NothingButNet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink:    #0c0c0d; --ink2: #2a2a2e; --ink3: #6b6b78; --ink4: #a8a8b3;
+  --paper:  #F5F0E8; --paper2: #eeecea; --paper3: #e5e2dc; --rule: #d8d5cf;
+  --orange: #e8530a; --orange-lt: #fff0ea;
+  --green:  #00C030; --red: #c0392b;
+  --ff-serif: 'DM Serif Display', Georgia, serif;
+  --ff-sans:  'Instrument Sans', sans-serif;
+  --ff-mono:  'DM Mono', monospace;
+  --nav-h: 56px;
+}
+*, body { font-family: var(--ff-sans); }
+body { background: var(--paper); color: var(--ink); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+/* ── Nav ── */
+nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); background: var(--paper); border-bottom: 1px solid var(--rule); display: flex; align-items: center; padding: 0 24px; gap: 24px; z-index: 100; }
+.nav-wordmark { font-family: var(--ff-serif); font-size: 20px; color: var(--ink); letter-spacing: -0.01em; text-decoration: none; flex-shrink: 0; }
+.nav-wordmark em { font-style: italic; color: var(--orange); }
+.nav-tabs { display: flex; gap: 2px; }
+.nav-tab { font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink3); text-decoration: none; padding: 6px 14px; border-radius: 4px; transition: color 0.15s, background 0.15s; }
+.nav-tab:hover { color: var(--ink); background: var(--paper2); }
+.nav-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.nav-auth-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--rule); }
+.nav-auth-name { font-family: var(--ff-mono); font-size: 11px; color: var(--ink3); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-signin-btn { font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 12px; background: var(--orange); color: #fff; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; transition: opacity 0.15s; }
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); background: none; border: none; cursor: pointer; padding: 4px 6px; }
+.nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Layout ── */
+.page { padding-top: calc(var(--nav-h) + 40px); max-width: 900px; margin: 0 auto; padding-left: 24px; padding-right: 24px; padding-bottom: 80px; }
+
+/* ── Profile header ── */
+.profile-header {
+  display: flex; align-items: flex-start; gap: 24px;
+  padding-bottom: 28px; border-bottom: 1px solid var(--rule); margin-bottom: 32px;
+}
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--rule);
+  background: var(--paper3); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-serif); font-size: 2rem; color: var(--ink3);
+  overflow: hidden;
+}
+.profile-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.profile-info { flex: 1; min-width: 0; }
+.profile-name {
+  font-family: var(--ff-serif); font-size: 1.9rem;
+  letter-spacing: -0.02em; color: var(--ink); line-height: 1.1;
+  margin-bottom: 4px;
+}
+.profile-meta { font-family: var(--ff-mono); font-size: 11px; color: var(--ink4); margin-bottom: 12px; }
+.profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Buttons */
+.btn { font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; padding: 6px 14px; border-radius: 4px; cursor: pointer; border: 1px solid var(--rule); background: none; color: var(--ink3); transition: all 0.15s; }
+.btn:hover { border-color: var(--orange); color: var(--orange); }
+.btn-primary { background: var(--orange); color: #fff; border-color: var(--orange); }
+.btn-primary:hover { opacity: 0.85; color: #fff; }
+.btn-friends { background: var(--paper2); }
+.btn-unfriend:hover { border-color: var(--red); color: var(--red); }
+
+/* ── Stats row ── */
+.stats-row { display: flex; gap: 0; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin-bottom: 32px; }
+.stat-block { flex: 1; padding: 16px 20px; border-right: 1px solid var(--rule); }
+.stat-block:last-child { border-right: none; }
+.stat-val { font-family: var(--ff-serif); font-size: 1.8rem; color: var(--ink); line-height: 1; }
+.stat-val.green { color: var(--green); }
+.stat-lbl { font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink4); margin-top: 3px; }
+
+/* ── Tabs ── */
+.profile-tabs { display: flex; border-bottom: 1px solid var(--rule); margin-bottom: 24px; }
+.profile-tab { font-family: var(--ff-sans); font-size: 13px; font-weight: 500; padding: 10px 16px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--ink3); cursor: pointer; margin-bottom: -1px; transition: color 0.15s; }
+.profile-tab:hover { color: var(--ink2); }
+.profile-tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* ── Review list ── */
+.review-item { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--paper3); cursor: pointer; transition: background 0.1s; }
+.review-item:hover .ri-matchup { color: var(--orange); }
+.review-item:last-child { border-bottom: none; }
+.ri-matchup { font-size: 14px; font-weight: 600; color: var(--ink); transition: color 0.15s; margin-bottom: 3px; }
+.ri-score { font-family: var(--ff-mono); font-size: 11px; color: var(--ink3); margin-bottom: 4px; }
+.ri-text { font-size: 13px; color: var(--ink2); line-height: 1.45; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ri-stars { font-size: 14px; color: var(--green); letter-spacing: -1px; text-align: right; white-space: nowrap; }
+.ri-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); text-align: right; margin-top: 3px; }
+.btn-load-more { display: block; width: 100%; margin-top: 16px; padding: 10px; font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); background: none; border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
+.btn-load-more:hover { border-color: var(--orange); color: var(--orange); }
+
+/* ── Friends list ── */
+.friend-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--paper3); }
+.friend-item:last-child { border-bottom: none; }
+.friend-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--rule); background: var(--paper3); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--ink3); flex-shrink: 0; overflow: hidden; }
+.friend-avatar img { width: 100%; height: 100%; border-radius: 50%; }
+.friend-name { font-size: 14px; font-weight: 600; color: var(--ink); flex: 1; cursor: pointer; }
+.friend-name:hover { color: var(--orange); }
+.friend-actions { display: flex; gap: 6px; }
+.section-label { font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink4); margin-bottom: 10px; margin-top: 20px; }
+.section-label:first-child { margin-top: 0; }
+
+/* ── Search ── */
+.search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-input { flex: 1; font-family: var(--ff-sans); font-size: 13px; padding: 8px 12px; background: #fff; border: 1px solid var(--rule); border-radius: 4px; outline: none; color: var(--ink); transition: border-color 0.15s; }
+.search-input:focus { border-color: var(--orange); }
+.search-input::placeholder { color: var(--ink4); }
+.search-results { display: flex; flex-direction: column; gap: 0; }
+.search-result-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--paper3); }
+.search-result-item:last-child { border-bottom: none; }
+
+/* ── Edit name modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(12,12,13,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.modal { background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; width: 100%; max-width: 400px; padding: 28px; }
+.modal h2 { font-family: var(--ff-serif); font-size: 1.4rem; margin-bottom: 6px; }
+.modal p { font-size: 13px; color: var(--ink3); margin-bottom: 18px; line-height: 1.5; }
+.modal input { width: 100%; font-family: var(--ff-sans); font-size: 14px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 4px; outline: none; color: var(--ink); background: #fff; transition: border-color 0.15s; margin-bottom: 14px; }
+.modal input:focus { border-color: var(--orange); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-error { font-size: 12px; color: var(--red); margin-bottom: 10px; }
+
+/* ── Empty / loading ── */
+.empty-state { padding: 40px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+.loading-state { padding: 24px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+
+/* ── Rating distribution bar ── */
+.dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.dist-label { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); width: 24px; text-align: right; flex-shrink: 0; }
+.dist-bar-wrap { flex: 1; height: 6px; background: var(--paper3); border-radius: 3px; overflow: hidden; }
+.dist-bar { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.4s ease; }
+.dist-count { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); width: 24px; }
+
+/* ── Toast ── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; font-size: 13px; padding: 9px 16px; border-radius: 4px; z-index: 999; font-family: var(--ff-sans); animation: toastIn 0.2s ease; }
+@keyframes toastIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-wordmark" href="/"><em>n</em>othingbutnet</a>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="/stats.html">Stats</a>
+    <a class="nav-tab" href="/builder.html">Builder</a>
+    <a class="nav-tab" href="/onoff">On/Off</a>
+    <a class="nav-tab" href="/reviews">BasketBoxd</a>
+  </div>
+  <div class="nav-auth" id="nav-auth-slot"></div>
+</nav>
+
+<div class="page" id="page">
+  <div class="loading-state">Loading…</div>
+</div>
+
+<!-- Edit name modal -->
+<div class="modal-overlay" id="name-modal" style="display:none">
+  <div class="modal">
+    <h2 id="modal-title">Choose your display name</h2>
+    <p id="modal-desc">This is how you'll appear to other users. You can change it anytime.</p>
+    <div class="modal-error" id="modal-error" style="display:none"></div>
+    <input type="text" id="name-input" placeholder="Your display name" maxlength="40">
+    <div class="modal-actions">
+      <button class="btn" id="modal-cancel" onclick="closeNameModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveName()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+let ME        = null;   // logged-in user
+let PROFILE   = null;   // profile being viewed
+let PROFILE_ID = null;  // user_id from URL, or own id
+let reviewOffset = 0;
+let reviewTotal  = 0;
+
+// ── Init ──────────────────────────────────────────────────────
+(async () => {
+  // Parse user_id from URL: /profile or /profile/123
+  const pathParts = window.location.pathname.split('/').filter(Boolean);
+  const urlUserId = pathParts.length >= 2 ? parseInt(pathParts[1]) : null;
+
+  // Load auth first
+  await loadAuth();
+
+  if (urlUserId) {
+    PROFILE_ID = urlUserId;
+  } else if (ME) {
+    PROFILE_ID = ME.id;
+  } else {
+    // Not logged in, no user in URL → redirect to login
+    window.location.href = '/auth/google/login?next=/profile';
+    return;
+  }
+
+  await loadProfile();
+
+  // First-login prompt: show name modal if user hasn't set their name
+  if (ME && ME.id === PROFILE_ID && !PROFILE.user.display_name_set) {
+    openNameModal(true);
+  }
+})();
+
+// ── Auth ──────────────────────────────────────────────────────
+async function loadAuth() {
+  const slot = document.getElementById('nav-auth-slot');
+  try {
+    const res  = await fetch('/auth/me');
+    const data = await res.json();
+    ME = data.user || null;
+  } catch { ME = null; }
+
+  if (ME) {
+    slot.innerHTML = `
+      <a href="/profile" style="text-decoration:none;cursor:pointer">${ME.avatar_url ? `<img class="nav-auth-avatar" src="${ME.avatar_url}" alt="">` : ''}</a>
+      <button class="nav-signout-btn" onclick="signOut()">Sign out</button>
+    `;
+  } else {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+  }
+}
+
+async function signOut() {
+  await fetch('/auth/logout', { method: 'POST' });
+  window.location.reload();
+}
+
+// ── Load profile ──────────────────────────────────────────────
+async function loadProfile() {
+  try {
+    const res  = await fetch(`/api/users/${PROFILE_ID}/profile`);
+    if (!res.ok) {
+      document.getElementById('page').innerHTML = '<div class="empty-state">User not found.</div>';
+      return;
+    }
+    PROFILE = await res.json();
+    renderProfile();
+  } catch(e) {
+    document.getElementById('page').innerHTML = `<div class="empty-state">Error loading profile.</div>`;
+  }
+}
+
+function renderProfile() {
+  const u = PROFILE.user;
+  const s = PROFILE.stats;
+  const isOwn = PROFILE.is_own;
+  document.title = `${u.display_name} — NothingButNet`;
+
+  const avatarContent = u.avatar_url
+    ? `<img src="${u.avatar_url}" alt="${u.display_name}">`
+    : u.display_name.charAt(0).toUpperCase();
+
+  const memberDate = new Date(u.member_since).toLocaleDateString('en-US', {month:'long', year:'numeric'});
+
+  // Action buttons
+  let actionsHtml = '';
+  if (isOwn) {
+    actionsHtml = `
+      <button class="btn" onclick="openNameModal(false)">Edit display name</button>
+      <a class="btn" href="/reviews">My reviews</a>
+    `;
+  } else if (ME) {
+    const fs = PROFILE.friend_status;
+    if (fs === 'friends') {
+      actionsHtml = `<button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Remove friend</button>`;
+    } else if (fs === 'request_sent') {
+      actionsHtml = `<button class="btn" disabled>Request sent</button>`;
+    } else if (fs === 'request_received') {
+      actionsHtml = `
+        <button class="btn btn-primary" onclick="acceptFriend(${u.id})">Accept request</button>
+        <button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Decline</button>
+      `;
+    } else {
+      actionsHtml = `<button class="btn btn-primary" onclick="addFriend(${u.id})">Add friend</button>`;
+    }
+  }
+
+  // Rating distribution
+  const maxCount = Math.max(...Object.values(s.distribution || {}), 1);
+  const distHtml = [10,9,8,7,6,5,4,3,2,1].map(r => {
+    const cnt  = s.distribution[r] || 0;
+    const pct  = Math.round((cnt / maxCount) * 100);
+    const star = (r / 2).toFixed(1);
+    return `<div class="dist-row">
+      <span class="dist-label">${star}★</span>
+      <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%"></div></div>
+      <span class="dist-count">${cnt}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page').innerHTML = `
+    <div class="profile-header">
+      <div class="profile-avatar">${avatarContent}</div>
+      <div class="profile-info">
+        <div class="profile-name">${u.display_name}</div>
+        <div class="profile-meta">Member since ${memberDate} · ${PROFILE.friend_count} friend${PROFILE.friend_count !== 1 ? 's' : ''}</div>
+        <div class="profile-actions">${actionsHtml}</div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-block">
+        <div class="stat-val">${s.total_reviews}</div>
+        <div class="stat-lbl">Reviews</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-val green">${s.avg_rating > 0 ? s.avg_rating.toFixed(1) + '★' : '—'}</div>
+        <div class="stat-lbl">Avg Rating</div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-val">${s.five_star_count}</div>
+        <div class="stat-lbl">5★ Reviews</div>
+      </div>
+      <div class="stat-block" style="border-right:none">
+        <div style="padding-top:2px">${distHtml}</div>
+        <div class="stat-lbl" style="margin-top:6px">Distribution</div>
+      </div>
+    </div>
+
+    <div class="profile-tabs">
+      <button class="profile-tab active" data-tab="reviews">Reviews</button>
+      <button class="profile-tab" data-tab="friends">Friends${PROFILE.friend_count > 0 ? ` (${PROFILE.friend_count})` : ''}</button>
+      ${isOwn ? '<button class="profile-tab" data-tab="find">Find Friends</button>' : ''}
+    </div>
+
+    <div id="tab-reviews"><div class="loading-state">Loading reviews…</div></div>
+    <div id="tab-friends" style="display:none"></div>
+    ${isOwn ? '<div id="tab-find" style="display:none"></div>' : ''}
+  `;
+
+  // Tab switching
+  document.querySelectorAll('.profile-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.profile-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ['reviews','friends','find'].forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        if (el) el.style.display = btn.dataset.tab === t ? '' : 'none';
+      });
+      if (btn.dataset.tab === 'friends' && !document.getElementById('tab-friends').dataset.loaded) loadFriends();
+      if (btn.dataset.tab === 'find'    && !document.getElementById('tab-find').dataset.loaded)    renderFindFriends();
+    });
+  });
+
+  // Load reviews immediately
+  loadReviews(true);
+}
+
+// ── Reviews tab ───────────────────────────────────────────────
+async function loadReviews(reset = false) {
+  if (reset) reviewOffset = 0;
+  const container = document.getElementById('tab-reviews');
+  if (!container) return;
+  if (reset) container.innerHTML = '<div class="loading-state">Loading…</div>';
+
+  const res  = await fetch(`/api/users/${PROFILE_ID}/reviews?limit=15&offset=${reviewOffset}`);
+  const data = await res.json();
+  const reviews = data.reviews || [];
+  reviewTotal = data.total || 0;
+  reviewOffset += reviews.length;
+
+  if (reset) container.innerHTML = '';
+
+  if (reviews.length === 0 && reset) {
+    container.innerHTML = '<div class="empty-state">No reviews yet.</div>';
+    return;
+  }
+
+  reviews.forEach(r => {
+    const awayWin = r.away_score > r.home_score;
+    const div = document.createElement('div');
+    div.className = 'review-item';
+    div.onclick = () => window.location.href = `/game?gameId=${r.game_id}&tab=reviews`;
+    div.innerHTML = `
+      <div>
+        <div class="ri-matchup">${r.away_team_abbr} @ ${r.home_team_abbr}</div>
+        <div class="ri-score">
+          <b>${awayWin ? r.away_score : r.home_score}</b>–${awayWin ? r.home_score : r.away_score}
+          · ${fmtDate(r.game_date)}
+        </div>
+        ${r.review_text ? `<div class="ri-text">${r.review_text}</div>` : ''}
+      </div>
+      <div>
+        <div class="ri-stars">${starsText(r.rating)}</div>
+        <div class="ri-date">${fmtShortDate(r.created_at)}</div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+
+  // Remove old load-more
+  const old = container.querySelector('.btn-load-more');
+  if (old) old.remove();
+
+  if (reviewOffset < reviewTotal) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-load-more';
+    btn.textContent = `Load more (${reviewTotal - reviewOffset} remaining)`;
+    btn.onclick = () => loadReviews(false);
+    container.appendChild(btn);
+  }
+}
+
+// ── Friends tab ───────────────────────────────────────────────
+async function loadFriends() {
+  const container = document.getElementById('tab-friends');
+  container.dataset.loaded = '1';
+
+  if (PROFILE.is_own) {
+    // Show full friends management (my own profile)
+    try {
+      const res  = await fetch('/api/friends');
+      const data = await res.json();
+      renderFriendsOwn(data);
+    } catch {
+      container.innerHTML = '<div class="empty-state">Could not load friends.</div>';
+    }
+  } else {
+    // Just show friend count / mutual indicator
+    container.innerHTML = `<div class="empty-state">${PROFILE.friend_count} friend${PROFILE.friend_count !== 1 ? 's' : ''}.</div>`;
+  }
+}
+
+function renderFriendsOwn(data) {
+  const container = document.getElementById('tab-friends');
+  let html = '';
+
+  if (data.requests_received?.length) {
+    html += `<div class="section-label">Friend Requests (${data.requests_received.length})</div>`;
+    html += data.requests_received.map(u => `
+      <div class="friend-item">
+        ${avatarEl(u.display_name, u.avatar_url)}
+        <span class="friend-name" onclick="goProfile(${u.id})">${u.display_name}</span>
+        <div class="friend-actions">
+          <button class="btn btn-primary" onclick="acceptFriend(${u.id})">Accept</button>
+          <button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Decline</button>
+        </div>
+      </div>`).join('');
+  }
+
+  if (data.friends?.length) {
+    html += `<div class="section-label">Friends (${data.friends.length})</div>`;
+    html += data.friends.map(u => `
+      <div class="friend-item">
+        ${avatarEl(u.display_name, u.avatar_url)}
+        <span class="friend-name" onclick="goProfile(${u.id})">${u.display_name}</span>
+        <div class="friend-actions">
+          <button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Remove</button>
+        </div>
+      </div>`).join('');
+  }
+
+  if (data.requests_sent?.length) {
+    html += `<div class="section-label">Sent Requests</div>`;
+    html += data.requests_sent.map(u => `
+      <div class="friend-item">
+        ${avatarEl(u.display_name, u.avatar_url)}
+        <span class="friend-name" onclick="goProfile(${u.id})">${u.display_name}</span>
+        <div class="friend-actions">
+          <button class="btn" onclick="removeFriend(${u.id})">Cancel</button>
+        </div>
+      </div>`).join('');
+  }
+
+  if (!html) html = '<div class="empty-state">No friends yet. Use Find Friends to connect.</div>';
+  container.innerHTML = html;
+}
+
+// ── Find Friends tab ──────────────────────────────────────────
+function renderFindFriends() {
+  const container = document.getElementById('tab-find');
+  container.dataset.loaded = '1';
+  container.innerHTML = `
+    <div class="search-row" style="margin-top:4px">
+      <input class="search-input" id="friend-search" type="text" placeholder="Search by display name…" maxlength="40">
+    </div>
+    <div class="search-results" id="search-results"></div>
+  `;
+  let timer;
+  document.getElementById('friend-search').addEventListener('input', e => {
+    clearTimeout(timer);
+    timer = setTimeout(() => searchUsers(e.target.value), 280);
+  });
+}
+
+async function searchUsers(q) {
+  const results = document.getElementById('search-results');
+  if (!results) return;
+  if (q.length < 2) { results.innerHTML = ''; return; }
+  results.innerHTML = '<div class="loading-state">Searching…</div>';
+  try {
+    const res  = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const users = data.users || [];
+    if (!users.length) { results.innerHTML = '<div class="empty-state">No users found.</div>'; return; }
+
+    // Also get current friend relationships
+    const frRes  = await fetch('/api/friends');
+    const frData = await frRes.json();
+    const friendIds = new Set([
+      ...(frData.friends || []).map(u => u.id),
+      ...(frData.requests_sent || []).map(u => u.id),
+      ...(frData.requests_received || []).map(u => u.id),
+    ]);
+
+    results.innerHTML = users.map(u => {
+      let actionHtml;
+      if (friendIds.has(u.id)) {
+        actionHtml = `<button class="btn" disabled>Connected</button>`;
+      } else {
+        actionHtml = `<button class="btn btn-primary" onclick="addFriend(${u.id}, this)">Add friend</button>`;
+      }
+      return `<div class="search-result-item">
+        ${avatarEl(u.display_name, u.avatar_url, 34)}
+        <span class="friend-name" onclick="goProfile(${u.id})" style="cursor:pointer">${u.display_name}</span>
+        ${actionHtml}
+      </div>`;
+    }).join('');
+  } catch {
+    results.innerHTML = '<div class="empty-state">Search failed.</div>';
+  }
+}
+
+// ── Friend actions ────────────────────────────────────────────
+async function addFriend(userId, btn) {
+  try {
+    const res = await fetch(`/api/friends/${userId}`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast('Friend request sent!');
+    if (btn) { btn.textContent = 'Request sent'; btn.disabled = true; }
+    // Update button on profile header if viewing their profile
+    PROFILE.friend_status = 'request_sent';
+    updateProfileActions();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function acceptFriend(userId) {
+  try {
+    const res = await fetch(`/api/friends/${userId}`, { method: 'PATCH' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast('Friend added!');
+    PROFILE.friend_status = 'friends';
+    PROFILE.friend_count++;
+    updateProfileActions();
+    if (document.getElementById('tab-friends').dataset.loaded) loadFriends();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function removeFriend(userId) {
+  try {
+    const res = await fetch(`/api/friends/${userId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast('Done.');
+    PROFILE.friend_status = null;
+    if (PROFILE.friend_count > 0) PROFILE.friend_count--;
+    updateProfileActions();
+    if (document.getElementById('tab-friends').dataset.loaded) loadFriends();
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+function updateProfileActions() {
+  const u  = PROFILE.user;
+  const fs = PROFILE.friend_status;
+  const el = document.querySelector('.profile-actions');
+  if (!el || PROFILE.is_own) return;
+  if (!ME) return;
+  let html = '';
+  if (fs === 'friends') {
+    html = `<button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Remove friend</button>`;
+  } else if (fs === 'request_sent') {
+    html = `<button class="btn" disabled>Request sent</button>`;
+  } else if (fs === 'request_received') {
+    html = `
+      <button class="btn btn-primary" onclick="acceptFriend(${u.id})">Accept request</button>
+      <button class="btn btn-unfriend" onclick="removeFriend(${u.id})">Decline</button>`;
+  } else {
+    html = `<button class="btn btn-primary" onclick="addFriend(${u.id})">Add friend</button>`;
+  }
+  el.innerHTML = html;
+}
+
+// ── Display name modal ────────────────────────────────────────
+function openNameModal(isFirstLogin) {
+  const modal  = document.getElementById('name-modal');
+  const title  = document.getElementById('modal-title');
+  const desc   = document.getElementById('modal-desc');
+  const cancel = document.getElementById('modal-cancel');
+  const input  = document.getElementById('name-input');
+  title.textContent = isFirstLogin ? 'Choose your display name' : 'Edit display name';
+  desc.textContent  = isFirstLogin
+    ? 'Pick a name that other users will see. You can change it anytime.'
+    : 'This is how you appear to other users.';
+  cancel.style.display = isFirstLogin ? 'none' : '';
+  input.value = isFirstLogin ? '' : (PROFILE?.user?.display_name || '');
+  document.getElementById('modal-error').style.display = 'none';
+  modal.style.display = 'flex';
+  setTimeout(() => input.focus(), 50);
+  input.onkeydown = e => { if (e.key === 'Enter') saveName(); };
+}
+
+function closeNameModal() {
+  document.getElementById('name-modal').style.display = 'none';
+}
+
+async function saveName() {
+  const input = document.getElementById('name-input');
+  const errEl = document.getElementById('modal-error');
+  const name  = input.value.trim();
+  errEl.style.display = 'none';
+
+  if (!name) { errEl.textContent = 'Please enter a name.'; errEl.style.display = ''; return; }
+  if (name.length > 40) { errEl.textContent = 'Max 40 characters.'; errEl.style.display = ''; return; }
+
+  try {
+    const res  = await fetch('/api/me/display-name', {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ display_name: name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    closeNameModal();
+    toast('Display name updated!');
+    // Update locally
+    if (PROFILE) PROFILE.user.display_name = name;
+    document.querySelector('.profile-name').textContent = name;
+    document.title = `${name} — NothingButNet`;
+    // Update nav
+    const navName = document.querySelector('.nav-auth-name');
+    if (navName) navName.textContent = name;
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = '';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function goProfile(userId) {
+  window.location.href = `/profile/${userId}`;
+}
+
+function fmtDate(str) {
+  if (!str) return '';
+  const d = new Date(str + (str.length === 10 ? 'T12:00:00' : ''));
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+function fmtShortDate(str) {
+  if (!str) return '';
+  const d = new Date(str);
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+}
+function starsText(r10) {
+  return '★'.repeat(Math.round(r10 / 2));
+}
+function avatarEl(name, url, size = 38) {
+  const inner = url
+    ? `<img src="${url}" alt="${name}" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover">`
+    : name.charAt(0).toUpperCase();
+  return `<div class="friend-avatar" style="width:${size}px;height:${size}px">${inner}</div>`;
+}
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+</script>
+</body>
+</html>

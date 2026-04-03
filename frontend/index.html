@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NothingButNet</title>
+<!-- Kick off scoreboard fetch before any JS parses -->
+<script>window._sbPreload = fetch('/api/scoreboard');</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -16,7 +18,7 @@
   --ink2:      #2a2a2e;
   --ink3:      #6b6b78;
   --ink4:      #a8a8b3;
-  --paper:     #f7f5f0;
+  --paper:     #F5F0E8;
   --paper2:    #eeecea;
   --paper3:    #e5e2dc;
   --rule:      #d8d5cf;
@@ -95,11 +97,11 @@ nav {
 .nav-link.active { color: var(--ink); background: var(--paper3); }
 
 /* ── Page layout ────────────────────────────────────────────── */
-.page { padding-top: var(--nav-h); }
+.page { padding-top: 40px; }
 
 /* ── Scoreboard section ─────────────────────────────────────── */
 .scoreboard-section {
-  padding: 32px 32px 0;
+  padding: 0px 32px 0;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -185,6 +187,7 @@ nav {
 /* Scroll strip */
 .scoreboard-strip {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 20px;
@@ -209,7 +212,6 @@ nav {
 }
 .game-card:hover {
   border-color: var(--orange);
-  transform: translateY(-2px);
   box-shadow: 0 4px 16px rgba(0,0,0,0.07);
 }
 .game-card.is-live { border-color: rgba(231,76,60,0.4); }
@@ -488,6 +490,16 @@ nav {
   font-size: 9px;
   color: var(--ink4);
 }
+#news-container {
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+#news-container::-webkit-scrollbar { width: 4px; }
+#news-container::-webkit-scrollbar-track { background: transparent; }
+#news-container::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
+
 .news-loading-msg, .news-error-msg {
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -515,18 +527,130 @@ nav {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink4); }
+
+/* ── Nav auth ─────────────────────────────────────────────── */
+.nav-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.nav-auth-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--rule);
+}
+.nav-auth-name {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.03em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-signin-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.15s;
+}
+.nav-signout-btn:hover { color: var(--ink); }
+
+
+/* ── Game card review row ─────────────────────────────────── */
+.card-review-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--paper3);
+  gap: 6px;
+}
+.card-stars {
+  font-size: 11px;
+  color: #00C030;
+  letter-spacing: -1px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.card-stars-val {
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  color: var(--ink3);
+  margin-left: 2px;
+}
+.card-review-btn {
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.card-review-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.card-review-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+.card-review-btn:disabled:hover {
+  border-color: var(--rule);
+  color: var(--ink3);
+}
+.card-stars-skeleton {
+  color: var(--rule);
+  letter-spacing: -1px;
+}
+
 </style>
 </head>
 <body>
 
 <!-- ── Nav ─────────────────────────────────────────────────── -->
 <nav>
-  <a class="nav-wordmark" href="/">nothingbutnet</a>
+  <a class="nav-wordmark" href="/">ydkball</a>
   <div class="nav-links">
     <a class="nav-link" href="/stats.html">Stats</a>
     <a class="nav-link" href="/builder.html">Builder</a>
     <a class="nav-link" href="/onoff">On/Off</a>
+    <a class="nav-link" href="/reviews.html">BasketBoxd</a>
   </div>
+  <div class="nav-auth" id="nav-auth-slot"></div>
 </nav>
 
 <!-- ── Page ────────────────────────────────────────────────── -->
@@ -535,7 +659,6 @@ nav {
   <!-- Scoreboard -->
   <div class="scoreboard-section">
     <div class="scoreboard-top">
-      <h2 class="section-title">Scoreboard</h2>
     </div>
     <!-- Calendar date strip -->
     <div class="cal-strip-wrap">
@@ -590,9 +713,24 @@ function teamLogoUrl(abbr) {
 
 // ── Date helpers ──────────────────────────────────────────────
 function todayStr() {
-  const d = new Date();
-  const z = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+  // NBA "game day" switches at 6 AM ET: before 6 AM ET we're still on yesterday's slate
+  const now = new Date();
+  const etParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const get = type => etParts.find(p => p.type === type).value;
+  const etHour = parseInt(get('hour'), 10);
+  const etDateStr = `${get('year')}-${get('month')}-${get('day')}`;
+  if (etHour < 6) {
+    // Before 6 AM ET — roll back one day
+    const [y, m, d] = etDateStr.split('-').map(Number);
+    const prev = new Date(y, m - 1, d - 1);
+    const z = n => String(n).padStart(2, '0');
+    return `${prev.getFullYear()}-${z(prev.getMonth()+1)}-${z(prev.getDate())}`;
+  }
+  return etDateStr;
 }
 
 function addDays(dateStr, n) {
@@ -629,7 +767,7 @@ const SB = {
 
 // ── Calendar strip ────────────────────────────────────────────
 const CAL_DAYS_BACK = 14;   // how many past days to show
-const CAL_DAYS_FWD  = 7;    // how many future days to show
+const CAL_DAYS_FWD  = 14;    // how many future days to show
 
 const DAYS_SHORT  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -665,7 +803,7 @@ function buildCalStrip() {
   strip.querySelectorAll('.cal-day').forEach(el => {
     el.addEventListener('click', () => {
       const date = el.dataset.date;
-      SB.date = date >= SB.today ? null : date;
+      SB.date = date === SB.today ? null : date;
       // Update active state
       strip.querySelectorAll('.cal-day').forEach(d => {
         const isActive = (SB.date === null && d.dataset.date === SB.today) || d.dataset.date === SB.date;
@@ -699,7 +837,11 @@ async function loadScoreboard() {
 
   try {
     const qs = SB.date ? `?date=${SB.date}` : '';
-    const res = await fetch(`${API}/api/scoreboard${qs}`);
+    // For today, reuse the preload promise fired in <head> (already in-flight or resolved)
+    const fetchPromise = (!SB.date && window._sbPreload)
+      ? window._sbPreload.then(r => r.clone())
+      : fetch(`${API}/api/scoreboard${qs}`);
+    const res = await fetchPromise;
     const data = await res.json();
     const games = data.games || [];
 
@@ -733,6 +875,9 @@ async function loadScoreboard() {
         }
       });
     });
+
+    // Load ratings for final games
+    loadCardRatings(games.filter(g => g.gameStatus === 3).map(g => g.gameId));
 
     // Auto-refresh live games
     if (games.some(g => g.gameStatus === 2) && !SB.date) {
@@ -793,6 +938,15 @@ function buildCard(g) {
   const homeRec = home.wins != null ? `${home.wins}-${home.losses}` : '';
   const tipText = isUpcoming ? fmtTipoff(g.gameTimeUTC || '') : '';
 
+  // Review row — always shown; disabled/greyed for non-final games
+  const reviewRow = `
+    <div class="card-review-row"${isFinal ? ` id="card-review-${g.gameId}"` : ''}>
+      <span class="card-stars${isFinal ? ' card-stars-display' : ''}" style="${isFinal ? '' : 'opacity:0.3'}">
+        <span class="card-stars-skeleton">★★★★★</span><span class="card-stars-val">${isFinal ? ' 0.0' : ''}</span>
+      </span>
+      <button class="card-review-btn"${isFinal ? ` onclick="event.stopPropagation();window.location.href='/game?gameId=${g.gameId}&tab=reviews'"` : ' disabled'}>Review</button>
+    </div>`;
+
   return `<div class="game-card ${isLive ? 'is-live' : ''}"
     data-game-id="${g.gameId}"
     data-game-status="${g.gameStatus}"
@@ -805,6 +959,7 @@ function buildCard(g) {
     ${teamRow(away.abbr, awayScore, awayWon, homeWon)}
     <div class="card-divider"></div>
     ${teamRow(home.abbr, homeScore, homeWon, awayWon)}
+    ${reviewRow}
   </div>`;
 }
 
@@ -905,11 +1060,81 @@ async function loadNews() {
   }
 }
 
+// ── Card ratings ─────────────────────────────────────────────
+async function loadCardRatings(gameIds) {
+  if (!gameIds || !gameIds.length) return;
+  // Fetch all in parallel
+  await Promise.all(gameIds.map(async gid => {
+    try {
+      const res = await fetch(`/api/games/${gid}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      updateCardRating(gid, data.game);
+    } catch { /* silently skip */ }
+  }));
+}
+
+function updateCardRating(gameId, g) {
+  const row = document.getElementById(`card-review-${gameId}`);
+  if (!row) return;
+  const starsEl = row.querySelector('.card-stars-display');
+  if (!starsEl) return;
+  if (g && g.review_count > 0) {
+    const stars = g.bayesian_rating / 2;
+    const full  = Math.floor(stars);
+    const half  = stars - full >= 0.25 ? 1 : 0;
+    const empty = 5 - full - half;
+    starsEl.innerHTML =
+      '<span style="color:var(--star,#00C030)">' + '★'.repeat(full) + (half ? '½' : '') + '</span>' +
+      '<span style="color:var(--rule)">' + '★'.repeat(empty) + '</span>' +
+      `<span class="card-stars-val"> ${stars.toFixed(1)}</span>`;
+  } else {
+    // No reviews yet — keep grey skeleton, update count to show "—"
+    starsEl.innerHTML = '<span class="card-stars-skeleton">★★★★★</span><span class="card-stars-val"> —</span>';
+  }
+}
+
+// Refresh card rating after a review is submitted
+document.addEventListener('rm:reviewed', e => {
+  fetch(`/api/games/${e.detail.gameId}`)
+    .then(r => r.json())
+    .then(data => updateCardRating(e.detail.gameId, data.game))
+    .catch(() => {});
+});
+
 // ── Init ──────────────────────────────────────────────────────
 buildCalStrip();
 loadScoreboard();
 loadPerformers();
 loadNews();
+</script>
+<script>
+// ── Nav auth (shared across all pages) ───────────────────────
+async function initNavAuth() {
+  const slot = document.getElementById('nav-auth-slot');
+  if (!slot) return;
+  try {
+    const res = await fetch('/auth/me');
+    const data = await res.json();
+    const user = data.user;
+    if (user) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${user.avatar_url ? `<img class="nav-auth-avatar" src="${user.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="navSignOut()">Sign out</button>
+      `;
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+    }
+  } catch {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
+  }
+}
+async function navSignOut() {
+  await fetch('/auth/logout', { method: 'POST' });
+  window.location.reload();
+}
+initNavAuth();
+
 </script>
 </body>
 </html>

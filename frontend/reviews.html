@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Reviews — NothingButNet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #F5F0E8;
+    --bg-card:   #FDFAF4;
+    --ink:       #1A1612;
+    --ink-2:     #4A3F35;
+    --ink-3:     #8C7B6E;
+    --rule:      #DDD5C8;
+    --orange:    #E85D26;
+    --orange-lt: #F5E6DE;
+    --gold:      #C9922A;
+    --star:      #00C030;
+    --serif:     'DM Serif Display', Georgia, serif;
+    --sans:      'Instrument Sans', sans-serif;
+    --mono:      'DM Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 16px; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Nav (aligned with other pages) ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    z-index: 100;
+  }
+  .nav-wordmark {
+    font-family: var(--serif);
+    font-size: 20px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    flex-shrink: 0;
+  }
+  .nav-wordmark em { font-style: italic; color: var(--orange); }
+  .nav-tabs {
+    display: flex;
+    gap: 2px;
+  }
+  .nav-tab {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .nav-tab:hover { color: var(--ink); background: var(--rule); }
+  .nav-tab.active { color: var(--ink); background: rgba(0,0,0,0.07); }
+  /* nav-auth injected by shared snippet */
+  .nav-auth {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .nav-auth-avatar {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--rule);
+  }
+  .nav-auth-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.03em;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nav-signin-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .nav-signin-btn:hover { opacity: 0.85; }
+  .nav-signout-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink-3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    transition: color 0.15s;
+  }
+  .nav-signout-btn:hover { color: var(--ink); }
+
+  /* ── Layout ── */
+  .page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 96px 24px 80px;
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 48px;
+    align-items: start;
+  }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .section-title {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .section-sub {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ── Tab bar ── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 28px;
+  }
+  .tab {
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    color: var(--ink-3);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--orange); border-bottom-color: var(--orange); }
+
+  /* ── Star display ── */
+  .stars {
+    display: inline-flex;
+    gap: 1px;
+    align-items: center;
+  }
+  .stars svg {
+    width: 13px; height: 13px;
+    flex-shrink: 0;
+  }
+  .stars.lg svg { width: 18px; height: 18px; }
+  .stars.sm svg { width: 11px; height: 11px; }
+
+  /* ── Game card (review feed) ── */
+  .review-card {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 14px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+    animation: fadeUp 0.3s ease both;
+  }
+  .review-card:first-child { padding-top: 0; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .reviewer-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--rule);
+    background: var(--rule);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-size: 1rem;
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+  .reviewer-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+
+  .review-body { min-width: 0; }
+  .review-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .reviewer-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .review-action {
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .review-game-link {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--orange);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .review-game-link:hover { text-decoration: underline; }
+
+  .review-rating-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .review-date {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-3);
+  }
+  .review-text {
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  /* ── Scoreline with logos (review feed) ── */
+  .scoreline-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .sl-team {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sl-team .win { color: var(--ink); }
+  .sl-team strong { font-weight: 600; }
+  .sl-dash { color: var(--rule); font-size: 0.85rem; }
+
+  /* ── Game card matchup with logos ── */
+  .tgc-logos {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .tgc-logo-score {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .tgc-logo-score.loser {
+    color: var(--ink-3);
+    font-weight: 400;
+  }
+  .tgc-vs {
+    font-size: 0.68rem;
+    color: var(--ink-3);
+    padding: 0 2px;
+  }
+
+  /* ── Game pill (scoreline in review feed) ── */
+  .scoreline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 2px 8px;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+  }
+  .scoreline .win { font-weight: 600; color: var(--ink); }
+
+  /* ── Top-rated game cards ── */
+  .top-game-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    transition: background 0.1s;
+    animation: fadeUp 0.3s ease both;
+  }
+  .top-game-card:first-child { padding-top: 0; }
+  .top-game-card:hover .tgc-matchup { color: var(--orange); }
+
+  .tgc-rank {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-3);
+    width: 20px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .tgc-body { flex: 1; min-width: 0; }
+  .tgc-matchup {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink);
+    transition: color 0.15s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tgc-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+  }
+  .tgc-date {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--ink-3);
+  }
+  .tgc-reviews {
+    font-size: 0.68rem;
+    color: var(--ink-3);
+  }
+  .tgc-rating {
+    flex-shrink: 0;
+    text-align: right;
+  }
+  .tgc-stars-val {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--star);
+  }
+
+  /* ── Sidebar ── */
+  .sidebar { position: sticky; top: 72px; }
+
+  .sidebar-card {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .sidebar-title {
+    font-family: var(--serif);
+    font-size: 1rem;
+    margin-bottom: 14px;
+    color: var(--ink);
+  }
+
+  /* ── Sign-in prompt card ── */
+  .signin-card {
+    background: var(--orange-lt);
+    border: 1px solid #E8C4B0;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .signin-card p {
+    font-size: 0.82rem;
+    color: var(--ink-2);
+    line-height: 1.5;
+    margin-bottom: 14px;
+  }
+  .signin-card p strong {
+    display: block;
+    font-family: var(--serif);
+    font-size: 1rem;
+    color: var(--ink);
+    margin-bottom: 4px;
+  }
+
+  /* ── Game detail modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 22, 18, 0.6);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    /* no backdrop-filter — too expensive */
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 88vh;
+    overflow-y: auto;
+    animation: slideUp 0.25s ease;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .modal-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: var(--ink-3);
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px;
+  }
+  .modal-close:hover { color: var(--ink); }
+
+  .modal-scorebox {
+    text-align: center;
+  }
+  .modal-matchup {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .modal-score {
+    font-family: var(--serif);
+    font-size: 2.2rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .modal-score .loser { color: var(--ink-3); }
+  .modal-date {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--ink-3);
+    margin-top: 6px;
+  }
+
+  .modal-agg {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .modal-agg-stars { }
+  .modal-agg-detail {
+    font-size: 0.78rem;
+    color: var(--ink-3);
+  }
+  .modal-agg-val {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    color: var(--star);
+    line-height: 1;
+    margin-right: 6px;
+  }
+
+  .modal-reviews {
+    padding: 0 24px 8px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+  .modal-review-item {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .modal-review-item:last-child { border-bottom: none; }
+  .mri-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .mri-name { font-size: 0.8rem; font-weight: 600; color: var(--ink); }
+  .mri-text { font-size: 0.82rem; line-height: 1.5; color: var(--ink-2); }
+  .mri-empty { padding: 24px 0; text-align: center; font-size: 0.82rem; color: var(--ink-3); }
+
+  /* ── Write review section in modal ── */
+  .modal-write {
+    padding: 20px 24px 24px;
+    border-top: 1px solid var(--rule);
+  }
+  .write-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+
+  /* ── Interactive star picker (CSS-only hover, no SVG gradient) ── */
+  .star-picker {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    direction: ltr;
+  }
+  .star-picker input { display: none; }
+  .star-picker label {
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--rule);
+    transition: color 0.08s;
+    user-select: none;
+    /* each label is a half-star */
+    width: 16px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  /* Left half-star labels show left half of ★ */
+  .star-picker label.left  { text-align: left; }
+  /* Right half-star labels show right half of ★, offset left */
+  .star-picker label.right { text-align: left; margin-left: -2px; }
+
+  /* Highlight on hover: all labels up to and including hovered one */
+  .star-picker label:hover,
+  .star-picker label:hover ~ label { color: var(--rule); }
+  .star-picker:hover label { color: var(--rule); }
+
+  /* Checked state handled via JS class for reliability */
+  .star-picker label.lit { color: var(--star); }
+
+  .review-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 10px 12px;
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+    margin-bottom: 10px;
+  }
+  .review-textarea:focus { border-color: var(--orange); }
+  .review-textarea::placeholder { color: var(--ink-3); }
+
+  .write-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .btn-submit {
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .btn-submit:hover { opacity: 0.88; }
+  .btn-submit:disabled { opacity: 0.4; cursor: default; }
+  .btn-delete-review {
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .btn-delete-review:hover { color: #c0392b; }
+
+  .write-login-prompt {
+    font-size: 0.82rem;
+    color: var(--ink-3);
+    line-height: 1.5;
+  }
+  .write-login-prompt a {
+    color: var(--orange);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  /* ── Filters row ── */
+  .filters-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .filter-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-right: 2px;
+  }
+  .filter-select {
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    color: var(--ink);
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 5px 10px;
+    outline: none;
+    cursor: pointer;
+  }
+  .filter-select:focus { border-color: var(--orange); }
+
+  /* ── Empty / loading states ── */
+  .state-empty {
+    padding: 48px 0;
+    text-align: center;
+  }
+  .state-empty p {
+    font-size: 0.85rem;
+    color: var(--ink-3);
+    line-height: 1.6;
+  }
+  .state-loading {
+    padding: 32px 0;
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  /* ── Load more ── */
+  .btn-more {
+    display: block;
+    width: 100%;
+    margin-top: 20px;
+    padding: 10px;
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    background: none;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-more:hover { border-color: var(--orange); color: var(--orange); }
+
+  /* ── Page hero ── */
+  .page-hero {
+    grid-column: 1 / -1;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+  .hero-title {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--ink);
+  }
+  .hero-title em { color: var(--orange); font-style: italic; }
+  .hero-sub {
+    font-size: 0.82rem;
+    color: var(--ink-3);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .hero-season {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    text-align: right;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    background: var(--ink);
+    color: #fff;
+    font-size: 0.82rem;
+    padding: 10px 18px;
+    border-radius: 4px;
+    z-index: 999;
+    animation: toastIn 0.25s ease;
+    pointer-events: none;
+  }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 768px) {
+    .page { grid-template-columns: 1fr; gap: 32px; }
+    .sidebar { position: static; }
+    .page-hero { flex-direction: column; align-items: flex-start; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <a class="nav-wordmark" href="/"><em>n</em>othingbutnet</a>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="/stats.html">Stats</a>
+    <a class="nav-tab" href="/builder.html">Builder</a>
+    <a class="nav-tab" href="/onoff">On/Off</a>
+    <a class="nav-tab active" href="/reviews">BasketBoxd</a>
+  </div>
+  <div class="nav-auth" id="nav-auth-slot"></div>
+</nav>
+
+<!-- ── Page ── -->
+<div class="page">
+
+  <!-- Hero -->
+  <div class="page-hero">
+    <div>
+      <h1 class="hero-title">Game <em>Reviews</em></h1>
+      <p class="hero-sub">Rate and review every NBA game. Find the classics, the thrillers, the disasters.</p>
+    </div>
+    <div class="hero-season">
+      <div style="font-weight:600;color:var(--ink);">2025–26 Season</div>
+      <div>Regular Season</div>
+    </div>
+  </div>
+
+  <!-- Main column -->
+  <main>
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="recent">Recent Activity</button>
+      <button class="tab" data-tab="top">Top Rated</button>
+      <button class="tab" data-tab="browse">Browse Games</button>
+    </div>
+
+    <!-- Recent Activity -->
+    <div id="paneRecent">
+      <div id="recentFeed" class="state-loading">Loading…</div>
+      <button class="btn-more" id="btnMoreRecent" style="display:none">Load more</button>
+    </div>
+
+    <!-- Top Rated -->
+    <div id="paneTop" style="display:none">
+      <div id="topFeed" class="state-loading">Loading…</div>
+    </div>
+
+    <!-- Browse Games -->
+    <div id="paneBrowse" style="display:none">
+      <div class="filters-row">
+        <span class="filter-label">Team</span>
+        <select class="filter-select" id="filterTeam">
+          <option value="">All Teams</option>
+        </select>
+        <span class="filter-label" style="margin-left:8px">Sort</span>
+        <select class="filter-select" id="filterSort">
+          <option value="date">Date</option>
+          <option value="rating">Highest Rated</option>
+          <option value="reviews">Most Reviewed</option>
+        </select>
+      </div>
+      <div id="browseFeed" class="state-loading">Loading…</div>
+      <button class="btn-more" id="btnMoreBrowse" style="display:none">Load more</button>
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div id="sidebarAuthCard"></div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Your Stats</div>
+      <div id="sidebarUserStats">
+        <p style="font-size:0.82rem;color:var(--ink-3)">Sign in to track your reviews.</p>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Top Rated This Season</div>
+      <div id="sidebarTopGames">
+        <div class="state-loading" style="padding:12px 0">Loading…</div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Reviews open in game.html?tab=reviews -->
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STATE
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let currentUser   = null;
+let currentGameId = null;
+let pickedRating  = 0;    // 1–10
+
+const recentState = { offset: 0, loading: false, exhausted: false };
+const browseState = { offset: 0, loading: false, exhausted: false };
+
+const TEAMS = [
+  'ATL','BOS','BKN','CHA','CHI','CLE','DAL','DEN','DET','GSW',
+  'HOU','IND','LAC','LAL','MEM','MIA','MIL','MIN','NOP','NYK',
+  'OKC','ORL','PHI','PHX','POR','SAC','SAS','TOR','UTA','WAS',
+];
+
+// NBA team abbreviation → team ID for CDN logos
+const TEAM_IDS = {
+  ATL:1610612737, BOS:1610612738, BKN:1610612751, CHA:1610612766,
+  CHI:1610612741, CLE:1610612739, DAL:1610612742, DEN:1610612743,
+  DET:1610612765, GSW:1610612744, HOU:1610612745, IND:1610612754,
+  LAC:1610612746, LAL:1610612747, MEM:1610612763, MIA:1610612748,
+  MIL:1610612749, MIN:1610612750, NOP:1610612740, NYK:1610612752,
+  OKC:1610612760, ORL:1610612753, PHI:1610612755, PHX:1610612756,
+  POR:1610612757, SAC:1610612758, SAS:1610612759, TOR:1610612761,
+  UTA:1610612762, WAS:1610612764,
+};
+
+function logoURL(abbr) {
+  const id = TEAM_IDS[abbr];
+  return id ? `https://cdn.nba.com/logos/nba/${id}/global/L/logo.svg` : null;
+}
+
+function logoImg(abbr, size = 28) {
+  const url = logoURL(abbr);
+  if (!url) return `<span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-2)">${abbr}</span>`;
+  return `<img src="${url}" alt="${abbr}" width="${size}" height="${size}" style="display:block;object-fit:contain" onerror="this.style.display='none'">`;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// UTILS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function api(path) {
+  const r = await fetch(path);
+  return r.json();
+}
+
+function fmtDate(str) {
+  if (!str) return '';
+  const d = new Date(str + (str.length === 10 ? 'T12:00:00' : ''));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function fmtShortDate(str) {
+  if (!str) return '';
+  const d = new Date(str + (str.length === 10 ? 'T12:00:00' : ''));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function starsHTML(rating10, size = '') {
+  // rating10: integer 1–10
+  const stars = rating10 / 2;  // 0.5–5.0
+  let html = `<span class="stars ${size}">`;
+  for (let i = 1; i <= 5; i++) {
+    const fill = Math.min(Math.max(stars - (i - 1), 0), 1);
+    html += starSVG(fill);
+  }
+  html += '</span>';
+  return html;
+}
+
+const STAR_ON  = '#00C030';
+const STAR_OFF = '#DDD5C8';
+
+function starSVG(fill) {
+  // fill: 0 (empty), 0.5 (half), 1 (full)
+  const id = 'g' + Math.random().toString(36).slice(2, 7);
+  if (fill >= 1) {
+    return `<svg viewBox="0 0 20 20"><polygon points="10,2 12.4,7.8 18.5,8.2 14,12.2 15.5,18 10,14.8 4.5,18 6,12.2 1.5,8.2 7.6,7.8" fill="${STAR_ON}"/></svg>`;
+  } else if (fill >= 0.5) {
+    return `<svg viewBox="0 0 20 20"><defs><linearGradient id="${id}" x1="0" x2="1" y1="0" y2="0"><stop offset="50%" stop-color="${STAR_ON}"/><stop offset="50%" stop-color="${STAR_OFF}"/></linearGradient></defs><polygon points="10,2 12.4,7.8 18.5,8.2 14,12.2 15.5,18 10,14.8 4.5,18 6,12.2 1.5,8.2 7.6,7.8" fill="url(#${id})"/></svg>`;
+  } else {
+    return `<svg viewBox="0 0 20 20"><polygon points="10,2 12.4,7.8 18.5,8.2 14,12.2 15.5,18 10,14.8 4.5,18 6,12.2 1.5,8.2 7.6,7.8" fill="${STAR_OFF}"/></svg>`;
+  }
+}
+
+function matchupLabel(g) {
+  return `${g.away_team_abbr} @ ${g.home_team_abbr}`;
+}
+
+function scoreline(g) {
+  const awayWin = g.away_score > g.home_score;
+  const homeWin = g.home_score > g.away_score;
+  return `<div class="scoreline-logo">
+    <div class="sl-team">
+      ${logoImg(g.away_team_abbr, 22)}
+      <span class="${awayWin ? 'win' : ''}">${g.away_team_abbr} <strong>${g.away_score}</strong></span>
+    </div>
+    <span class="sl-dash">–</span>
+    <div class="sl-team">
+      <span class="${homeWin ? 'win' : ''}">${g.home_team_abbr} <strong>${g.home_score}</strong></span>
+      ${logoImg(g.home_team_abbr, 22)}
+    </div>
+  </div>`;
+}
+
+function avatarEl(displayName, avatarUrl, size = 40) {
+  if (avatarUrl) {
+    return `<div class="reviewer-avatar" style="width:${size}px;height:${size}px"><img src="${avatarUrl}" alt="${displayName}"></div>`;
+  }
+  return `<div class="reviewer-avatar" style="width:${size}px;height:${size}px">${displayName.charAt(0).toUpperCase()}</div>`;
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// AUTH (shared nav pattern)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadAuth() {
+  try {
+    const data = await api('/auth/me');
+    currentUser = data.user || null;
+  } catch { currentUser = null; }
+  // Render nav auth slot
+  const slot = document.getElementById('nav-auth-slot');
+  if (slot) {
+    if (currentUser) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${currentUser.avatar_url ? `<img class="nav-auth-avatar" src="${currentUser.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="signOut()">Sign out</button>
+      `;
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=/reviews">Sign in</a>`;
+    }
+  }
+  renderSidebarAuth();
+  renderSidebarUserStats();
+}
+
+function renderSidebarAuth() {
+  const el = document.getElementById('sidebarAuthCard');
+  if (!currentUser) {
+    el.innerHTML = `
+      <div class="signin-card">
+        <p><strong>Start reviewing games</strong>Rate and review every NBA game — track what you've watched, share your takes.</p>
+        <a class="nav-signin-btn" href="/auth/google/login?next=/reviews">Sign in with Google</a>
+      </div>
+    `;
+  } else {
+    el.innerHTML = '';
+  }
+}
+
+async function renderSidebarUserStats() {
+  const el = document.getElementById('sidebarUserStats');
+  if (!currentUser) {
+    el.innerHTML = '<p style="font-size:0.82rem;color:var(--ink-3)">Sign in to track your reviews.</p>';
+    return;
+  }
+  try {
+    const data = await api(`/api/users/${currentUser.id}/profile`);
+    const s = data.stats;
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-family:var(--serif);font-size:1.5rem;color:var(--ink)">${s.total_reviews}</div>
+          <div style="font-size:0.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.05em">Reviews</div>
+        </div>
+        <div>
+          <div style="font-family:var(--serif);font-size:1.5rem;color:var(--gold)">${s.avg_rating > 0 ? s.avg_rating.toFixed(1) : '—'}</div>
+          <div style="font-size:0.72rem;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.05em">Avg Stars</div>
+        </div>
+      </div>
+      ${s.total_reviews > 0 ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--rule)">
+          <a href="#" onclick="showMyReviews()" style="font-size:0.78rem;color:var(--orange);text-decoration:none;font-weight:600">View all my reviews →</a>
+        </div>` : ''}
+    `;
+  } catch {
+    el.innerHTML = '<p style="font-size:0.82rem;color:var(--ink-3)">Could not load stats.</p>';
+  }
+}
+
+async function signOut() {
+  await fetch('/auth/logout', { method: 'POST' });
+  currentUser = null;
+  const slot = document.getElementById('nav-auth-slot');
+  if (slot) slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=/reviews">Sign in</a>`;
+  renderSidebarAuth();
+  renderSidebarUserStats();
+  showToast('Signed out.');
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TABS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const TABS = {
+  recent: document.getElementById('paneRecent'),
+  top:    document.getElementById('paneTop'),
+  browse: document.getElementById('paneBrowse'),
+};
+
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    Object.entries(TABS).forEach(([k, el]) => el.style.display = k === tab ? '' : 'none');
+    if (tab === 'top' && !document.getElementById('topFeed').dataset.loaded) loadTopRated();
+    if (tab === 'browse' && !document.getElementById('browseFeed').dataset.loaded) loadBrowse();
+  });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// RECENT ACTIVITY
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadRecent(append = false) {
+  if (recentState.loading || recentState.exhausted) return;
+  recentState.loading = true;
+
+  const data = await api(`/api/reviews/recent?limit=15`);
+  const feed = document.getElementById('recentFeed');
+  const reviews = data.reviews || [];
+
+  if (!append) feed.innerHTML = '';
+
+  if (reviews.length === 0 && !append) {
+    feed.innerHTML = `<div class="state-empty"><p>No reviews yet.<br>Be the first to review a game!</p></div>`;
+  } else {
+    reviews.forEach((r, i) => {
+      const div = document.createElement('div');
+      div.className = 'review-card';
+      div.style.animationDelay = `${i * 0.04}s`;
+      div.innerHTML = `
+        ${avatarEl(r.display_name, r.avatar_url)}
+        <div class="review-body">
+          <div class="review-meta">
+            <span class="reviewer-name">${r.display_name}</span>
+            <span class="review-action">reviewed</span>
+            <span class="review-game-link" onclick="goToGame('${r.game_id}')">${r.away_team_abbr} @ ${r.home_team_abbr}</span>
+          </div>
+          ${scoreline(r)}
+          <div class="review-rating-row">
+            ${starsHTML(r.rating)}
+            <span class="review-date">${fmtShortDate(r.game_date)}</span>
+          </div>
+          ${r.review_text ? `<p class="review-text">${r.review_text}</p>` : ''}
+        </div>
+      `;
+      feed.appendChild(div);
+    });
+  }
+
+  recentState.loading = false;
+  if (reviews.length < 15) recentState.exhausted = true;
+  document.getElementById('btnMoreRecent').style.display = recentState.exhausted ? 'none' : 'block';
+}
+
+document.getElementById('btnMoreRecent').addEventListener('click', () => loadRecent(true));
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TOP RATED
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadTopRated() {
+  const feed = document.getElementById('topFeed');
+  feed.innerHTML = '<div class="state-loading">Loading…</div>';
+  feed.dataset.loaded = '1';
+
+  const data = await api('/api/reviews/top-games?limit=25');
+  const games = data.games || [];
+
+  if (games.length === 0) {
+    feed.innerHTML = `<div class="state-empty"><p>No rated games yet.<br>Start reviewing to build the leaderboard.</p></div>`;
+    return;
+  }
+
+  feed.innerHTML = '';
+  games.forEach((g, i) => {
+    const div = document.createElement('div');
+    div.className = 'top-game-card';
+    div.style.animationDelay = `${i * 0.03}s`;
+    div.onclick = () => goToGame(g.game_id);
+    const awayWin = g.away_score > g.home_score;
+    div.innerHTML = `
+      <div class="tgc-rank">${i + 1}</div>
+      <div class="tgc-body">
+        <div class="tgc-logos">
+          ${logoImg(g.away_team_abbr, 20)}
+          <span class="tgc-logo-score ${awayWin ? '' : 'loser'}">${g.away_score}</span>
+          <span class="tgc-vs">@</span>
+          <span class="tgc-logo-score ${awayWin ? 'loser' : ''}">${g.home_score}</span>
+          ${logoImg(g.home_team_abbr, 20)}
+        </div>
+        <div class="tgc-meta">
+          <span class="tgc-date">${fmtShortDate(g.game_date)}</span>
+          <span class="tgc-reviews">${g.review_count} review${g.review_count !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      <div class="tgc-rating">
+        ${starsHTML(Math.round(g.bayesian_rating), 'sm')}
+        <div class="tgc-stars-val">${(g.bayesian_rating / 2).toFixed(2)}</div>
+      </div>
+    `;
+    feed.appendChild(div);
+  });
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// BROWSE GAMES
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Populate team filter
+const teamSel = document.getElementById('filterTeam');
+TEAMS.forEach(t => {
+  const opt = document.createElement('option');
+  opt.value = t; opt.textContent = t;
+  teamSel.appendChild(opt);
+});
+
+teamSel.addEventListener('change', resetBrowse);
+document.getElementById('filterSort').addEventListener('change', resetBrowse);
+
+function resetBrowse() {
+  browseState.offset = 0;
+  browseState.exhausted = false;
+  document.getElementById('browseFeed').innerHTML = '';
+  loadBrowse();
+}
+
+async function loadBrowse(append = false) {
+  if (browseState.loading || browseState.exhausted) return;
+  browseState.loading = true;
+  const feed = document.getElementById('browseFeed');
+  feed.dataset.loaded = '1';
+
+  if (!append) feed.innerHTML = '<div class="state-loading">Loading…</div>';
+
+  const team = document.getElementById('filterTeam').value;
+  const sort = document.getElementById('filterSort').value;
+  const limit = 30;
+
+  const params = new URLSearchParams({
+    limit, offset: browseState.offset, sort, dir: 'desc',
+    ...(team ? { team } : {}),
+  });
+
+  const data = await api(`/api/games?${params}`);
+  const games = data.games || [];
+
+  if (!append) feed.innerHTML = '';
+
+  if (games.length === 0 && !append) {
+    feed.innerHTML = `<div class="state-empty"><p>No games found.</p></div>`;
+    browseState.loading = false;
+    return;
+  }
+
+  games.forEach((g, i) => {
+    const div = document.createElement('div');
+    div.className = 'top-game-card';
+    div.style.animationDelay = `${i * 0.02}s`;
+    div.onclick = () => goToGame(g.game_id);
+    const awayWin = (g.away_score ?? 0) > (g.home_score ?? 0);
+
+    const ratingPart = g.avg_stars
+      ? `<div class="tgc-rating">
+           ${starsHTML(Math.round(g.bayesian_rating), 'sm')}
+           <div class="tgc-stars-val">${g.avg_stars.toFixed(2)}</div>
+         </div>`
+      : `<div class="tgc-rating"><span style="font-size:0.72rem;color:var(--ink-3)">unrated</span></div>`;
+
+    div.innerHTML = `
+      <div class="tgc-body">
+        <div class="tgc-logos">
+          ${logoImg(g.away_team_abbr, 20)}
+          <span class="tgc-logo-score ${awayWin ? '' : 'loser'}">${g.away_score ?? '?'}</span>
+          <span class="tgc-vs">@</span>
+          <span class="tgc-logo-score ${awayWin ? 'loser' : ''}">${g.home_score ?? '?'}</span>
+          ${logoImg(g.home_team_abbr, 20)}
+        </div>
+        <div class="tgc-meta">
+          <span class="tgc-date">${fmtDate(g.game_date)}</span>
+          <span class="tgc-reviews">${g.review_count} review${g.review_count !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+      ${ratingPart}
+    `;
+    feed.appendChild(div);
+  });
+
+  browseState.offset += games.length;
+  browseState.loading = false;
+  if (games.length < limit) browseState.exhausted = true;
+  document.getElementById('btnMoreBrowse').style.display = browseState.exhausted ? 'none' : 'block';
+}
+
+document.getElementById('btnMoreBrowse').addEventListener('click', () => loadBrowse(true));
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIDEBAR TOP 5
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function loadSidebarTop() {
+  const el = document.getElementById('sidebarTopGames');
+  const data = await api('/api/reviews/top-games?limit=5');
+  const games = data.games || [];
+  if (games.length === 0) {
+    el.innerHTML = '<p style="font-size:0.78rem;color:var(--ink-3)">No ratings yet.</p>';
+    return;
+  }
+  el.innerHTML = games.map((g, i) => `
+    <div class="top-game-card" onclick="goToGame('${g.game_id}')" style="padding:8px 0">
+      <div class="tgc-rank">${i + 1}</div>
+      <div class="tgc-body">
+        <div class="tgc-logos">
+          ${logoImg(g.away_team_abbr, 18)}
+          <span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-3)">@</span>
+          ${logoImg(g.home_team_abbr, 18)}
+          <span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-2)">${g.away_score}–${g.home_score}</span>
+        </div>
+        <div class="tgc-meta"><span class="tgc-date">${fmtShortDate(g.game_date)}</span></div>
+      </div>
+      <div class="tgc-rating">
+        <div class="tgc-stars-val">${(g.bayesian_rating / 2).toFixed(1)}★</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NAVIGATION — clicking a game goes to game.html with Reviews tab
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function goToGame(gameId) {
+  window.location.href = `/game?gameId=${gameId}&tab=reviews`;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// INIT
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+(async () => {
+  await loadAuth();
+  loadRecent();
+  loadSidebarTop();
+})();
+</script>
+</body>
+</html>

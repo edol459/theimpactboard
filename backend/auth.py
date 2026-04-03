@@ -89,7 +89,10 @@ def google_login():
     # Store a 'next' URL so we can redirect back after login
     next_url = request.args.get("next", "/")
     session["oauth_next"] = next_url
-    redirect_uri = url_for("auth.google_callback", _external=True)
+    # Force http in development to prevent scheme mismatch with Google's
+    # registered redirect URI. In production on Railway (https), remove this.
+    redirect_uri = url_for("auth.google_callback", _external=True,
+                           _scheme="http" if os.getenv("FLASK_ENV") != "production" else "https")
     return oauth.google.authorize_redirect(redirect_uri)
 
 

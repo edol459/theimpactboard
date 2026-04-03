@@ -14,7 +14,7 @@
   --ink2:      #2a2a2e;
   --ink3:      #6b6b78;
   --ink4:      #a8a8b3;
-  --paper:     #f7f5f0;
+  --paper:     #F5F0E8;
   --paper2:    #eeecea;
   --paper3:    #e5e2dc;
   --rule:      #d8d5cf;
@@ -109,6 +109,36 @@ nav {
 }
 .btn-load:hover:not(:disabled) { background: var(--orange); }
 .btn-load:disabled { background: var(--rule); color: var(--ink4); cursor: not-allowed; }
+
+.lev-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.lev-toggle-label {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink3); line-height: 1.3;
+}
+.lev-toggle-label small {
+  display: block; font-size: 9px; color: var(--ink4);
+  letter-spacing: 0.03em; text-transform: none;
+}
+/* Toggle pill */
+.toggle-pill {
+  position: relative; width: 34px; height: 18px; flex-shrink: 0;
+}
+.toggle-pill input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 9px;
+  background: var(--rule); cursor: pointer; transition: background 0.2s;
+}
+.toggle-pill input:checked ~ .toggle-track { background: var(--orange); }
+.toggle-track::after {
+  content: ''; position: absolute;
+  width: 12px; height: 12px; border-radius: 50%; background: #fff;
+  top: 3px; left: 3px; transition: transform 0.2s;
+}
+.toggle-pill input:checked ~ .toggle-track::after { transform: translateX(16px); }
 
 .players-scroll { flex: 1; overflow-y: auto; padding: 12px 10px; }
 .players-scroll-label {
@@ -275,6 +305,60 @@ table.wt tbody td.td-lineup { text-align: left; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink4); }
+
+/* ── Nav auth ─────────────────────────────────────────────── */
+.nav-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.nav-auth-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--rule);
+}
+.nav-auth-name {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.03em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-signin-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.15s;
+}
+.nav-signout-btn:hover { color: var(--ink); }
+
 </style>
 </head>
 <body>
@@ -285,6 +369,9 @@ table.wt tbody td.td-lineup { text-align: left; }
     <a class="nav-tab" href="/stats">Stats</a>
     <a class="nav-tab" href="/builder">Builder</a>
     <a class="nav-tab active" href="/onoff">On/Off</a>
+    <a class="nav-tab" href="/reviews.html">basketboxd</a>
+  </div>
+  <div class="nav-auth" id="nav-auth-slot">    <a class="nav-tab" href="/reviews">BasketBoxd</a>
   </div>
 </nav>
 
@@ -302,6 +389,16 @@ table.wt tbody td.td-lineup { text-align: left; }
         <option value="2024-25">2024–25</option>
         <option value="2023-24">2023–24</option>
       </select>
+      <div class="lev-toggle-row">
+        <div class="lev-toggle-label">
+          Leverage filter
+          <small>removes 4th-qtr blowout stints</small>
+        </div>
+        <label class="toggle-pill">
+          <input type="checkbox" id="lev-toggle" checked>
+          <span class="toggle-track"></span>
+        </label>
+      </div>
       <button class="btn-load" id="btn-load" disabled>Load roster →</button>
     </div>
     <div class="players-scroll" id="players-scroll">
@@ -345,6 +442,7 @@ const TEAMS = [
 let roster     = [];
 let allLineups = [];
 let selected   = new Set();
+let levFilter  = true;   // default ON
 
 const teamSel       = document.getElementById('team-select');
 const seasonSel     = document.getElementById('season-select');
@@ -362,6 +460,12 @@ TEAMS.forEach(t => {
   teamSel.appendChild(o);
 });
 teamSel.addEventListener('change', () => { btnLoad.disabled = !teamSel.value; });
+
+const levToggle = document.getElementById('lev-toggle');
+levToggle.addEventListener('change', () => {
+  levFilter = levToggle.checked;
+  if (selected.size) buildWOWY();
+});
 
 // ── Load ───────────────────────────────────────────────────────
 btnLoad.addEventListener('click', async () => {
@@ -464,6 +568,12 @@ function buildWOWY() {
   const selArr = [...selected];
   const subsets = allSubsets(selArr);
 
+  // When leverage filter is on, use _lev columns; fall back to base if lev data missing
+  const minKey  = levFilter ? 'min_lev'  : 'min';
+  const ortgKey = levFilter ? 'ortg_lev' : 'ortg';
+  const drtgKey = levFilter ? 'drtg_lev' : 'drtg';
+  const netKey  = levFilter ? 'net_lev'  : 'net';
+
   const rows = subsets.map(onSet => {
     const offSet = new Set(selArr.filter(p => !onSet.has(p)));
 
@@ -475,20 +585,27 @@ function buildWOWY() {
 
     if (!matching.length) return null;
 
-    const totalMin = matching.reduce((s, l) => s + (l.min || 0), 0);
+    // When lev filter is on, exclude lineups with no leverage minutes
+    const usable = levFilter
+      ? matching.filter(l => l[minKey] != null && l[minKey] > 0)
+      : matching;
+
+    if (!usable.length) return null;
+
+    const totalMin = usable.reduce((s, l) => s + (l[minKey] || 0), 0);
     const wavg = key => {
-      const coveredMin = matching.reduce((s, l) => l[key] != null ? s + (l.min || 0) : s, 0);
+      const coveredMin = usable.reduce((s, l) => l[key] != null ? s + (l[minKey] || 0) : s, 0);
       if (!coveredMin) return null;
-      const val = matching.reduce((s, l) => l[key] != null ? s + l[key] * (l.min || 0) : s, 0);
+      const val = usable.reduce((s, l) => l[key] != null ? s + l[key] * (l[minKey] || 0) : s, 0);
       return Math.round((val / coveredMin) * 10) / 10;
     };
 
     return {
       onSet,
       min:  Math.round(totalMin),
-      ortg: wavg('ortg'),
-      drtg: wavg('drtg'),
-      net:  wavg('net'),
+      ortg: wavg(ortgKey),
+      drtg: wavg(drtgKey),
+      net:  wavg(netKey),
     };
   }).filter(Boolean);
 
@@ -533,7 +650,7 @@ function renderResults(rows) {
   main.innerHTML = `
     <div class="results-head">
       <div class="results-title">On/Off Combinations</div>
-      <div class="results-meta">Min-weighted · ${season} · Reg Season · ${rows.length} combination${rows.length!==1?'s':''}</div>
+      <div class="results-meta">Min-weighted · ${season} · Reg Season · ${levFilter ? 'Leverage filter on' : 'All minutes'} · ${rows.length} combination${rows.length!==1?'s':''}</div>
     </div>
     <div class="sel-strip">
       <span class="sel-strip-label">Selected</span>
@@ -613,6 +730,34 @@ function lastName(full) {
 function initials(full) {
   return (full||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 }
+</script>
+<script>
+// ── Nav auth (shared across all pages) ───────────────────────
+async function initNavAuth() {
+  const slot = document.getElementById('nav-auth-slot');
+  if (!slot) return;
+  try {
+    const res = await fetch('/auth/me');
+    const data = await res.json();
+    const user = data.user;
+    if (user) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${user.avatar_url ? `<img class="nav-auth-avatar" src="${user.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="navSignOut()">Sign out</button>
+      `;
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+    }
+  } catch {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
+  }
+}
+async function navSignOut() {
+  await fetch('/auth/logout', { method: 'POST' });
+  window.location.reload();
+}
+initNavAuth();
+
 </script>
 </body>
 </html>

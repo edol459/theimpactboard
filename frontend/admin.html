@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — NothingButNet</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink:    #0c0c0d;
+  --ink2:   #2a2a2e;
+  --ink3:   #6b6b78;
+  --ink4:   #a8a8b3;
+  --paper:  #F5F0E8;
+  --paper2: #eeecea;
+  --paper3: #e5e2dc;
+  --rule:   #d8d5cf;
+  --orange: #e8530a;
+  --red:    #c0392b;
+  --green:  #00C030;
+  --ff-serif: 'DM Serif Display', Georgia, serif;
+  --ff-sans:  'Instrument Sans', sans-serif;
+  --ff-mono:  'DM Mono', monospace;
+  --nav-h: 56px;
+}
+body {
+  font-family: var(--ff-sans);
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center;
+  padding: 0 24px; gap: 20px; z-index: 100;
+}
+.nav-wordmark {
+  font-family: var(--ff-serif); font-size: 20px;
+  color: var(--ink); letter-spacing: -0.01em;
+  text-decoration: none; flex-shrink: 0;
+}
+.nav-wordmark em { font-style: italic; color: var(--orange); }
+.nav-badge {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--red); color: #fff;
+  padding: 2px 8px; border-radius: 3px;
+}
+.nav-back {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink3); text-decoration: none;
+  margin-left: auto;
+  transition: color 0.15s;
+}
+.nav-back:hover { color: var(--ink); }
+
+.page {
+  padding-top: calc(var(--nav-h) + 32px);
+  max-width: 1000px;
+  margin: 0 auto;
+  padding-left: 24px; padding-right: 24px;
+  padding-bottom: 80px;
+}
+
+/* ── Header ── */
+.page-header { margin-bottom: 28px; }
+.page-title {
+  font-family: var(--ff-serif);
+  font-size: 2rem; letter-spacing: -0.02em;
+  color: var(--ink); margin-bottom: 4px;
+}
+.page-sub { font-size: 13px; color: var(--ink3); }
+
+/* ── Stats row ── */
+.stats-row {
+  display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap;
+}
+.stat-chip {
+  background: #fff; border: 1px solid var(--rule);
+  border-radius: 6px; padding: 12px 18px;
+  display: flex; flex-direction: column; gap: 2px;
+  min-width: 120px;
+}
+.stat-chip-val {
+  font-family: var(--ff-serif); font-size: 1.6rem;
+  color: var(--ink); line-height: 1;
+}
+.stat-chip-lbl {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink3);
+}
+
+/* ── Search ── */
+.search-row {
+  display: flex; gap: 10px; margin-bottom: 20px; align-items: center;
+}
+.search-input {
+  flex: 1; font-family: var(--ff-sans); font-size: 13px;
+  padding: 8px 12px; background: #fff;
+  border: 1px solid var(--rule); border-radius: 4px;
+  outline: none; color: var(--ink);
+  transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--orange); }
+.search-input::placeholder { color: var(--ink4); }
+.btn-search {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 8px 16px; background: var(--orange); color: #fff;
+  border: none; border-radius: 4px; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-search:hover { opacity: 0.85; }
+
+/* ── Table ── */
+.review-table { width: 100%; border-collapse: collapse; }
+.review-table th {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink3); text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+.review-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--paper3);
+  vertical-align: top;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.review-table tr:hover td { background: #fff; }
+
+.td-game {
+  font-family: var(--ff-mono); font-size: 11px;
+  white-space: nowrap;
+}
+.td-user { font-weight: 500; color: var(--ink); }
+.td-email { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); }
+.td-stars { color: var(--green); font-size: 12px; white-space: nowrap; }
+.td-text {
+  max-width: 320px; font-size: 12px; color: var(--ink2);
+  line-height: 1.45;
+}
+.td-text.empty { color: var(--ink4); font-style: italic; }
+.td-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); white-space: nowrap; }
+.btn-delete {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 4px 10px; background: none;
+  border: 1px solid #e0b0b0; border-radius: 3px;
+  color: var(--red); cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.btn-delete:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+.table-state {
+  font-family: var(--ff-mono); font-size: 12px;
+  color: var(--ink3); padding: 32px 0; text-align: center;
+}
+.btn-more {
+  display: block; width: 100%; margin-top: 16px;
+  padding: 10px; font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink3); background: none;
+  border: 1px solid var(--rule); border-radius: 4px;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.btn-more:hover { border-color: var(--orange); color: var(--orange); }
+
+/* ── Access denied ── */
+.denied {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 50vh; gap: 12px;
+  text-align: center;
+}
+.denied h2 { font-family: var(--ff-serif); font-size: 1.8rem; }
+.denied p { font-size: 14px; color: var(--ink3); }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--ink); color: #fff;
+  font-size: 13px; padding: 9px 16px;
+  border-radius: 4px; z-index: 999;
+  font-family: var(--ff-sans);
+  animation: toastIn 0.2s ease;
+}
+@keyframes toastIn {
+  from { opacity:0; transform:translateY(6px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-wordmark" href="/"><em>n</em>othingbutnet</a>
+  <span class="nav-badge">Admin</span>
+  <a class="nav-back" href="/">← Back to site</a>
+</nav>
+
+<div class="page" id="page">
+  <div class="table-state">Checking access…</div>
+</div>
+
+<script>
+const API = '';
+
+// ── Utils ─────────────────────────────────────────────────────
+function fmtDate(str) {
+  if (!str) return '';
+  const d = new Date(str);
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+    + ' ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
+function starsText(rating) {
+  const full = Math.round(rating / 2);
+  return '★'.repeat(full) + '☆'.repeat(5 - full) + ` (${(rating/2).toFixed(1)})`;
+}
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+// ── State ─────────────────────────────────────────────────────
+let offset = 0;
+let total  = 0;
+let query  = '';
+let loading = false;
+
+// ── Render admin UI ───────────────────────────────────────────
+function renderPage(stats) {
+  document.getElementById('page').innerHTML = `
+    <div class="page-header">
+      <h1 class="page-title">Review Moderation</h1>
+      <p class="page-sub">Delete reviews that violate community guidelines. Actions are immediate and irreversible.</p>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-chip">
+        <div class="stat-chip-val" id="stat-total">—</div>
+        <div class="stat-chip-lbl">Total Reviews</div>
+      </div>
+      <div class="stat-chip">
+        <div class="stat-chip-val" id="stat-shown">—</div>
+        <div class="stat-chip-lbl">Shown</div>
+      </div>
+    </div>
+
+    <div class="search-row">
+      <input class="search-input" id="search-input" type="text"
+        placeholder="Search by reviewer name or review text…"
+        value="${query}">
+      <button class="btn-search" onclick="doSearch()">Search</button>
+    </div>
+
+    <table class="review-table">
+      <thead>
+        <tr>
+          <th>Game</th>
+          <th>Reviewer</th>
+          <th>Rating</th>
+          <th>Review</th>
+          <th>Date</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="review-tbody">
+        <tr><td colspan="6"><div class="table-state">Loading…</div></td></tr>
+      </tbody>
+    </table>
+    <button class="btn-more" id="btn-more" style="display:none" onclick="loadMore()">Load more</button>
+  `;
+
+  document.getElementById('search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch();
+  });
+
+  loadReviews(true);
+}
+
+async function loadReviews(reset = false) {
+  if (loading) return;
+  loading = true;
+  if (reset) { offset = 0; }
+
+  const params = new URLSearchParams({ limit: 50, offset, ...(query ? { q: query } : {}) });
+  try {
+    const res  = await fetch(`/api/admin/reviews?${params}`);
+    const data = await res.json();
+    total = data.total || 0;
+    const reviews = data.reviews || [];
+
+    document.getElementById('stat-total').textContent = total;
+
+    const tbody = document.getElementById('review-tbody');
+    if (reset) tbody.innerHTML = '';
+
+    if (reviews.length === 0 && reset) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="table-state">No reviews found.</div></td></tr>`;
+    } else {
+      reviews.forEach(r => tbody.insertAdjacentHTML('beforeend', reviewRow(r)));
+    }
+
+    offset += reviews.length;
+    document.getElementById('stat-shown').textContent = offset;
+    document.getElementById('btn-more').style.display = data.has_more ? 'block' : 'none';
+  } catch(e) {
+    toast('Error loading reviews: ' + e.message);
+  }
+  loading = false;
+}
+
+function reviewRow(r) {
+  const text = r.review_text
+    ? `<span>${r.review_text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`
+    : `<span class="empty">No written review</span>`;
+  return `<tr id="row-${r.id}">
+    <td class="td-game">
+      <div>${r.matchup}</div>
+      <div style="color:var(--ink3)">${r.away_score}–${r.home_score}</div>
+      <div style="color:var(--ink4)">${r.game_date}</div>
+    </td>
+    <td>
+      <div class="td-user">${r.display_name}</div>
+      <div class="td-email">${r.email}</div>
+    </td>
+    <td class="td-stars">${starsText(r.rating)}</td>
+    <td class="td-text">${text}</td>
+    <td class="td-date">${fmtDate(r.created_at)}</td>
+    <td>
+      <button class="btn-delete" onclick="deleteReview(${r.id}, '${r.display_name.replace(/'/g,"\\'")}')">Delete</button>
+    </td>
+  </tr>`;
+}
+
+function doSearch() {
+  query = document.getElementById('search-input').value.trim();
+  loadReviews(true);
+}
+
+function loadMore() {
+  loadReviews(false);
+}
+
+async function deleteReview(id, name) {
+  if (!confirm(`Delete review #${id} by ${name}?\n\nThis cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/admin/reviews/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const row = document.getElementById(`row-${id}`);
+    if (row) {
+      row.style.opacity = '0.3';
+      row.style.transition = 'opacity 0.3s';
+      setTimeout(() => row.remove(), 300);
+    }
+    total--;
+    offset--;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-shown').textContent = offset;
+    toast(`Review deleted.`);
+  } catch(e) {
+    toast('Error: ' + e.message);
+  }
+}
+
+// ── Init: check admin access ──────────────────────────────────
+(async () => {
+  try {
+    const res  = await fetch('/api/admin/check');
+    const data = await res.json();
+    if (!data.is_admin) {
+      document.getElementById('page').innerHTML = `
+        <div class="denied">
+          <h2>Access Denied</h2>
+          <p>You don't have admin privileges.<br>Sign in with an admin account to continue.</p>
+          <a href="/auth/google/login?next=/admin" style="margin-top:12px;font-family:var(--ff-mono);font-size:11px;color:var(--orange)">Sign in →</a>
+        </div>`;
+      return;
+    }
+    renderPage();
+  } catch(e) {
+    document.getElementById('page').innerHTML = `<div class="denied"><h2>Error</h2><p>${e.message}</p></div>`;
+  }
+})();
+</script>
+</body>
+</html>

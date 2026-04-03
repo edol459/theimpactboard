@@ -12,7 +12,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --ink:#0c0c0d;--ink2:#2a2a2e;--ink3:#6b6b78;--ink4:#a8a8b3;
-  --paper:#f7f5f0;--paper2:#eeecea;--paper3:#e5e2dc;--rule:#d8d5cf;
+  --paper:     #F5F0E8;--paper2:#eeecea;--paper3:#e5e2dc;--rule:#d8d5cf;
   --orange:#e8530a;--orange-lt:#fff0ea;--green:#1a7a4a;--red:#c0392b;
   --ff-serif:'DM Serif Display',Georgia,serif;
   --ff-sans:'Instrument Sans',system-ui,sans-serif;
@@ -97,12 +97,171 @@ table.box-table tfoot td:first-child{text-align:left;}
 .pbp-desc .period-marker{font-family:var(--ff-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink4);}
 .pbp-team-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
 
+
+/* ── Reviews tab ─────────────────────────────────────────────── */
+.reviews-panel { padding: 0 24px 48px; }
+.reviews-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0 16px; border-bottom: 1px solid var(--rule);
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+}
+.reviews-agg {
+  display: flex; align-items: center; gap: 10px;
+}
+.reviews-agg-val {
+  font-family: var(--ff-serif); font-size: 2rem;
+  color: #00C030; line-height: 1;
+}
+.reviews-agg-stars { font-size: 16px; color: #00C030; letter-spacing: -1px; }
+.reviews-agg-count { font-family: var(--ff-mono); font-size: 11px; color: var(--ink3); }
+.reviews-agg-empty { font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+
+/* Write section */
+.reviews-write {
+  background: var(--paper2); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 18px 20px; margin-bottom: 24px;
+}
+.reviews-write-title {
+  font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink3); margin-bottom: 12px;
+}
+.star-picker-inline {
+  display: flex; gap: 4px; margin-bottom: 12px;
+  user-select: none; align-items: center;
+}
+.star-picker-inline svg {
+  width: 28px; height: 28px; cursor: pointer; flex-shrink: 0;
+}
+.review-write-textarea {
+  width: 100%; min-height: 80px;
+  padding: 10px 12px; resize: vertical;
+  font-family: var(--ff-sans); font-size: 13px;
+  line-height: 1.5; color: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: 4px; outline: none;
+  transition: border-color 0.15s; margin-bottom: 10px;
+  display: block;
+}
+.review-write-textarea:focus { border-color: var(--orange); }
+.review-write-textarea::placeholder { color: var(--ink4); }
+.reviews-write-actions { display: flex; align-items: center; gap: 10px; }
+.btn-review-submit {
+  font-family: var(--ff-sans); font-size: 13px; font-weight: 600;
+  padding: 8px 18px; background: var(--orange); color: #fff;
+  border: none; border-radius: 4px; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-review-submit:hover { opacity: 0.85; }
+.btn-review-submit:disabled { opacity: 0.4; cursor: default; }
+.btn-review-delete {
+  font-family: var(--ff-sans); font-size: 12px; color: var(--ink3);
+  background: none; border: none; cursor: pointer; margin-left: auto;
+}
+.btn-review-delete:hover { color: var(--red); }
+.review-signin-prompt { font-size: 13px; color: var(--ink3); line-height: 1.5; }
+.review-signin-prompt a { color: var(--orange); font-weight: 600; text-decoration: none; }
+
+/* Review list */
+.review-item {
+  display: grid; grid-template-columns: 36px 1fr;
+  gap: 12px; padding: 16px 0;
+  border-bottom: 1px solid var(--paper3);
+  animation: fadeUp 0.2s ease both;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(4px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.review-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover; border: 1.5px solid var(--rule);
+  background: var(--paper3); display: flex;
+  align-items: center; justify-content: center;
+  font-size: 14px; color: var(--ink3); flex-shrink: 0;
+  overflow: hidden;
+}
+.review-avatar img { width: 100%; height: 100%; border-radius: 50%; }
+.review-body { min-width: 0; }
+.review-top {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 5px; flex-wrap: wrap;
+}
+.review-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.review-stars { font-size: 12px; color: #00C030; letter-spacing: -1px; }
+.review-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); margin-left: auto; }
+.review-text { font-size: 13px; line-height: 1.55; color: var(--ink2); }
+.reviews-empty { padding: 32px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+.btn-load-more {
+  display: block; width: 100%; margin-top: 16px;
+  padding: 10px; font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink3); background: none;
+  border: 1px solid var(--rule); border-radius: 4px;
+  cursor: pointer; transition: border-color 0.15s, color 0.15s;
+}
+.btn-load-more:hover { border-color: var(--orange); color: var(--orange); }
+.reviews-loading { padding: 32px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+
 /* ── Loading / Error ─────────────────────────────────────────── */
 .loading-state,.error-state{display:flex;align-items:center;justify-content:center;padding:60px 24px;color:var(--ink4);font-family:var(--ff-mono);font-size:12px;gap:8px;}
 .loading-spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--rule);border-top-color:var(--orange);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .live-dot{width:7px;height:7px;border-radius:50%;background:#e74c3c;animation:pulse 1.4s ease-in-out infinite;flex-shrink:0;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+
+/* ── Nav auth ─────────────────────────────────────────────── */
+.nav-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.nav-auth-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--rule);
+}
+.nav-auth-name {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.03em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-signin-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.15s;
+}
+.nav-signout-btn:hover { color: var(--ink); }
+
 </style>
 </head>
 <body>
@@ -112,7 +271,9 @@ table.box-table tfoot td:first-child{text-align:left;}
     <a class="nav-tab" href="/stats.html">Stats</a>
     <a class="nav-tab" href="/builder.html">Builder</a>
     <a class="nav-tab" href="/onoff">On/Off</a>
+    <a class="nav-tab" href="/reviews">BasketBoxd</a>
   </div>
+  <div class="nav-auth" id="nav-auth-slot"></div>
 </nav>
 
 <div class="page">
@@ -193,6 +354,8 @@ function renderScoreboard(box) {
   // Update page title
   if (!isUpcoming) document.title = `${awayAbbr} ${awayScore} – ${homeScore} ${homeAbbr} — NothingButNet`;
 
+  const reviewRow = ''; // Reviews moved to tab
+
   el.innerHTML = `
     <div class="game-sb">
       <div class="sb-team away ${!isUpcoming && !isLive && !awayWon ? 'loser' : ''}">
@@ -212,7 +375,10 @@ function renderScoreboard(box) {
         </div>
         ${teamLogo(homeAbbr)}
       </div>
-    </div>`;
+    </div>
+  `;
+
+  if (!isLive && !isUpcoming) loadAggRating();
 }
 
 function teamLogo(abbr) {
@@ -222,12 +388,19 @@ function teamLogo(abbr) {
 
 function renderTabs(box) {
   const container = document.getElementById('game-tabs');
+  const isFinal = box && box.gameStatus === 3;
   const tabs = [
     {id:'pbp', label:'Play-by-Play'},
     {id:'box', label:'Box Score'},
+    ...(isFinal ? [{id:'reviews', label:'Reviews'}] : []),
   ];
 
-  ACTIVE_TAB = 'pbp';
+  // Set default tab from URL param only on first render; preserve user's selection on polls
+  if (!ACTIVE_TAB || !tabs.find(t => t.id === ACTIVE_TAB)) {
+    const urlTab = new URLSearchParams(window.location.search).get('tab');
+    ACTIVE_TAB = (urlTab && tabs.find(t => t.id === urlTab)) ? urlTab : 'pbp';
+  }
+
   container.style.display = '';
   container.innerHTML = tabs.map(t =>
     `<button class="game-tab ${t.id===ACTIVE_TAB ? 'active' : ''}" data-tab="${t.id}">${t.label}</button>`
@@ -237,15 +410,22 @@ function renderTabs(box) {
       ACTIVE_TAB = btn.dataset.tab;
       container.querySelectorAll('.game-tab').forEach(b => b.classList.toggle('active', b===btn));
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id===`panel-${ACTIVE_TAB}`));
+      if (ACTIVE_TAB === 'reviews' && !document.getElementById('panel-reviews').dataset.loaded) {
+        loadReviewsPanel();
+      }
     });
   });
 }
 
 function renderPanels(box, pbp) {
   const el = document.getElementById('game-panels');
+  const isFinal = box && box.gameStatus === 3;
   el.innerHTML = `
     <div class="tab-panel ${ACTIVE_TAB==='pbp'?'active':''}" id="panel-pbp">${buildPbp(pbp, box)}</div>
-    <div class="tab-panel ${ACTIVE_TAB==='box'?'active':''}" id="panel-box">${buildBox(box)}</div>`;
+    <div class="tab-panel ${ACTIVE_TAB==='box'?'active':''}" id="panel-box">${buildBox(box)}</div>
+    ${isFinal ? `<div class="tab-panel ${ACTIVE_TAB==='reviews'?'active':''}" id="panel-reviews"><div class="reviews-panel"><div class="reviews-loading">Loading reviews…</div></div></div>` : ''}
+  `;
+  if (isFinal && ACTIVE_TAB === 'reviews') loadReviewsPanel();
 
   // Box score team toggle
   el.querySelectorAll('.box-team-btn').forEach(btn => {
@@ -434,6 +614,317 @@ const TEAM_IDS = {
   SAC:1610612758,SAS:1610612759,TOR:1610612761,UTA:1610612762,WAS:1610612764,
 };
 function nbaTeamId(abbr) { return TEAM_IDS[abbr] || 0; }
+</script>
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// REVIEWS TAB
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const STAR_ON  = '#00C030';
+const STAR_OFF = '#d8d5cf';
+let _reviewUser    = null;
+let _pickedRating  = 0;
+let _reviewOffset  = 0;
+let _reviewTotal   = 0;
+
+function fmtShortDate(str) {
+  if (!str) return '';
+  const d = new Date(str);
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+
+function starsText(r10, size = 13) {
+  const n = r10 / 2;
+  let s = '';
+  for (let i = 1; i <= 5; i++) {
+    const f = Math.min(Math.max(n - (i-1), 0), 1);
+    s += f >= 0.5 ? '★' : '☆';
+  }
+  return `<span style="color:${STAR_ON};font-size:${size}px;letter-spacing:-1px">${s}</span>`;
+}
+
+function avatarEl(name, url) {
+  const inner = url
+    ? `<img src="${url}" alt="${name}" style="width:36px;height:36px;border-radius:50%;object-fit:cover">`
+    : name.charAt(0).toUpperCase();
+  return `<div class="review-avatar">${inner}</div>`;
+}
+
+// ── Aggregate rating display in scoreboard header ─────────
+async function loadAggRating() { /* no-op: shown in reviews tab */ }
+
+// ── Load the reviews panel ────────────────────────────────
+async function loadReviewsPanel(append = false) {
+  const panel = document.getElementById('panel-reviews');
+  if (!panel) return;
+  const container = panel.querySelector('.reviews-panel') || panel;
+
+  if (!append) {
+    _reviewOffset = 0;
+    container.innerHTML = '<div class="reviews-loading">Loading…</div>';
+    panel.dataset.loaded = '1';
+  }
+
+  const [gameRes, revRes] = await Promise.all([
+    fetch(`/api/games/${GAME_ID}`),
+    fetch(`/api/games/${GAME_ID}/reviews?limit=15&offset=${_reviewOffset}`),
+  ]);
+
+  const gameData = gameRes.ok ? await gameRes.json() : {};
+  const revData  = revRes.ok  ? await revRes.json()  : {};
+  const g        = gameData.game || {};
+  const reviews  = revData.reviews || [];
+  _reviewTotal   = revData.total || 0;
+  _reviewOffset  += reviews.length;
+
+  if (!append) {
+    container.innerHTML = renderReviewsContent(g, reviews, revData.has_more);
+    buildStarPicker();
+    wireWriteSection();
+  } else {
+    // Append new reviews before load-more button
+    const list = container.querySelector('.review-list');
+    const btn  = container.querySelector('.btn-load-more');
+    if (list) reviews.forEach(r => list.insertAdjacentHTML('beforeend', reviewItemHTML(r)));
+    if (btn) {
+      if (revData.has_more) {
+        btn.textContent = `Load more (${_reviewTotal - _reviewOffset} remaining)`;
+      } else {
+        btn.remove();
+      }
+    }
+  }
+}
+
+function renderReviewsContent(g, reviews, hasMore) {
+  // Aggregate
+  let aggHtml;
+  if (g.review_count > 0) {
+    const stars = (g.bayesian_rating / 2).toFixed(2);
+    aggHtml = `
+      <div class="reviews-agg">
+        <span class="reviews-agg-val">${stars}</span>
+        <span class="reviews-agg-stars">${'★'.repeat(Math.round(g.bayesian_rating/2))}</span>
+        <span class="reviews-agg-count">${g.review_count} review${g.review_count !== 1 ? 's' : ''}</span>
+      </div>`;
+  } else {
+    aggHtml = `<div class="reviews-agg"><span class="reviews-agg-empty">No ratings yet — be the first.</span></div>`;
+  }
+
+  // Write section
+  const writeHtml = _reviewUser
+    ? `<div class="reviews-write" id="reviews-write-section">
+        <div class="reviews-write-title" id="write-title">Rate This Game</div>
+        <div class="star-picker-inline" id="star-picker-inline"></div>
+        <textarea class="review-write-textarea" id="review-textarea" placeholder="Write a review (optional)…"></textarea>
+        <div class="reviews-write-actions">
+          <button class="btn-review-submit" id="btn-review-submit">Submit</button>
+        </div>
+      </div>`
+    : `<div class="reviews-write">
+        <p class="review-signin-prompt">
+          <a href="/auth/google/login?next=${encodeURIComponent(window.location.pathname + '?tab=reviews')}">Sign in</a> to rate and review this game.
+        </p>
+      </div>`;
+
+  // Review list
+  const listHtml = reviews.length === 0
+    ? '<div class="reviews-empty">No reviews yet.</div>'
+    : `<div class="review-list">${reviews.map(reviewItemHTML).join('')}</div>`;
+
+  const loadMoreHtml = hasMore
+    ? `<button class="btn-load-more">Load more (${_reviewTotal - _reviewOffset} remaining)</button>`
+    : '';
+
+  return `
+    <div class="reviews-header">
+      ${aggHtml}
+    </div>
+    ${writeHtml}
+    ${listHtml}
+    ${loadMoreHtml}
+  `;
+}
+
+function reviewItemHTML(r) {
+  return `<div class="review-item">
+    ${avatarEl(r.display_name, r.avatar_url)}
+    <div class="review-body">
+      <div class="review-top">
+        <span class="review-name">${r.display_name}</span>
+        ${starsText(r.rating)}
+        <span class="review-date">${fmtShortDate(r.created_at)}</span>
+      </div>
+      ${r.review_text ? `<p class="review-text">${r.review_text}</p>` : ''}
+    </div>
+  </div>`;
+}
+
+function wireWriteSection() {
+  const panel = document.getElementById('panel-reviews');
+  if (!panel) return;
+
+  // Load-more
+  const loadMoreBtn = panel.querySelector('.btn-load-more');
+  if (loadMoreBtn) loadMoreBtn.addEventListener('click', () => loadReviewsPanel(true));
+
+  if (!_reviewUser) return;
+
+  // Check if user already reviewed — pre-fill
+  fetch(`/api/games/${GAME_ID}/reviews?limit=100`)
+    .then(r => r.json())
+    .then(data => {
+      const existing = (data.reviews || []).find(r => r.user_id === _reviewUser.id);
+      if (existing) {
+        _pickedRating = existing.rating;
+        applyStarColors(_pickedRating);
+        const ta = document.getElementById('review-textarea');
+        const title = document.getElementById('write-title');
+        const btn = document.getElementById('btn-review-submit');
+        if (ta) ta.value = existing.review_text || '';
+        if (title) title.textContent = 'Your Review';
+        if (btn) {
+          btn.textContent = 'Update';
+          // Add delete button
+          const del = document.createElement('button');
+          del.className = 'btn-review-delete';
+          del.textContent = 'Delete review';
+          del.addEventListener('click', deleteReview);
+          btn.parentElement.appendChild(del);
+        }
+      }
+    }).catch(() => {});
+
+  // Submit
+  const submitBtn = document.getElementById('btn-review-submit');
+  if (submitBtn) submitBtn.addEventListener('click', submitReview);
+}
+
+// ── Star picker ───────────────────────────────────────────
+function buildStarPicker() {
+  const picker = document.getElementById('star-picker-inline');
+  if (!picker || picker.dataset.built) return;
+
+  // 5 SVG stars, each split into left/right halves via dataset
+  for (let star = 1; star <= 5; star++) {
+    const id  = 'gp' + star;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 20 20');
+    svg.dataset.star = star;
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="${id}" x1="0" x2="1" y1="0" y2="0">
+          <stop class="sl" offset="50%" stop-color="${STAR_OFF}"/>
+          <stop class="sr" offset="50%" stop-color="${STAR_OFF}"/>
+        </linearGradient>
+      </defs>
+      <polygon points="10,2 12.4,7.8 18.5,8.2 14,12.2 15.5,18 10,14.8 4.5,18 6,12.2 1.5,8.2 7.6,7.8"
+               fill="url(#${id})"/>`;
+    picker.appendChild(svg);
+  }
+
+  picker.addEventListener('mousemove', e => {
+    const svg = e.target.closest('svg[data-star]');
+    if (!svg) return;
+    const rect  = svg.getBoundingClientRect();
+    const isLeft = (e.clientX - rect.left) < rect.width / 2;
+    const star  = parseInt(svg.dataset.star);
+    _applyPickerColors(isLeft ? star * 2 - 1 : star * 2);
+  });
+  picker.addEventListener('mouseleave', () => _applyPickerColors(_pickedRating));
+  picker.addEventListener('click', e => {
+    const svg = e.target.closest('svg[data-star]');
+    if (!svg) return;
+    const rect  = svg.getBoundingClientRect();
+    const isLeft = (e.clientX - rect.left) < rect.width / 2;
+    const star  = parseInt(svg.dataset.star);
+    _pickedRating = isLeft ? star * 2 - 1 : star * 2;
+    _applyPickerColors(_pickedRating);
+  });
+  picker.dataset.built = '1';
+  _applyPickerColors(_pickedRating);
+}
+
+function _applyPickerColors(rating) {
+  const picker = document.getElementById('star-picker-inline');
+  if (!picker) return;
+  picker.querySelectorAll('svg[data-star]').forEach(svg => {
+    const star = parseInt(svg.dataset.star);
+    const lv = star * 2 - 1, rv = star * 2;
+    svg.querySelector('.sl').setAttribute('stop-color', rating >= lv ? STAR_ON : STAR_OFF);
+    svg.querySelector('.sr').setAttribute('stop-color', rating >= rv ? STAR_ON : STAR_OFF);
+  });
+}
+
+function applyStarColors(rating) { _applyPickerColors(rating); }
+
+// ── Submit / Delete ───────────────────────────────────────
+async function submitReview() {
+  if (!_pickedRating) { showReviewToast('Pick a star rating first.'); return; }
+  const btn  = document.getElementById('btn-review-submit');
+  const text = document.getElementById('review-textarea')?.value.trim() || null;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const r = await fetch(`/api/games/${GAME_ID}/reviews`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({rating: _pickedRating, review_text: text}),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    showReviewToast('Review saved!');
+    _reviewOffset = 0; _pickedRating = 0;
+    loadReviewsPanel(false);
+  } catch(e) {
+    showReviewToast('Error: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+}
+
+async function deleteReview() {
+  if (!confirm('Delete your review?')) return;
+  try {
+    const r = await fetch(`/api/games/${GAME_ID}/reviews`, {method:'DELETE'});
+    if (!r.ok) throw new Error((await r.json()).error);
+    showReviewToast('Review deleted.');
+    _reviewOffset = 0; _pickedRating = 0;
+    loadReviewsPanel(false);
+  } catch(e) { showReviewToast('Error: ' + e.message); }
+}
+
+function showReviewToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#0c0c0d;color:#fff;font-size:13px;padding:9px 16px;border-radius:4px;z-index:9999;font-family:var(--ff-sans);animation:fadeUp 0.2s ease';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+// ── Nav auth ──────────────────────────────────────────────
+async function initNavAuth() {
+  const slot = document.getElementById('nav-auth-slot');
+  if (!slot) return;
+  try {
+    const res  = await fetch('/auth/me');
+    const data = await res.json();
+    const user = data.user;
+    _reviewUser = user || null;
+    if (user) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${user.avatar_url ? `<img class="nav-auth-avatar" src="${user.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="navSignOut()">Sign out</button>
+      `;
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+    }
+  } catch {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
+  }
+}
+async function navSignOut() {
+  await fetch('/auth/logout', {method:'POST'});
+  window.location.reload();
+}
+initNavAuth();
 </script>
 </body>
 </html>

@@ -651,6 +651,13 @@ def build_player_rows(data, season, season_type):
         min_pg     = min_total / gp if gp > 0 else 0
         poss       = g(row, 'POSS')
 
+        # Tracking/hustle stats come from LeagueDashPtStats as season totals.
+        # Divide by GP here so the DB stores per-game averages, consistent
+        # with base stats (pts, ast, reb, etc.) which are already averaged.
+        def pg(key):
+            v = safe_float(row.get(key))
+            return round(v / gp, 3) if v is not None and gp > 0 else None
+
         # Bio data
         b = bio_dict.get(pid, {})
         pos_raw    = safe(b.get('PLAYER_HEIGHT_INCHES')) or None
@@ -732,100 +739,100 @@ def build_player_rows(data, season, season_type):
             'pct_pts_3pt':     safe_float(row.get('PCT_PTS_3PT')),
             'pct_pts_ft':      safe_float(row.get('PCT_PTS_FT')),
 
-            # Tracking: drives
-            'drives':        safe_float(row.get('DRIVES')),
-            'drive_fga':     safe_float(row.get('DRIVE_FGA')),
-            'drive_fgm':     safe_float(row.get('DRIVE_FGM')),
-            'drive_fg_pct':  safe_float(row.get('DRIVE_FG_PCT')),
-            'drive_pts':     safe_float(row.get('DRIVE_PTS')),
-            'drive_ast':     safe_float(row.get('DRIVE_AST')),
-            'drive_tov':     safe_float(row.get('DRIVE_TOV')),
-            'drive_pf':      safe_float(row.get('DRIVE_PF')),
-            'drive_passes':  safe_float(row.get('DRIVE_PASSES')),
+            # Tracking: drives (season totals ÷ GP → per-game)
+            'drives':        pg('DRIVES'),
+            'drive_fga':     pg('DRIVE_FGA'),
+            'drive_fgm':     pg('DRIVE_FGM'),
+            'drive_fg_pct':  safe_float(row.get('DRIVE_FG_PCT')),   # rate
+            'drive_pts':     pg('DRIVE_PTS'),
+            'drive_ast':     pg('DRIVE_AST'),
+            'drive_tov':     pg('DRIVE_TOV'),
+            'drive_pf':      pg('DRIVE_PF'),
+            'drive_passes':  pg('DRIVE_PASSES'),
 
             # Tracking: passing
-            'passes_made':     safe_float(row.get('PASSES_MADE')),
-            'passes_received': safe_float(row.get('PASSES_RECEIVED')),
-            'ast_pts_created': safe_float(row.get('AST_PTS_CREATED')),
-            'secondary_ast':   safe_float(row.get('SECONDARY_AST')),
-            'potential_ast':   safe_float(row.get('POTENTIAL_AST')),
-            'ft_ast':          safe_float(row.get('FT_AST')),
+            'passes_made':     pg('PASSES_MADE'),
+            'passes_received': pg('PASSES_RECEIVED'),
+            'ast_pts_created': pg('AST_PTS_CREATED'),
+            'secondary_ast':   pg('SECONDARY_AST'),
+            'potential_ast':   pg('POTENTIAL_AST'),
+            'ft_ast':          pg('FT_AST'),
 
             # Tracking: touches
-            'touches':            safe_float(row.get('TOUCHES')),
-            'time_of_poss':       safe_float(row.get('TIME_OF_POSS')),
-            'avg_sec_per_touch':  safe_float(row.get('AVG_SEC_PER_TOUCH')),
-            'avg_drib_per_touch': safe_float(row.get('AVG_DRIB_PER_TOUCH')),
-            'elbow_touches':      safe_float(row.get('ELBOW_TOUCHES')),
-            'post_touches':       safe_float(row.get('POST_TOUCHES')),
-            'paint_touches':      safe_float(row.get('PAINT_TOUCHES')),
+            'touches':            pg('TOUCHES'),
+            'time_of_poss':       pg('TIME_OF_POSS'),
+            'avg_sec_per_touch':  safe_float(row.get('AVG_SEC_PER_TOUCH')),  # rate
+            'avg_drib_per_touch': safe_float(row.get('AVG_DRIB_PER_TOUCH')), # rate
+            'elbow_touches':      pg('ELBOW_TOUCHES'),
+            'post_touches':       pg('POST_TOUCHES'),
+            'paint_touches':      pg('PAINT_TOUCHES'),
 
             # Tracking: pull-up
-            'pull_up_fga':     safe_float(row.get('PULL_UP_FGA')),
-            'pull_up_fgm':     safe_float(row.get('PULL_UP_FGM')),
-            'pull_up_fg_pct':  safe_float(row.get('PULL_UP_FG_PCT')),
-            'pull_up_fg3a':    safe_float(row.get('PULL_UP_FG3A')),
-            'pull_up_fg3_pct': safe_float(row.get('PULL_UP_FG3_PCT')),
-            'pull_up_efg_pct': safe_float(row.get('PULL_UP_EFG_PCT')),
+            'pull_up_fga':     pg('PULL_UP_FGA'),
+            'pull_up_fgm':     pg('PULL_UP_FGM'),
+            'pull_up_fg_pct':  safe_float(row.get('PULL_UP_FG_PCT')),   # rate
+            'pull_up_fg3a':    pg('PULL_UP_FG3A'),
+            'pull_up_fg3_pct': safe_float(row.get('PULL_UP_FG3_PCT')),  # rate
+            'pull_up_efg_pct': safe_float(row.get('PULL_UP_EFG_PCT')),  # rate
 
             # Tracking: catch & shoot
-            'cs_fga':     safe_float(row.get('CATCH_SHOOT_FGA')),
-            'cs_fgm':     safe_float(row.get('CATCH_SHOOT_FGM')),
-            'cs_fg_pct':  safe_float(row.get('CATCH_SHOOT_FG_PCT')),
-            'cs_fg3a':    safe_float(row.get('CATCH_SHOOT_FG3A')),
-            'cs_fg3_pct': safe_float(row.get('CATCH_SHOOT_FG3_PCT')),
-            'cs_efg_pct': safe_float(row.get('CATCH_SHOOT_EFG_PCT')),
+            'cs_fga':     pg('CATCH_SHOOT_FGA'),
+            'cs_fgm':     pg('CATCH_SHOOT_FGM'),
+            'cs_fg_pct':  safe_float(row.get('CATCH_SHOOT_FG_PCT')),   # rate
+            'cs_fg3a':    pg('CATCH_SHOOT_FG3A'),
+            'cs_fg3_pct': safe_float(row.get('CATCH_SHOOT_FG3_PCT')),  # rate
+            'cs_efg_pct': safe_float(row.get('CATCH_SHOOT_EFG_PCT')),  # rate
 
             # Tracking: post-up
-            'post_touch_fga':    safe_float(row.get('POST_TOUCH_FGA')),
-            'post_touch_fg_pct': safe_float(row.get('POST_TOUCH_FG_PCT')),
-            'post_touch_pts':    safe_float(row.get('POST_TOUCH_PTS')),
-            'post_touch_ast':    safe_float(row.get('POST_TOUCH_AST')),
-            'post_touch_tov':    safe_float(row.get('POST_TOUCH_TOV')),
+            'post_touch_fga':    pg('POST_TOUCH_FGA'),
+            'post_touch_fg_pct': safe_float(row.get('POST_TOUCH_FG_PCT')),  # rate
+            'post_touch_pts':    pg('POST_TOUCH_PTS'),
+            'post_touch_ast':    pg('POST_TOUCH_AST'),
+            'post_touch_tov':    pg('POST_TOUCH_TOV'),
 
-            # Tracking: speed
-            'dist_miles':     safe_float(row.get('DIST_MILES')),
-            'dist_miles_off': safe_float(row.get('DIST_MILES_OFF')),
-            'dist_miles_def': safe_float(row.get('DIST_MILES_DEF')),
-            'avg_speed':      safe_float(row.get('AVG_SPEED')),
-            'avg_speed_off':  safe_float(row.get('AVG_SPEED_OFF')),
-            'avg_speed_def':  safe_float(row.get('AVG_SPEED_DEF')),
+            # Tracking: speed (dist is per-game; avg_speed is a rate)
+            'dist_miles':     pg('DIST_MILES'),
+            'dist_miles_off': pg('DIST_MILES_OFF'),
+            'dist_miles_def': pg('DIST_MILES_DEF'),
+            'avg_speed':      safe_float(row.get('AVG_SPEED')),      # rate
+            'avg_speed_off':  safe_float(row.get('AVG_SPEED_OFF')),  # rate
+            'avg_speed_def':  safe_float(row.get('AVG_SPEED_DEF')),  # rate
 
             # Tracking: rim defense
-            'def_rim_fga':    safe_float(row.get('DEF_RIM_FGA')),
-            'def_rim_fgm':    safe_float(row.get('DEF_RIM_FGM')),
-            'def_rim_fg_pct': safe_float(row.get('DEF_RIM_FG_PCT')),
+            'def_rim_fga':    pg('DEF_RIM_FGA'),
+            'def_rim_fgm':    pg('DEF_RIM_FGM'),
+            'def_rim_fg_pct': safe_float(row.get('DEF_RIM_FG_PCT')),  # rate
 
             # Hustle
-            'contested_shots': safe_float(row.get('CONTESTED_SHOTS')),
-            'contested_2pt':   safe_float(row.get('CONTESTED_2PT_SHOTS')),
-            'contested_3pt':   safe_float(row.get('CONTESTED_3PT_SHOTS')),
-            'deflections':     safe_float(row.get('DEFLECTIONS')),
-            'charges_drawn':   safe_float(row.get('CHARGES_DRAWN')),
-            'screen_assists':  safe_float(row.get('SCREEN_ASSISTS')),
-            'screen_ast_pts':  safe_float(row.get('SCREEN_AST_PTS')),
-            'loose_balls':     safe_float(row.get('LOOSE_BALLS_RECOVERED')),
-            'box_outs':        safe_float(row.get('BOX_OUTS')),
-            'off_box_outs':    safe_float(row.get('OFF_BOXOUTS')),
-            'def_box_outs':    safe_float(row.get('DEF_BOXOUTS')),
+            'contested_shots': pg('CONTESTED_SHOTS'),
+            'contested_2pt':   pg('CONTESTED_2PT_SHOTS'),
+            'contested_3pt':   pg('CONTESTED_3PT_SHOTS'),
+            'deflections':     pg('DEFLECTIONS'),
+            'charges_drawn':   pg('CHARGES_DRAWN'),
+            'screen_assists':  pg('SCREEN_ASSISTS'),
+            'screen_ast_pts':  pg('SCREEN_AST_PTS'),
+            'loose_balls':     pg('LOOSE_BALLS_RECOVERED'),
+            'box_outs':        pg('BOX_OUTS'),
+            'off_box_outs':    pg('OFF_BOXOUTS'),
+            'def_box_outs':    pg('DEF_BOXOUTS'),
 
-            # Closest defender shooting
-            'cd_fga_vt':  safe_float(row.get('FGA_VT')),
-            'cd_fgm_vt':  safe_float(row.get('FGM_VT')),
-            'cd_fg3a_vt': safe_float(row.get('FG3A_VT')),
-            'cd_fg3m_vt': safe_float(row.get('FG3M_VT')),
-            'cd_fga_tg':  safe_float(row.get('FGA_TG')),
-            'cd_fgm_tg':  safe_float(row.get('FGM_TG')),
-            'cd_fg3a_tg': safe_float(row.get('FG3A_TG')),
-            'cd_fg3m_tg': safe_float(row.get('FG3M_TG')),
-            'cd_fga_op':  safe_float(row.get('FGA_OP')),
-            'cd_fgm_op':  safe_float(row.get('FGM_OP')),
-            'cd_fg3a_op': safe_float(row.get('FG3A_OP')),
-            'cd_fg3m_op': safe_float(row.get('FG3M_OP')),
-            'cd_fga_wo':  safe_float(row.get('FGA_WO')),
-            'cd_fgm_wo':  safe_float(row.get('FGM_WO')),
-            'cd_fg3a_wo': safe_float(row.get('FG3A_WO')),
-            'cd_fg3m_wo': safe_float(row.get('FG3M_WO')),
+            # Closest defender shooting (counts ÷ GP; percentages are rates)
+            'cd_fga_vt':  pg('FGA_VT'),
+            'cd_fgm_vt':  pg('FGM_VT'),
+            'cd_fg3a_vt': pg('FG3A_VT'),
+            'cd_fg3m_vt': pg('FG3M_VT'),
+            'cd_fga_tg':  pg('FGA_TG'),
+            'cd_fgm_tg':  pg('FGM_TG'),
+            'cd_fg3a_tg': pg('FG3A_TG'),
+            'cd_fg3m_tg': pg('FG3M_TG'),
+            'cd_fga_op':  pg('FGA_OP'),
+            'cd_fgm_op':  pg('FGM_OP'),
+            'cd_fg3a_op': pg('FG3A_OP'),
+            'cd_fg3m_op': pg('FG3M_OP'),
+            'cd_fga_wo':  pg('FGA_WO'),
+            'cd_fgm_wo':  pg('FGM_WO'),
+            'cd_fg3a_wo': pg('FG3A_WO'),
+            'cd_fg3m_wo': pg('FG3M_WO'),
 
             # Synergy
             'iso_ppp':          safe_float(row.get('ISO_PPP')),

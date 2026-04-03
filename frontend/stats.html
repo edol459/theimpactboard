@@ -17,7 +17,7 @@
   --ink2:      #2a2a2e;
   --ink3:      #6b6b78;
   --ink4:      #a8a8b3;
-  --paper:     #f7f5f0;
+  --paper:     #F5F0E8;
   --paper2:    #eeecea;
   --paper3:    #e5e2dc;
   --rule:      #d8d5cf;
@@ -1146,6 +1146,60 @@ tbody tr {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Nav auth ─────────────────────────────────────────────── */
+.nav-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.nav-auth-avatar {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--rule);
+}
+.nav-auth-name {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.03em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-signin-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  background: var(--orange);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  transition: color 0.15s;
+}
+.nav-signout-btn:hover { color: var(--ink); }
+
 </style>
 </head>
 <body>
@@ -1158,14 +1212,10 @@ tbody tr {
     <a class="nav-tab active" href="/stats.html">Stats</a>
     <a class="nav-tab" href="/builder.html">Builder</a>
     <a class="nav-tab" href="/onoff">On/Off</a>
+    <a class="nav-tab" href="/reviews.html">BasketBoxd</a>
   </div>
 
-  <div class="nav-right">
-    <select class="season-select" id="season-select">
-      <option value="2025-26" selected>2025–26</option>
-      <option value="2024-25">2024–25</option>
-      <option value="2023-24">2023–24</option>
-    </select>
+  <div class="nav-auth" id="nav-auth-slot">    <a class="nav-tab" href="/reviews">Game Reviews</a>
   </div>
 </nav>
 
@@ -1178,6 +1228,11 @@ tbody tr {
     <div class="page-header">
       <div class="page-title">Player Stats</div>
       <div class="page-subtitle" id="page-subtitle">2025–26 · Regular Season</div>
+      <select class="season-select" id="season-select">
+        <option value="2025-26" selected>2025–26</option>
+        <option value="2024-25">2024–25</option>
+        <option value="2023-24">2023–24</option>
+      </select>
     </div>
 
     <!-- Toolbar -->
@@ -2424,12 +2479,15 @@ function showDemoData() {
 // Fmt types that represent counting stats and scale with games played
 const COUNTING_FMTS = new Set(['1f', 'int']);
 
+// Columns that are already raw totals — never multiply by GP
+const RAW_TOTAL_KEYS = new Set(['gp', 'min']);
+
 // Returns the value to display for a cell, applying per-game vs totals mode
 function getStatVal(p, col) {
   const raw = p[col.key];
   if (raw == null) return null;
-  // Only scale counting stats; percentages, ratings, +/-, etc. stay as-is
-  if (ST.statMode === 'totals' && COUNTING_FMTS.has(col.fmt) && p.gp != null) {
+  // Only scale per-game counting stats; skip raw totals, percentages, ratings, etc.
+  if (ST.statMode === 'totals' && COUNTING_FMTS.has(col.fmt) && p.gp != null && !RAW_TOTAL_KEYS.has(col.key)) {
     return raw * p.gp;
   }
   return raw;
@@ -2932,6 +2990,34 @@ function setStatus(html) {
 // ── Init ──────────────────────────────────────────────────────
 renderSubTabs(ST.statCat);  // populates sub-tabs, contextual filters, clears filter vals
 loadStats();
+</script>
+<script>
+// ── Nav auth (shared across all pages) ───────────────────────
+async function initNavAuth() {
+  const slot = document.getElementById('nav-auth-slot');
+  if (!slot) return;
+  try {
+    const res = await fetch('/auth/me');
+    const data = await res.json();
+    const user = data.user;
+    if (user) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${user.avatar_url ? `<img class="nav-auth-avatar" src="${user.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="navSignOut()">Sign out</button>
+      `;
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+    }
+  } catch {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
+  }
+}
+async function navSignOut() {
+  await fetch('/auth/logout', { method: 'POST' });
+  window.location.reload();
+}
+initNavAuth();
+
 </script>
 </body>
 </html>

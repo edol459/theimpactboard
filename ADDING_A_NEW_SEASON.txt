@@ -1,0 +1,112 @@
+ADDING A NEW SEASON TO NOTHINGBUTNET
+======================================
+
+Run the following scripts in order from the project root.
+Replace 2024-25 with the season you're adding (format: YYYY-YY).
+
+All scripts are safe to re-run — they use upsert, so no duplicates.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 — Core player stats
+Writes to:  players, player_seasons
+Powers:     Stats page, Builder (foundation)
+Time:       ~5–15 min
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Regular season:
+  python backend/ingest/fetch_season.py --season 2024-25
+
+Playoffs (optional, run after regular season):
+  python backend/ingest/fetch_season.py --season 2024-25 --season-type Playoffs
+
+  → YES, this is still needed for NothingButNet. The stats page
+    (/api/players) and Builder (/api/builder) both query player_seasons
+    and players directly. This is the primary data source for the whole
+    app — do not skip it.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 — Team rosters & lineups
+Writes to:  team_rosters, team_lineups
+Powers:     On/Off tool
+Time:       ~15 min
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  python backend/fetch_lineups.py --season 2024-25
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 — Percentile rankings
+Writes to:  player_pctiles
+Powers:     Builder (must run after Step 1)
+Time:       ~1–2 min
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Regular season:
+  python backend/ingest/compute_pctiles.py --season 2024-25
+
+Playoffs (if you ran Step 1 for playoffs):
+  python backend/ingest/compute_pctiles.py --season 2024-25 --season-type Playoffs
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DONE — the season will now appear in all dropdown selectors.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+OPTIONAL STEPS (adds extra columns to the stats page — skip for now)
+======================================================================
+
+These take much longer and rely on external APIs that may only
+have current-season data.
+
+  PBP-derived turnover types (~2 hrs each):
+    Writes to: player_seasons (bad_pass_tov, lost_ball_tov columns)
+    python backend/ingest/fetch_bad_pass_tov.py --season 2024-25
+    python backend/ingest/fetch_lost_ball_tov.py --season 2024-25
+
+  External impact metrics (DARKO, LEBRON, net_pts100):
+    Writes to: player_seasons (darko_dpm, lebron, net_pts100, etc. columns)
+    python backend/ingest/fetch_external.py --season 2024-25
+    Note: these APIs typically only serve the current season.
+    Running them for old seasons will likely return no data.
+
+  Derived metrics (gravity, shot quality, leverage):
+    Writes to: player_metrics
+    python backend/ingest/compute_metrics.py --season 2024-25
+    Note: player_metrics is NOT queried by NothingButNet's server.
+    This script is left over from TheImpactBoard. Skip it entirely.
+
+  If you ran any optional steps that update player_seasons, re-run
+  compute_pctiles afterward so the Builder reflects the new columns:
+    python backend/ingest/compute_pctiles.py --season 2024-25
+
+
+TABLE REFERENCE
+===============
+
+  players            — one row per player (name, position, draft info)
+  player_seasons     — one row per player per season, 150+ stat columns
+                       queried by: /api/players (stats page), /api/builder
+  player_pctiles     — percentile rank per stat per season
+                       queried by: /api/builder, /api/stat-keys
+  team_rosters       — players per team per season
+                       queried by: /api/on-off (roster panel)
+  team_lineups       — 5-man lineup on/off stats per team per season
+                       queried by: /api/on-off
+  games              — completed game records (populated automatically
+                       by the live scoreboard system, not by ingest scripts)
+  game_reviews       — user ratings/reviews, tied to games table
+  player_metrics     — TheImpactBoard leftover, not used by NothingButNet
+
+
+NOTES
+=====
+- Season format is always YYYY-YY, e.g. 2024-25, 2023-24, 2022-23
+- Steps 1 and 3 must be run separately for Regular Season and Playoffs
+  if you want both to appear in the selector
+- Step 2 (lineups) only has one mode — it always fetches regular season data
+- Game reviews (basketboxd) only exist for games that were played while
+  the server was running — historical seasons won't have reviews,
+  but the page will still load correctly for those seasons

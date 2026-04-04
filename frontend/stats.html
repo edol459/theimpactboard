@@ -2664,10 +2664,30 @@ const COUNTING_FMTS = new Set(['1f', 'int']);
 // Columns that are already raw totals — never multiply by GP
 const RAW_TOTAL_KEYS = new Set(['gp', 'min']);
 
+// Stats fetched with PerMode=Totals and stored as season totals in the DB.
+// Per-game mode must divide by GP; totals mode returns as-is (don't re-multiply).
+const STORED_AS_TOTAL_KEYS = new Set([
+  // Misc (LeagueDashPlayerStats Totals)
+  'bad_pass_tov', 'lost_ball_tov',
+  // Hustle (LeagueHustleStatsPlayer Totals)
+  'contested_shots', 'contested_2pt', 'contested_3pt',
+  'deflections', 'charges_drawn',
+  'screen_assists', 'screen_ast_pts',
+  'loose_balls', 'box_outs', 'off_box_outs', 'def_box_outs',
+  // Closest defender (LeagueDashPlayerPtShot Totals)
+  'cd_fga_vt', 'cd_fgm_vt', 'cd_fga_tg', 'cd_fgm_tg',
+  'cd_fga_op', 'cd_fgm_op', 'cd_fga_wo', 'cd_fgm_wo',
+]);
+
 // Returns the value to display for a cell, applying per-game vs totals mode
 function getStatVal(p, col) {
   const raw = p[col.key];
   if (raw == null) return null;
+  if (STORED_AS_TOTAL_KEYS.has(col.key)) {
+    // DB value is a season total — divide for per-game, return as-is for totals
+    if (ST.statMode === 'per_game' && p.gp != null && p.gp > 0) return raw / p.gp;
+    return raw;
+  }
   // Only scale per-game counting stats; skip raw totals, percentages, ratings, etc.
   if (ST.statMode === 'totals' && COUNTING_FMTS.has(col.fmt) && p.gp != null && !RAW_TOTAL_KEYS.has(col.key)) {
     return raw * p.gp;

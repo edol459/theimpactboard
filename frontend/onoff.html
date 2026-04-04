@@ -28,13 +28,14 @@
   --nav-h: 56px;
   font-size: 15px;
 }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 body {
   font-family: var(--ff-sans);
   background: var(--paper);
   color: var(--ink);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 body::before {
   content: '';

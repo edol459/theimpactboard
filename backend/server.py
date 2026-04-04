@@ -1212,13 +1212,15 @@ def _format_review(r: dict) -> dict:
         "review_text":  r.get("review_text"),
         "created_at":   str(r.get("created_at", "")),
         "updated_at":   str(r.get("updated_at", "")),
+        "like_count":   int(r.get("like_count", 0)),
+        "liked_by_me":  bool(r.get("liked_by_me", False)),
     }
 
 
 def _format_game(g: dict) -> dict:
     avg_stars = None
     if g.get("review_count", 0) > 0:
-        avg_stars = round(g["bayesian_rating"] / 2, 2)
+        avg_stars = round(g["rating_sum"] / g["review_count"] / 2, 2)
     return {
         "game_id":        g["game_id"],
         "season":         g["season"],
@@ -1320,17 +1322,41 @@ def get_game(game_id):
 def get_game_reviews(game_id):
     limit  = min(int(request.args.get("limit", 20)), 100)
     offset = int(request.args.get("offset", 0))
+    sort   = request.args.get("sort", "date")  # "date" | "likes"
+    order_sql = "like_count DESC, gr.created_at DESC" if sort == "likes" else "gr.created_at DESC"
+    user    = current_user()
+    user_id = user["id"] if user else None
     try:
         conn = get_conn()
         cur  = conn.cursor()
-        cur.execute("""
-            SELECT gr.*, u.display_name, u.avatar_url
-            FROM game_reviews gr
-            JOIN users u ON gr.user_id = u.id
-            WHERE gr.game_id = %s
-            ORDER BY gr.created_at DESC
-            LIMIT %s OFFSET %s
-        """, (game_id, limit, offset))
+        if user_id:
+            cur.execute(f"""
+                SELECT gr.*, u.display_name, u.avatar_url,
+                       COUNT(rl.review_id)                                   AS like_count,
+                       BOOL_OR(rl_me.user_id IS NOT NULL)                    AS liked_by_me
+                FROM game_reviews gr
+                JOIN users u ON gr.user_id = u.id
+                LEFT JOIN review_likes rl    ON rl.review_id    = gr.id
+                LEFT JOIN review_likes rl_me ON rl_me.review_id = gr.id
+                                            AND rl_me.user_id   = %s
+                WHERE gr.game_id = %s
+                GROUP BY gr.id, u.display_name, u.avatar_url
+                ORDER BY {order_sql}
+                LIMIT %s OFFSET %s
+            """, (user_id, game_id, limit, offset))
+        else:
+            cur.execute(f"""
+                SELECT gr.*, u.display_name, u.avatar_url,
+                       COUNT(rl.review_id) AS like_count,
+                       FALSE               AS liked_by_me
+                FROM game_reviews gr
+                JOIN users u ON gr.user_id = u.id
+                LEFT JOIN review_likes rl ON rl.review_id = gr.id
+                WHERE gr.game_id = %s
+                GROUP BY gr.id, u.display_name, u.avatar_url
+                ORDER BY {order_sql}
+                LIMIT %s OFFSET %s
+            """, (game_id, limit, offset))
         reviews = [_format_review(dict(r)) for r in cur.fetchall()]
         cur.execute("SELECT COUNT(*) FROM game_reviews WHERE game_id = %s", (game_id,))
         total = cur.fetchone()["count"]
@@ -1409,6 +1435,49 @@ def delete_review(game_id):
         if not deleted:
             return jsonify({"error": "Review not found"}), 404
         return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# POST /api/reviews/<review_id>/like  — toggle like on a review
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/<int:review_id>/like", methods=["POST"])
+@login_required
+def toggle_review_like(review_id):
+    user = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS review_likes (
+                user_id    INTEGER REFERENCES users(id)        ON DELETE CASCADE,
+                review_id  INTEGER REFERENCES game_reviews(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (user_id, review_id)
+            )
+        """)
+        cur.execute(
+            "SELECT 1 FROM review_likes WHERE user_id = %s AND review_id = %s",
+            (user["id"], review_id)
+        )
+        if cur.fetchone():
+            cur.execute(
+                "DELETE FROM review_likes WHERE user_id = %s AND review_id = %s",
+                (user["id"], review_id)
+            )
+            liked = False
+        else:
+            cur.execute(
+                "INSERT INTO review_likes (user_id, review_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                (user["id"], review_id)
+            )
+            liked = True
+        cur.execute("SELECT COUNT(*) FROM review_likes WHERE review_id = %s", (review_id,))
+        like_count = cur.fetchone()["count"]
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"liked": liked, "like_count": int(like_count)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1968,4 +2037,4 @@ def user_profile(user_id):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

@@ -25,7 +25,7 @@
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  html { font-size: 16px; }
+  html { font-size: 16px; overflow-x: hidden; }
 
   body {
     background: var(--bg);
@@ -33,6 +33,7 @@
     font-family: var(--sans);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
   /* ── Nav (aligned with other pages) ── */

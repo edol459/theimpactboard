@@ -34,7 +34,7 @@
   font-size: 15px;
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
   font-family: var(--ff-sans);
@@ -42,6 +42,7 @@ body {
   color: var(--ink);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 /* grain */
@@ -658,7 +659,7 @@ nav {
   .cal-strip-wrap { margin: 0 -16px 14px; }
   .cal-strip { padding: 0 16px; }
   .performers-col { padding: 20px 16px 40px; overflow-x: auto; }
-  .performer-list { min-width: 480px; }
+  .performer-list { min-width: 480px; padding-right: 16px; }
   .news-aside { padding: 20px 16px 40px; overflow-x: auto; }
   .news-list { min-width: 320px; }
   .section-title { font-size: 20px; }
@@ -1107,7 +1108,7 @@ function updateCardRating(gameId, g) {
   const starsEl = row.querySelector('.card-stars-display');
   if (!starsEl) return;
   if (g && g.review_count > 0) {
-    const stars = g.bayesian_rating / 2;
+    const stars = g.avg_stars;
     const full  = Math.floor(stars);
     const half  = stars - full >= 0.25 ? 1 : 0;
     const empty = 5 - full - half;

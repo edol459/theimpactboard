@@ -20,8 +20,8 @@
   --nav-h:56px;
   font-size:15px;
 }
-html{scroll-behavior:smooth}
-body{font-family:var(--ff-sans);background:var(--paper);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;}
+html{scroll-behavior:smooth;overflow-x:hidden}
+body{font-family:var(--ff-sans);background:var(--paper);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");opacity:.022;pointer-events:none;z-index:9999;}
 
 /* ── Nav ─────────────────────────────────────────────────────── */
@@ -191,6 +191,34 @@ table.box-table tfoot td:first-child{text-align:left;}
 .review-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); margin-left: auto; }
 .review-text { font-size: 13px; line-height: 1.55; color: var(--ink2); }
 .reviews-empty { padding: 32px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
+
+/* Sort toggle */
+.reviews-sort {
+  display: flex; gap: 4px; margin-bottom: 12px;
+}
+.reviews-sort-btn {
+  font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.05em;
+  text-transform: uppercase; padding: 5px 10px; border-radius: 4px;
+  border: 1px solid var(--rule); background: none; color: var(--ink3);
+  cursor: pointer; transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.reviews-sort-btn:hover { color: var(--ink); border-color: var(--ink3); }
+.reviews-sort-btn.active { background: var(--paper3); color: var(--ink); border-color: var(--paper3); }
+
+/* Like button */
+.review-footer {
+  display: flex; align-items: center; margin-top: 8px;
+}
+.btn-like {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--ff-mono); font-size: 11px;
+  color: var(--ink4); background: none; border: none;
+  cursor: pointer; padding: 2px 0; transition: color 0.12s;
+}
+.btn-like:hover { color: var(--ink3); }
+.btn-like.liked { color: var(--orange); }
+.btn-like svg { width: 14px; height: 14px; flex-shrink: 0; }
+
 .btn-load-more {
   display: block; width: 100%; margin-top: 16px;
   padding: 10px; font-family: var(--ff-mono); font-size: 11px;
@@ -656,6 +684,8 @@ let _reviewUser    = null;
 let _pickedRating  = 0;
 let _reviewOffset  = 0;
 let _reviewTotal   = 0;
+let _reviewSort    = 'likes';  // 'likes' | 'date'
+let _likesWired    = false;
 
 function fmtShortDate(str) {
   if (!str) return '';
@@ -668,9 +698,15 @@ function starsText(r10, size = 13) {
   let s = '';
   for (let i = 1; i <= 5; i++) {
     const f = Math.min(Math.max(n - (i-1), 0), 1);
-    s += f >= 0.5 ? '★' : '☆';
+    if (f >= 1) {
+      s += `<span style="color:${STAR_ON}">★</span>`;
+    } else if (f >= 0.5) {
+      s += `<span style="background:linear-gradient(to right,${STAR_ON} 50%,${STAR_OFF} 50%);-webkit-background-clip:text;background-clip:text;color:transparent">★</span>`;
+    } else {
+      s += `<span style="color:${STAR_OFF}">★</span>`;
+    }
   }
-  return `<span style="color:${STAR_ON};font-size:${size}px;letter-spacing:-1px">${s}</span>`;
+  return `<span style="font-size:${size}px;letter-spacing:-1px">${s}</span>`;
 }
 
 function avatarEl(name, url) {
@@ -697,7 +733,7 @@ async function loadReviewsPanel(append = false) {
 
   const [gameRes, revRes] = await Promise.all([
     fetch(`/api/games/${GAME_ID}`),
-    fetch(`/api/games/${GAME_ID}/reviews?limit=15&offset=${_reviewOffset}`),
+    fetch(`/api/games/${GAME_ID}/reviews?limit=15&offset=${_reviewOffset}&sort=${_reviewSort}`),
   ]);
 
   const gameData = gameRes.ok ? await gameRes.json() : {};
@@ -730,11 +766,11 @@ function renderReviewsContent(g, reviews, hasMore) {
   // Aggregate
   let aggHtml;
   if (g.review_count > 0) {
-    const stars = (g.bayesian_rating / 2).toFixed(2);
+    const stars = (g.avg_stars || 0).toFixed(2);
     aggHtml = `
       <div class="reviews-agg">
         <span class="reviews-agg-val">${stars}</span>
-        <span class="reviews-agg-stars">${'★'.repeat(Math.round(g.bayesian_rating/2))}</span>
+        <span class="reviews-agg-stars">${starsText(g.avg_stars * 2, 16)}</span>
         <span class="reviews-agg-count">${g.review_count} review${g.review_count !== 1 ? 's' : ''}</span>
       </div>`;
   } else {
@@ -757,10 +793,15 @@ function renderReviewsContent(g, reviews, hasMore) {
         </p>
       </div>`;
 
-  // Review list
+  // Sort toggle + review list
+  const sortHtml = reviews.length > 0 ? `
+    <div class="reviews-sort">
+      <button class="reviews-sort-btn${_reviewSort === 'likes' ? ' active' : ''}" data-sort="likes">Most Liked</button>
+      <button class="reviews-sort-btn${_reviewSort === 'date'  ? ' active' : ''}" data-sort="date">Most Recent</button>
+    </div>` : '';
   const listHtml = reviews.length === 0
     ? '<div class="reviews-empty">No reviews yet.</div>'
-    : `<div class="review-list">${reviews.map(reviewItemHTML).join('')}</div>`;
+    : `${sortHtml}<div class="review-list">${reviews.map(reviewItemHTML).join('')}</div>`;
 
   const loadMoreHtml = hasMore
     ? `<button class="btn-load-more">Load more (${_reviewTotal - _reviewOffset} remaining)</button>`
@@ -777,7 +818,11 @@ function renderReviewsContent(g, reviews, hasMore) {
 }
 
 function reviewItemHTML(r) {
-  return `<div class="review-item">
+  const heartIcon = `<svg viewBox="0 0 20 20" fill="${r.liked_by_me ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8">
+    <path d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"/>
+  </svg>`;
+  const likeLabel = r.like_count > 0 ? r.like_count : '';
+  return `<div class="review-item" data-review-id="${r.id}">
     ${avatarEl(r.display_name, r.avatar_url)}
     <div class="review-body">
       <div class="review-top">
@@ -786,6 +831,11 @@ function reviewItemHTML(r) {
         <span class="review-date">${fmtShortDate(r.created_at)}</span>
       </div>
       ${r.review_text ? `<p class="review-text">${r.review_text}</p>` : ''}
+      <div class="review-footer">
+        <button class="btn-like${r.liked_by_me ? ' liked' : ''}" data-review-id="${r.id}" title="Like this review">
+          ${heartIcon}<span class="like-count">${likeLabel}</span>
+        </button>
+      </div>
     </div>
   </div>`;
 }
@@ -797,6 +847,36 @@ function wireWriteSection() {
   // Load-more
   const loadMoreBtn = panel.querySelector('.btn-load-more');
   if (loadMoreBtn) loadMoreBtn.addEventListener('click', () => loadReviewsPanel(true));
+
+  // Sort toggle
+  panel.querySelectorAll('.reviews-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _reviewSort = btn.dataset.sort;
+      loadReviewsPanel(false);
+    });
+  });
+
+  // Like buttons — wire once, use event delegation so re-renders stay covered
+  if (!_likesWired) {
+    _likesWired = true;
+    panel.addEventListener('click', async e => {
+      const btn = e.target.closest('.btn-like');
+      if (!btn) return;
+      if (!_reviewUser) {
+        window.location.href = `/auth/google/login?next=${encodeURIComponent(window.location.pathname + '?tab=reviews')}`;
+        return;
+      }
+      const reviewId = btn.dataset.reviewId;
+      const res = await fetch(`/api/reviews/${reviewId}/like`, { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      btn.classList.toggle('liked', data.liked);
+      const svg = btn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+      const countEl = btn.querySelector('.like-count');
+      if (countEl) countEl.textContent = data.like_count > 0 ? data.like_count : '';
+    });
+  }
 
   if (!_reviewUser) return;
 

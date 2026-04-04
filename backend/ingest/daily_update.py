@@ -14,8 +14,7 @@ Runs the full update pipeline in order:
   8.  fetch_lebron.py          — LEBRON + O/D-LEBRON + WAR (fanspo.com)
   9.  fetch_net_pts.py         — Net Points per 100 (ESPN via S3)
   10. fetch_lineups.py         — 5-man lineup data for On/Off tool
-  11. compute_metrics.py       — recompute all derived metrics
-  12. compute_pctiles.py       — recompute percentiles for Builder
+  11. compute_pctiles.py       — recompute percentiles for Builder
 """
 
 import os
@@ -143,11 +142,6 @@ def main():
         ),
         # ── Compute ───────────────────────────────────────────
         (
-            'compute_metrics.py',
-            'Derived metrics',
-            season_args,
-        ),
-        (
             'compute_pctiles.py',
             'Percentiles (Builder)',
             season_args,
@@ -163,7 +157,7 @@ def main():
         if not run(path, label, args):
             failed_steps.append(label)
             # Compute steps are hard dependencies — stop if they fail
-            if script_name in ('compute_metrics.py', 'compute_pctiles.py'):
+            if script_name in ('compute_pctiles.py',):
                 print(f"\n❌ Pipeline stopped at: {label}")
                 sys.exit(1)
             # Data fetch failures are non-fatal — log and continue

@@ -81,6 +81,9 @@ nav {
 .nav-links {
   display: flex;
   gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .nav-link {
   font-family: var(--ff-mono);
@@ -635,6 +638,32 @@ nav {
 .card-stars-skeleton {
   color: var(--rule);
   letter-spacing: -1px;
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 88px; }
+  nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-auth { padding: 13px 0; }
+  .nav-auth-name { display: none; }
+  .nav-links {
+    order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+    flex-wrap: nowrap; border-top: 1px solid var(--rule);
+    padding: 7px 0 9px; gap: 0;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-link { white-space: nowrap; padding: 5px 12px; }
+
+  .page { padding-top: 88px; }
+  .scoreboard-section { padding: 0 16px 0; }
+  .cal-strip-wrap { margin: 0 -16px 14px; }
+  .cal-strip { padding: 0 16px; }
+  .performers-col { padding: 20px 16px 40px; overflow-x: auto; }
+  .performer-list { min-width: 480px; }
+  .news-aside { padding: 20px 16px 40px; overflow-x: auto; }
+  .news-list { min-width: 320px; }
+  .section-title { font-size: 20px; }
 }
 
 </style>

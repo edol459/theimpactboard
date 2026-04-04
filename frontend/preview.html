@@ -68,7 +68,7 @@ nav {
 
 .nav-wordmark span { color: var(--orange); }
 
-.nav-links { display: flex; gap: 2px; }
+.nav-links { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
 .nav-link {
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -395,6 +395,22 @@ nav {
   transition: color 0.15s;
 }
 .nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Mobile nav ─────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 88px; }
+  nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-auth { padding: 13px 0; }
+  .nav-auth-name { display: none; }
+  .nav-links {
+    order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+    flex-wrap: nowrap; border-top: 1px solid var(--rule);
+    padding: 7px 0 9px; gap: 0;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-link { white-space: nowrap; padding: 5px 12px; }
+}
 
 </style>
 </head>

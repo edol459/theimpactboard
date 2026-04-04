@@ -55,7 +55,7 @@ nav {
   text-decoration: none; flex-shrink: 0;
 }
 .nav-wordmark span { color: var(--orange); }
-.nav-tabs { display: flex; gap: 2px; }
+.nav-tabs { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
 .nav-tab {
   font-family: var(--ff-mono); font-size: 11px;
   letter-spacing: 0.08em; text-transform: uppercase;
@@ -320,6 +320,39 @@ table.wt tbody td.td-lineup { text-align: left; }
   transition: color 0.15s;
 }
 .nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 88px; }
+  nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-auth { padding: 13px 0; }
+  .nav-tabs {
+    order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+    flex-wrap: nowrap; border-top: 1px solid var(--rule);
+    padding: 7px 0 9px; gap: 0;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { white-space: nowrap; padding: 5px 12px; }
+}
+
+@media (max-width: 768px) {
+  /* Stack sidebar above main */
+  .app { flex-direction: column; }
+  .sidebar {
+    width: 100%; height: auto; position: static;
+    border-right: none; border-bottom: 1px solid var(--rule);
+  }
+  .players-scroll { max-height: 260px; }
+  .player-grid { grid-template-columns: repeat(3, 1fr); }
+
+  .main { min-width: 0; overflow: visible; }
+  .results-head { padding: 12px 16px 10px; }
+  .sel-strip { padding: 10px 16px; }
+
+  /* Table: ensure horizontal scroll */
+  .table-scroll { overflow-x: auto; }
+}
 
 </style>
 </head>

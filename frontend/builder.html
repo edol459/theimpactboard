@@ -76,7 +76,7 @@ nav {
 }
 .nav-wordmark span { color: var(--orange); }
 
-.nav-tabs { display: flex; gap: 2px; }
+.nav-tabs { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
 .nav-tab {
   font-family: var(--ff-mono);
   font-size: 11px;
@@ -435,6 +435,42 @@ tbody tr { animation: rowIn 0.2s ease both; }
   transition: color 0.15s;
 }
 .nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 88px; }
+  nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-auth, .nav-right { padding: 13px 0; }
+  .nav-auth-name { display: none; }
+  .nav-tabs {
+    order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+    flex-wrap: nowrap; border-top: 1px solid var(--rule);
+    padding: 7px 0 9px; gap: 0;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { white-space: nowrap; padding: 5px 12px; }
+}
+
+@media (max-width: 768px) {
+  .page-header { padding: 14px 16px 12px; flex-wrap: wrap; gap: 10px; }
+  .page-title { font-size: 22px; }
+
+  /* Stack sidebar above main content */
+  .app { flex-direction: column; }
+  .builder-layout { grid-template-columns: 1fr; overflow: visible; }
+  .builder-panel { border-right: none; border-bottom: 1px solid var(--rule); max-height: 280px; overflow: hidden; }
+  .builder-results { overflow: visible; }
+  .builder-results-head { padding: 14px 16px; }
+  .builder-min-wrap { flex-wrap: wrap; }
+  .min-slider { width: 100px; }
+
+  /* Spotlight */
+  .spotlight-inner { padding: 14px 16px; flex-direction: column; gap: 14px; max-height: none; }
+  .spotlight-identity { width: 100%; }
+  .sp-bar-label { width: 100px; }
+  .builder-table-wrap { overflow-x: auto; }
+}
 
 </style>
 </head>

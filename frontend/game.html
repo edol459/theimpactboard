@@ -28,7 +28,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 nav{position:fixed;top:0;left:0;right:0;height:var(--nav-h);background:var(--paper);border-bottom:1px solid var(--rule);display:flex;align-items:center;padding:0 24px;gap:32px;z-index:100;}
 .nav-wordmark{font-family:var(--ff-serif);font-size:20px;color:var(--ink);letter-spacing:-.01em;text-decoration:none;flex-shrink:0;}
 .nav-wordmark em{font-style:italic;color:var(--orange);}
-.nav-tabs{display:flex;gap:2px;}
+.nav-tabs{display:flex;gap:2px;flex:1 1 0;min-width:0;overflow:hidden;}
 .nav-tab{font-family:var(--ff-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);text-decoration:none;padding:6px 14px;border-radius:4px;transition:color .15s,background .15s;display:inline-block;}
 .nav-tab:hover{color:var(--ink);background:var(--paper2);}
 .nav-tab.active{color:var(--ink);background:var(--paper3);}
@@ -261,6 +261,37 @@ table.box-table tfoot td:first-child{text-align:left;}
   transition: color 0.15s;
 }
 .nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 88px; }
+  nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-auth { padding: 13px 0; }
+  .nav-auth-name { display: none; }
+  .nav-tabs {
+    order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+    flex-wrap: nowrap; border-top: 1px solid var(--rule);
+    padding: 7px 0 9px; gap: 0;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { white-space: nowrap; padding: 5px 12px; }
+
+  .page { padding-left: 0; padding-right: 0; }
+  .game-sb { padding: 20px 16px 14px; }
+  .sb-team { gap: 8px; }
+  .sb-logo, .sb-logo-fallback { width: 40px; height: 40px; font-size: 20px; }
+  .sb-score { font-size: 36px; min-width: 44px; letter-spacing: -1px; }
+  .sb-center { padding: 0 10px; }
+  .sb-abbr { font-size: 11px; }
+
+  .game-tabs { padding: 0 12px; overflow-x: auto; scrollbar-width: none; }
+  .game-tabs::-webkit-scrollbar { display: none; }
+  .game-tab { padding: 10px 12px; white-space: nowrap; font-size: 12px; }
+  .tab-panel { padding: 0 12px; }
+  .reviews-panel { padding: 0 12px 48px; }
+  .reviews-header { padding: 16px 0 12px; }
+}
 
 </style>
 </head>

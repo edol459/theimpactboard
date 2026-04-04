@@ -6,6 +6,7 @@ python backend/ingest/fetch_darko.py
 Fetches from https://www.darko.app/api/active-players
 Matches on nba_id directly — no name matching needed.
 Updates player_seasons with darko_dpm, darko_odpm, darko_ddpm, darko_box.
+NOTE: /api/active-players is current-season only — no historical backfill possible via this endpoint.
 
 Run manually or via daily_update.py.
 """
@@ -22,7 +23,7 @@ import psycopg2.extras
 load_dotenv()
 
 DATABASE_URL = os.getenv('DATABASE_URL')
-SEASON       = os.getenv('NBA_SEASON', '2024-25')
+SEASON       = os.getenv('NBA_SEASON', '2025-26')
 SEASON_TYPE  = os.getenv('NBA_SEASON_TYPE', 'Regular Season')
 
 DARKO_URL = 'https://www.darko.app/api/active-players'

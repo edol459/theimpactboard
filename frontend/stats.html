@@ -392,6 +392,12 @@ nav {
   color: var(--orange);
   border-bottom-color: var(--orange);
 }
+.stat-group-tab.unavailable {
+  color: var(--ink4);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.stat-group-tab.unavailable:hover { color: var(--ink4); }
 
 .min-filter-wrap {
   display: flex;
@@ -685,6 +691,11 @@ td.bot10  { color: var(--red)    !important; }
 .builder-stat-item:hover { background: var(--paper2); }
 .builder-stat-item.selected { background: var(--orange-lt); }
 .builder-stat-item.selected .builder-stat-name { color: var(--orange); }
+.builder-stat-item.unavailable {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.builder-stat-item.unavailable:hover { background: none; }
 
 .builder-check {
   width: 14px; height: 14px;
@@ -2446,6 +2457,32 @@ const BUILDER_CATALOG = [
   { group: 'Overall', key: 'avg_speed_def',     label: 'Def. Avg Speed' },
 ];
 
+// ── Season availability ───────────────────────────────────────
+const CURRENT_SEASON = '2025-26';
+function isPastSeason() { return ST.season !== CURRENT_SEASON; }
+
+// Impact sub-tabs only available in 2025-26 (can't be backfilled)
+const PAST_UNAVAILABLE_IMPACT_TABS = new Set(['darko', 'leverage', 'gravity', 'shot_difficulty']);
+
+// Builder keys only available in 2025-26
+const PAST_UNAVAILABLE_BUILDER_KEYS = new Set([
+  'darko_dpm', 'darko_odpm', 'darko_ddpm', 'darko_box',
+  'leverage_full', 'leverage_offense', 'leverage_defense', 'leverage_shooting',
+  'leverage_creation', 'leverage_turnovers', 'leverage_rebounds', 'leverage_onball_def',
+  'gravity_score', 'gravity_onball_perimeter', 'gravity_offball_perimeter',
+  'gravity_onball_interior', 'gravity_offball_interior',
+  'sq_avg_shot_quality', 'sq_fg_pct_above_expected', 'sq_avg_defender_distance',
+  'sq_avg_defender_pressure', 'sq_avg_shooter_speed', 'sq_avg_made_quality', 'sq_avg_missed_quality',
+]);
+
+function getDefaultImpactGroup() {
+  const subs = STAT_CATS.impact.subs;
+  if (isPastSeason()) {
+    return Object.keys(subs).find(k => !PAST_UNAVAILABLE_IMPACT_TABS.has(k)) || Object.keys(subs)[0];
+  }
+  return Object.keys(subs)[0];
+}
+
 // ── Format helpers ────────────────────────────────────────────
 function fmt(val, type) {
   if (val === null || val === undefined) return '—';
@@ -2477,6 +2514,18 @@ document.getElementById('season-select').addEventListener('change', function() {
   ST.season = this.value;
   const display = this.value.replace('-', '–');
   document.getElementById('page-subtitle').textContent = `${display} · Regular Season`;
+  // Re-render impact sub-tabs to reflect which metrics are available for this season
+  if (ST.statCat === 'impact') renderSubTabs(ST.statCat);
+  // Strip unavailable keys from builder selection when switching to a past season
+  if (isPastSeason()) {
+    ST.builderSelected = ST.builderSelected.filter(k => !PAST_UNAVAILABLE_BUILDER_KEYS.has(k));
+  }
+  // Re-render builder stat list if it's been initialized
+  if (builderInited) {
+    renderBuilderStatList(document.getElementById('builder-search').value.trim().toLowerCase());
+    renderBuilderChips();
+    updateSelectAllBtn();
+  }
   loadStats();
 });
 
@@ -2484,12 +2533,23 @@ document.getElementById('season-select').addEventListener('change', function() {
 function renderSubTabs(cat) {
   const subs = STAT_CATS[cat].subs;
   const tabBar = document.getElementById('stat-group-tabs');
-  tabBar.innerHTML = Object.entries(subs).map(([key, sub], i) =>
-    `<button class="stat-group-tab ${i === 0 ? 'active' : ''}" data-group="${key}">${sub.label}</button>`
-  ).join('');
+
+  // If current group is unavailable for this season, switch to the best available default
+  if (cat === 'impact' && isPastSeason() && PAST_UNAVAILABLE_IMPACT_TABS.has(ST.statGroup)) {
+    ST.statGroup = getDefaultImpactGroup();
+    const sub = subs[ST.statGroup];
+    ST.sortCol = sub?.defaultSort || 'pts';
+  }
+
+  tabBar.innerHTML = Object.entries(subs).map(([key, sub]) => {
+    const unavailable = cat === 'impact' && isPastSeason() && PAST_UNAVAILABLE_IMPACT_TABS.has(key);
+    const isActive = key === ST.statGroup && !unavailable;
+    return `<button class="stat-group-tab${isActive ? ' active' : ''}${unavailable ? ' unavailable' : ''}" data-group="${key}"${unavailable ? ' disabled title="Not available for past seasons"' : ''}>${sub.label}</button>`;
+  }).join('');
+
   ST.statFilterVals = {};
   renderFilterPanel();
-  tabBar.querySelectorAll('.stat-group-tab').forEach(btn => {
+  tabBar.querySelectorAll('.stat-group-tab:not(.unavailable)').forEach(btn => {
     btn.addEventListener('click', () => {
       tabBar.querySelectorAll('.stat-group-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -2509,9 +2569,9 @@ document.querySelectorAll('.stat-cat-btn').forEach(btn => {
     document.querySelectorAll('.stat-cat-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     ST.statCat = btn.dataset.cat;
-    const firstSub = Object.keys(STAT_CATS[ST.statCat].subs)[0];
-    ST.statGroup = firstSub;
-    const sub = STAT_CATS[ST.statCat].subs[firstSub];
+    const defaultGroup = ST.statCat === 'impact' ? getDefaultImpactGroup() : Object.keys(STAT_CATS[ST.statCat].subs)[0];
+    ST.statGroup = defaultGroup;
+    const sub = STAT_CATS[ST.statCat].subs[defaultGroup];
     ST.sortCol = sub?.defaultSort || 'pts';
     ST.sortDir = 'desc';
     renderSubTabs(ST.statCat);
@@ -2818,8 +2878,9 @@ function renderBuilderStatList(filter = '') {
     html += `<div class="builder-stat-group-items ${isOpen ? 'open' : ''}" data-group-items="${group}">`;
     for (const item of items) {
       const sel = ST.builderSelected.includes(item.key);
+      const unavail = isPastSeason() && PAST_UNAVAILABLE_BUILDER_KEYS.has(item.key);
       html += `
-        <button class="builder-stat-item ${sel ? 'selected' : ''}" data-key="${item.key}">
+        <button class="builder-stat-item${sel ? ' selected' : ''}${unavail ? ' unavailable' : ''}" data-key="${item.key}"${unavail ? ' disabled title="Not available for past seasons"' : ''}>
           <div class="builder-check">
             <span class="builder-check-mark">✓</span>
           </div>
@@ -2851,7 +2912,9 @@ function renderBuilderStatList(filter = '') {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const group = btn.dataset.groupAll;
-      const groupItems = BUILDER_CATALOG.filter(i => i.group === group);
+      const groupItems = BUILDER_CATALOG.filter(i =>
+        i.group === group && !(isPastSeason() && PAST_UNAVAILABLE_BUILDER_KEYS.has(i.key))
+      );
       const groupKeys = groupItems.map(i => i.key);
       const allSelected = groupKeys.every(k => ST.builderSelected.includes(k));
       if (allSelected) {
@@ -2872,7 +2935,7 @@ function renderBuilderStatList(filter = '') {
     });
   });
 
-  list.querySelectorAll('.builder-stat-item').forEach(btn => {
+  list.querySelectorAll('.builder-stat-item:not(.unavailable)').forEach(btn => {
     btn.addEventListener('click', () => toggleBuilderStat(btn.dataset.key));
   });
 

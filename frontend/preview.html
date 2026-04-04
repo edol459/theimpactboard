@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Game Preview – ydkball</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -33,19 +35,21 @@
   font-size: 15px;
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: clip; }
 
 body {
+  position: relative;
   font-family: var(--ff-sans);
   background: var(--paper);
   color: var(--ink);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 body::before {
   content: '';
-  position: fixed; inset: 0;
+  position: absolute; inset: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   opacity: 0.022;
   pointer-events: none;
@@ -64,8 +68,21 @@ nav {
   padding: 0 24px;
   gap: 24px;
   z-index: 100;
+  will-change: transform;
 }
 
+.nav-wordmark {
+  font-family: var(--ff-serif);
+  font-size: 20px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.nav-logo { height: 26px; width: auto; margin-right: 8px; }
 .nav-wordmark span { color: var(--orange); }
 
 .nav-links { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
@@ -417,7 +434,7 @@ nav {
 <body>
 
 <nav>
-  <a class="nav-wordmark" href="/">ydk<span>ball</span></a>
+  <a class="nav-wordmark" href="/"><img class="nav-logo" src="/logo.png" alt="">ydk<span>ball</span></a>
   <div class="nav-links">
     <a class="nav-link" href="/stats.html">Stats</a>
     <a class="nav-link" href="/builder.html">Builder</a>

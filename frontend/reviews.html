@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Game Reviews — ydkball</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -56,7 +58,11 @@
     letter-spacing: -0.01em;
     text-decoration: none;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0;
   }
+  .nav-logo { height: 26px; width: auto; margin-right: 8px; }
   .nav-wordmark span { color: var(--orange); }
   .nav-tabs {
     display: flex;
@@ -210,6 +216,7 @@
     animation: fadeUp 0.3s ease both;
   }
   .review-card:first-child { padding-top: 0; }
+  .review-card:hover { opacity: 0.85; }
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(6px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -793,7 +800,7 @@
 
 <!-- ── Nav ── -->
 <nav>
-  <a class="nav-wordmark" href="/">ydk<span>ball</span></a>
+  <a class="nav-wordmark" href="/"><img class="nav-logo" src="/logo.png" alt="">ydk<span>ball</span></a>
   <div class="nav-tabs">
     <a class="nav-tab" href="/stats.html">Stats</a>
     <a class="nav-tab" href="/builder.html">Builder</a>
@@ -1119,6 +1126,8 @@ async function loadRecent(append = false) {
       const div = document.createElement('div');
       div.className = 'review-card';
       div.style.animationDelay = `${i * 0.04}s`;
+      div.style.cursor = 'pointer';
+      div.addEventListener('click', () => goToGame(r.game_id));
       div.innerHTML = `
         ${avatarEl(r.display_name, r.avatar_url)}
         <div class="review-body">

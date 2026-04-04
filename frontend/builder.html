@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Builder — ydkball</title>
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -76,7 +78,11 @@ nav {
   letter-spacing: -0.01em;
   text-decoration: none;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
 }
+.nav-logo { height: 26px; width: auto; margin-right: 8px; }
 .nav-wordmark span { color: var(--orange); }
 
 .nav-tabs { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
@@ -455,14 +461,18 @@ tbody tr { animation: rowIn 0.2s ease both; }
   .nav-tab { white-space: nowrap; padding: 5px 12px; }
 }
 
+/* ── Drawer trigger & backdrop (always defined, hidden on desktop) ── */
+.mobile-stats-btn { display: none; }
+.drawer-backdrop { display: none; }
+.drawer-done-btn { display: none; }
+.drawer-handle-bar { display: none; }
+
 @media (max-width: 768px) {
   .page-header { padding: 14px 16px 12px; flex-wrap: wrap; gap: 10px; }
   .page-title { font-size: 22px; }
 
-  /* Stack sidebar above main content */
   .app { flex-direction: column; }
   .builder-layout { grid-template-columns: 1fr; overflow: visible; }
-  .builder-panel { border-right: none; border-bottom: 1px solid var(--rule); max-height: 340px; overflow-y: auto; }
   .builder-results { overflow: visible; }
   .builder-results-head { padding: 14px 16px; }
   .builder-min-wrap { flex-wrap: wrap; }
@@ -473,6 +483,122 @@ tbody tr { animation: rowIn 0.2s ease both; }
   .spotlight-identity { width: 100%; }
   .sp-bar-label { width: 100px; }
   .builder-table-wrap { overflow-x: auto; }
+
+  /* ── Bottom drawer trigger button ── */
+  .mobile-stats-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: calc(100% - 32px);
+    margin: 12px 16px 4px;
+    padding: 13px 16px;
+    font-family: var(--ff-sans);
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--paper2);
+    border: 1.5px solid var(--rule);
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--ink2);
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .mobile-stats-btn:hover { border-color: var(--ink3); background: var(--paper3); }
+  .mobile-stats-btn .stats-btn-label { display: flex; align-items: center; gap: 8px; }
+  .mobile-stats-btn .stats-btn-icon { font-size: 16px; }
+  .mobile-stats-btn .stats-btn-count {
+    font-family: var(--ff-mono); font-size: 11px;
+    background: var(--orange); color: #fff;
+    border-radius: 10px; padding: 2px 7px;
+    display: none;
+  }
+  .mobile-stats-btn .stats-btn-count.visible { display: inline-block; }
+  .mobile-stats-btn .stats-btn-arrow { color: var(--ink4); font-size: 18px; }
+
+  /* ── Backdrop ── */
+  .drawer-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(12,12,13,0.45);
+    z-index: 200;
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+  }
+  .drawer-backdrop.visible { display: block; }
+
+  /* ── Drag handle pill ── */
+  .drawer-handle-bar {
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: var(--rule);
+    border-radius: 2px;
+    margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* ── Drawer panel ── */
+  .builder-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 82vh;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 210;
+    background: var(--paper);
+    border-top: 1px solid var(--rule);
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: none;
+  }
+  .builder-panel.drawer-open {
+    transform: translateY(0);
+  }
+
+  /* ── Drawer header (Done button) ── */
+  .drawer-done-btn {
+    display: block;
+    font-family: var(--ff-mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--orange);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 0;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* Make the panel-head a row with title + done button */
+  .builder-panel-head {
+    display: flex;
+    align-items: center;
+    padding: 14px 20px 12px;
+    flex-shrink: 0;
+  }
+  .builder-panel-head-left { flex: 1; }
+  .builder-panel-sub { margin-top: 2px; }
+
+  /* ── Larger touch targets inside drawer ── */
+  .builder-stat-item {
+    padding: 13px 20px;
+  }
+  .builder-stat-name { font-size: 14px; }
+  .builder-check { width: 18px; height: 18px; }
+  .builder-check-mark { font-size: 11px; }
+  .builder-stat-key { font-size: 10px; }
+  .builder-stat-group-label { padding: 12px 20px 6px; font-size: 10px; }
+
+  /* Run wrap in drawer */
+  .builder-run-wrap { padding: 10px 16px; flex-shrink: 0; }
+  .builder-stat-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom, 16px); }
 }
 
 </style>
@@ -480,7 +606,7 @@ tbody tr { animation: rowIn 0.2s ease both; }
 <body>
 
 <nav>
-  <a class="nav-wordmark" href="/">ydk<span>ball</span></a>
+  <a class="nav-wordmark" href="/"><img class="nav-logo" src="/logo.png" alt="">ydk<span>ball</span></a>
   <div class="nav-tabs">
     <a class="nav-tab" href="/stats.html">Stats</a>
     <a class="nav-tab active" href="/builder.html">Builder</a>
@@ -509,9 +635,13 @@ tbody tr { animation: rowIn 0.2s ease both; }
 
       <!-- Left: stat selector -->
       <div class="builder-panel">
+        <div class="drawer-handle-bar" aria-hidden="true"></div>
         <div class="builder-panel-head">
-          <div class="builder-panel-title">Pick Stats</div>
-          <div class="builder-panel-sub"></div>
+          <div class="builder-panel-head-left">
+            <div class="builder-panel-title">Pick Stats</div>
+            <div class="builder-panel-sub"></div>
+          </div>
+          <button class="drawer-done-btn" id="drawer-done-btn">Done</button>
         </div>
 
         <div class="builder-run-wrap">
@@ -532,6 +662,16 @@ tbody tr { animation: rowIn 0.2s ease both; }
           </div>
         </div>
       </div>
+
+      <!-- Mobile stat drawer trigger (hidden on desktop via CSS) -->
+      <button class="mobile-stats-btn" id="mobile-stats-btn" aria-label="Open stat selector">
+        <span class="stats-btn-label">
+          <span class="stats-btn-icon">⚗️</span>
+          Select Stats
+          <span class="stats-btn-count" id="stats-btn-count">0</span>
+        </span>
+        <span class="stats-btn-arrow">›</span>
+      </button>
 
       <!-- Right: results -->
       <div class="builder-results" id="builder-results-panel">
@@ -1030,6 +1170,40 @@ async function navSignOut() {
 }
 initNavAuth();
 
+// ── Mobile stats drawer ───────────────────────────────────────────
+const mobileStatsBtn = document.getElementById('mobile-stats-btn');
+const drawerDoneBtn  = document.getElementById('drawer-done-btn');
+const drawerBackdrop = document.getElementById('drawer-backdrop');
+const builderPanel   = document.querySelector('.builder-panel');
+const statsBtnCount  = document.getElementById('stats-btn-count');
+
+function openDrawer() {
+  builderPanel.classList.add('drawer-open');
+  drawerBackdrop.classList.add('visible');
+  document.body.style.overflow = 'hidden';
+}
+function closeDrawer() {
+  builderPanel.classList.remove('drawer-open');
+  drawerBackdrop.classList.remove('visible');
+  document.body.style.overflow = '';
+}
+function updateStatsBtnCount() {
+  const n = (ST.builderSelected || []).length;
+  statsBtnCount.textContent = n;
+  statsBtnCount.classList.toggle('visible', n > 0);
+}
+
+mobileStatsBtn.addEventListener('click', openDrawer);
+drawerDoneBtn.addEventListener('click', closeDrawer);
+drawerBackdrop.addEventListener('click', closeDrawer);
+document.getElementById('builder-run').addEventListener('click', closeDrawer);
+
+// Watch chip list mutations to keep the trigger badge in sync
+new MutationObserver(updateStatsBtnCount)
+  .observe(document.getElementById('builder-chips'), { childList: true });
+
 </script>
+
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
 </body>
 </html>

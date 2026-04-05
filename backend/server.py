@@ -326,11 +326,25 @@ def run_builder():
     selected    = body.get("selected",    [])
     min_minutes = int(body.get("min_minutes", 500))
     pos_filter  = body.get("pos", "ALL")
+    mode        = body.get("mode", "flat")  # 'flat' or 'impact'
 
     if not selected:
         return jsonify({"error": "No stats selected"}), 400
     if len(selected) > 150:
         return jsonify({"error": "Max 150 stats at a time"}), 400
+
+    # Load win-correlation weights for impact mode
+    impact_weights = {}
+    if mode == 'impact':
+        season_key = season.replace('-', '_')
+        corr_path  = os.path.join(
+            os.path.dirname(__file__), 'ingest', 'data',
+            f'win_correlations_{season_key}.json'
+        )
+        if os.path.exists(corr_path):
+            with open(corr_path) as f:
+                corr_data = json.load(f)
+            impact_weights = corr_data.get('weights', {})
 
     try:
         conn = get_conn()
@@ -373,16 +387,19 @@ def run_builder():
         for p in players:
             pid = str(p["player_id"])
             breakdown = []
-            total_pct = 0.0
+            total_wgt = 0.0
+            total_wpct = 0.0
             covered   = 0
 
             for stat in selected:
                 pmap = pct_maps.get(stat, {})
                 pct  = pmap.get(pid) or pmap.get(int(pid))
                 if pct is not None:
-                    breakdown.append({"stat": stat, "pctile": round(float(pct), 1)})
-                    total_pct += float(pct)
-                    covered   += 1
+                    w = impact_weights.get(stat, 1.0) if mode == 'impact' else 1.0
+                    breakdown.append({"stat": stat, "pctile": round(float(pct), 1), "weight": round(w, 4)})
+                    total_wpct += float(pct) * w
+                    total_wgt  += w
+                    covered    += 1
 
             if covered == 0:
                 continue
@@ -391,7 +408,7 @@ def run_builder():
             if covered < len(selected) * 0.8:
                 continue
 
-            score = round(total_pct / covered, 2)
+            score = round(total_wpct / total_wgt, 2)
             results.append({
                 "player_id":      int(p["player_id"]),
                 "player_name":    p["player_name"],
@@ -412,6 +429,7 @@ def run_builder():
             "results": results,
             "season":  season,
             "n":       len(results),
+            "mode":    mode,
             "stats_found": list(pct_maps.keys()),
             "stats_missing": [s for s in selected if s not in pct_maps],
         })

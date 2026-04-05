@@ -292,6 +292,21 @@ nav {
 .min-slider { accent-color: var(--orange); width: 120px; cursor: pointer; }
 .min-value { font-family: var(--ff-mono); font-size: 11px; color: var(--ink2); min-width: 40px; }
 
+.impact-toggle-wrap { display: flex; align-items: center; gap: 6px; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--rule); }
+.impact-toggle-label { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); letter-spacing: 0.05em; white-space: nowrap; }
+.impact-toggle {
+  position: relative; width: 32px; height: 18px; cursor: pointer;
+  background: var(--paper3); border: 1px solid var(--rule); border-radius: 9px;
+  transition: background 0.2s, border-color 0.2s; flex-shrink: 0;
+}
+.impact-toggle.on { background: var(--orange); border-color: var(--orange); }
+.impact-toggle::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 12px; height: 12px; border-radius: 50%; background: #fff;
+  transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.impact-toggle.on::after { transform: translateX(14px); }
+
 .builder-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 10px; color: var(--ink4);
@@ -683,6 +698,10 @@ tbody tr { animation: rowIn 0.2s ease both; }
               <input class="min-slider" id="builder-min-slider" type="range" min="0" max="2000" step="100" value="500">
               <span class="min-value" id="builder-min-value">500</span>
             </div>
+            <div class="impact-toggle-wrap" title="Weight stats by their correlation to winning">
+              <span class="impact-toggle-label">Impact Mode</span>
+              <div class="impact-toggle" id="impact-toggle" role="switch" aria-checked="false"></div>
+            </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;min-width:0;">
             <div class="builder-results-meta" id="builder-meta">Select stats and run</div>
@@ -746,6 +765,7 @@ const ST = {
   seasonType: 'Regular Season',
   builderSelected: [],
   builderResults:  [],
+  impactMode: false,
 };
 
 document.getElementById('season-select').addEventListener('change', function() {
@@ -1007,7 +1027,7 @@ async function runBuilder() {
     const res = await fetch(`${API}/api/builder`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ season: ST.season, season_type: ST.seasonType, selected: ST.builderSelected, min_minutes: minMin }),
+      body: JSON.stringify({ season: ST.season, season_type: ST.seasonType, selected: ST.builderSelected, min_minutes: minMin, mode: ST.impactMode ? 'impact' : 'flat' }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -1115,6 +1135,12 @@ document.getElementById('builder-search').addEventListener('input', function() {
 });
 
 document.getElementById('builder-run').addEventListener('click', runBuilder);
+
+document.getElementById('impact-toggle').addEventListener('click', function() {
+  ST.impactMode = !ST.impactMode;
+  this.classList.toggle('on', ST.impactMode);
+  this.setAttribute('aria-checked', String(ST.impactMode));
+});
 
 document.getElementById('builder-min-slider').addEventListener('input', function() {
   document.getElementById('builder-min-value').textContent = this.value;

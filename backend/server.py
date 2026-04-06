@@ -1337,7 +1337,7 @@ def get_games():
 
     SORT_MAP = {
         "date":    "g.game_date",
-        "rating":  "g.bayesian_rating",
+        "rating":  "(g.rating_sum::float / NULLIF(g.review_count, 0))",
         "reviews": "g.review_count",
     }
     order_col = SORT_MAP.get(sort, "g.game_date")
@@ -1680,7 +1680,7 @@ def get_top_rated_games():
               AND season_type = %s
               AND status = 'Final'
               AND review_count >= %s
-            ORDER BY bayesian_rating DESC NULLS LAST
+            ORDER BY (rating_sum::float / NULLIF(review_count, 0)) DESC NULLS LAST
             LIMIT %s
         """, (season, season_type, min_reviews, limit))
         games = [_format_game(dict(r)) for r in cur.fetchall()]

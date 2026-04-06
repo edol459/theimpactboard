@@ -1,6 +1,9 @@
 ADDING A NEW SEASON TO YDKBALL
 ======================================
 
+
+# to add for BROWSE GAMES basketboxd: python backend/fetch_games.py --season 2022-23 --all
+
 Run the following scripts in order from the project root.
 Replace 2024-25 with the season you're adding (format: YYYY-YY).
 

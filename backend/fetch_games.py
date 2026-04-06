@@ -25,7 +25,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     print("❌ DATABASE_URL not found."); sys.exit(1)
 
-SEASON = "2025-26"
+SEASON = None  # set from CLI args below
 
 # NBA API season type strings → our labels
 SEASON_TYPES = {
@@ -183,9 +183,12 @@ def verify():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch NBA games into the games table.")
+    parser.add_argument("--season",    default="2025-26", help="Season string, e.g. 2024-25")
     parser.add_argument("--playoffs",  action="store_true", help="Fetch Playoffs only")
     parser.add_argument("--all",       action="store_true", help="Fetch Regular Season + Playoffs")
     args = parser.parse_args()
+
+    SEASON = args.season
 
     if args.all:
         fetch_season_type("Regular Season", "Regular Season")

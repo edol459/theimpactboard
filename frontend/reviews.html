@@ -797,6 +797,7 @@
 </style>
 </head>
 <body>
+<script src="/season-config.js"></script>
 
 <!-- ── Nav ── -->
 <nav>
@@ -849,7 +850,13 @@
     <!-- Browse Games -->
     <div id="paneBrowse" style="display:none">
       <div class="filters-row">
-        <span class="filter-label">Team</span>
+        <span class="filter-label">Season</span>
+        <select class="filter-select" id="filterSeason"></select>
+        <select class="filter-select" id="filterSeasonType">
+          <option value="Regular Season">Regular Season</option>
+          <option value="Playoffs">Playoffs</option>
+        </select>
+        <span class="filter-label" style="margin-left:8px">Team</span>
         <select class="filter-select" id="filterTeam">
           <option value="">All Teams</option>
         </select>
@@ -1219,6 +1226,17 @@ TEAMS.forEach(t => {
 
 teamSel.addEventListener('change', resetBrowse);
 document.getElementById('filterSort').addEventListener('change', resetBrowse);
+document.getElementById('filterSeason').addEventListener('change', resetBrowse);
+document.getElementById('filterSeasonType').addEventListener('change', resetBrowse);
+
+// Populate season dropdown and set default season type to match
+populateSeasonDropdown(
+  document.getElementById('filterSeason'),
+  computeCurrentSeason()
+).then(() => {
+  // Set season type to match the current default
+  document.getElementById('filterSeasonType').value = computeCurrentSeasonType();
+});
 
 function resetBrowse() {
   browseState.offset = 0;
@@ -1235,12 +1253,16 @@ async function loadBrowse(append = false) {
 
   if (!append) feed.innerHTML = '<div class="state-loading">Loading…</div>';
 
+  const season     = document.getElementById('filterSeason').value;
+  const seasonType = document.getElementById('filterSeasonType').value;
   const team = document.getElementById('filterTeam').value;
   const sort = document.getElementById('filterSort').value;
   const limit = 30;
 
   const params = new URLSearchParams({
     limit, offset: browseState.offset, sort, dir: 'desc',
+    ...(season     ? { season }          : {}),
+    ...(seasonType ? { season_type: seasonType } : {}),
     ...(team ? { team } : {}),
   });
 
@@ -1320,7 +1342,7 @@ async function loadSidebarTop() {
         <div class="tgc-meta"><span class="tgc-date">${fmtShortDate(g.game_date)}</span></div>
       </div>
       <div class="tgc-rating">
-        <div class="tgc-stars-val">${(g.bayesian_rating / 2).toFixed(1)}★</div>
+        <div class="tgc-stars-val">${g.avg_stars.toFixed(1)}★</div>
       </div>
     </div>
   `).join('');

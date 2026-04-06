@@ -181,44 +181,47 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
 }
 .fav-card {
-  aspect-ratio: 2/3; border-radius: 6px; overflow: hidden;
-  background: var(--ink2); position: relative;
-  cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+  aspect-ratio: 2/3; border-radius: 8px; overflow: hidden;
+  background: var(--paper2); border: 1px solid var(--rule);
+  position: relative; cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
 }
-.fav-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+.fav-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.10); border-color: var(--orange); }
 .fav-card-inner {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; padding: 12px 8px; width: 100%; height: 100%;
-  background: linear-gradient(160deg, #1a1a20 0%, #0c0c12 100%);
+  gap: 0; padding: 0; width: 100%; height: 100%;
 }
 .fav-logos {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  flex: 1; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex: 1; width: 100%; padding: 16px 10px 10px;
 }
-.fav-logo { width: 42px; height: 42px; object-fit: contain; flex-shrink: 0; }
-.fav-logo-fallback { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-.fav-vs { font-family: var(--ff-mono); font-size: 9px; color: #555; }
+.fav-logo { width: 62px; height: 62px; object-fit: contain; flex-shrink: 0; }
+.fav-logo-fallback { width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.fav-vs { font-family: var(--ff-mono); font-size: 9px; color: var(--ink4); }
 .fav-info {
-  width: 100%; text-align: center; padding: 0 6px 10px;
+  width: 100%; text-align: center; padding: 8px 8px 12px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper3);
 }
-.fav-teams { font-family: var(--ff-mono); font-size: 9px; color: #aaa; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fav-score { font-family: var(--ff-serif); font-size: 13px; color: #fff; margin-top: 2px; }
-.fav-date { font-family: var(--ff-mono); font-size: 8px; color: #666; margin-top: 2px; }
+.fav-teams { font-family: var(--ff-mono); font-size: 9px; color: var(--ink3); letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav-score { font-family: var(--ff-serif); font-size: 14px; color: var(--ink); margin-top: 2px; font-weight: 600; }
+.fav-date { font-family: var(--ff-mono); font-size: 8px; color: var(--ink4); margin-top: 2px; }
 /* Remove overlay */
 .fav-remove {
-  position: absolute; top: 5px; right: 5px;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: rgba(0,0,0,0.7); border: 1px solid #555;
+  position: absolute; top: 6px; right: 6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--paper); border: 1px solid var(--rule);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0; transition: opacity 0.15s;
-  font-size: 11px; color: #fff; line-height: 1;
+  cursor: pointer; opacity: 0; transition: opacity 0.15s, border-color 0.15s;
+  font-size: 11px; color: var(--ink3); line-height: 1;
   z-index: 2;
 }
+.fav-remove:hover { border-color: var(--orange); color: var(--orange); }
 .fav-card:hover .fav-remove.visible { opacity: 1; }
 /* Empty slot */
 .fav-slot {
-  aspect-ratio: 2/3; border-radius: 6px;
+  aspect-ratio: 2/3; border-radius: 8px;
   border: 1.5px dashed var(--rule);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: border-color 0.15s, background 0.15s;
@@ -242,8 +245,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 
 @media (max-width: 640px) {
   .fav-grid { gap: 8px; }
-  .fav-logo { width: 32px; height: 32px; }
-  .fav-score { font-size: 11px; }
+  .fav-logo { width: 44px; height: 44px; }
+  .fav-logo-fallback { width: 44px; height: 44px; font-size: 20px; }
+  .fav-score { font-size: 12px; }
 }
 
 /* ── Toast ── */

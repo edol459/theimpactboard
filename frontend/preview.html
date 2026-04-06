@@ -111,9 +111,10 @@ nav {
 
 /* ── Matchup hero ────────────────────────────────────────────── */
 .hero {
-  background: var(--ink2);
-  border-radius: 16px;
-  padding: 32px 28px;
+  background: var(--paper2);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 28px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -126,9 +127,9 @@ nav {
 .hero::before {
   content: '';
   position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 25% 50%, var(--away-color) 0%, transparent 55%),
-              radial-gradient(ellipse at 75% 50%, var(--home-color) 0%, transparent 55%);
-  opacity: 0.18;
+  background: radial-gradient(ellipse at 20% 50%, var(--away-color) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 50%, var(--home-color) 0%, transparent 50%);
+  opacity: 0.06;
   pointer-events: none;
 }
 
@@ -142,10 +143,10 @@ nav {
 .hero-team.home { flex-direction: row-reverse; }
 
 .hero-logo {
-  width: 68px; height: 68px;
+  width: 72px; height: 72px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.10));
 }
 
 .hero-team-info { display: flex; flex-direction: column; gap: 4px; }
@@ -154,13 +155,13 @@ nav {
 .hero-abbr {
   font-family: var(--ff-serif);
   font-size: 30px;
-  color: white;
+  color: var(--ink);
   letter-spacing: -0.02em;
 }
 .hero-record {
   font-family: var(--ff-mono);
   font-size: 11px;
-  color: rgba(255,255,255,0.5);
+  color: var(--ink4);
   letter-spacing: 0.05em;
 }
 
@@ -177,13 +178,13 @@ nav {
   font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
+  color: var(--ink4);
 }
 .hero-time {
   font-family: var(--ff-sans);
   font-size: 14px;
   font-weight: 600;
-  color: white;
+  color: var(--ink);
   text-align: center;
 }
 .hero-badge {
@@ -192,15 +193,15 @@ nav {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--orange);
-  background: rgba(232,83,10,0.15);
-  border: 1px solid rgba(232,83,10,0.3);
+  background: var(--orange-lt);
+  border: 1px solid rgba(232,83,10,0.25);
   border-radius: 4px;
   padding: 3px 8px;
 }
 
 /* ── Sections ────────────────────────────────────────────────── */
 .section {
-  background: white;
+  background: var(--paper2);
   border: 1px solid var(--rule);
   border-radius: 12px;
   margin-bottom: 12px;

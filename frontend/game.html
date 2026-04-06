@@ -350,7 +350,7 @@ const API = window.location.protocol === 'file:' ? 'http://localhost:5000' : '';
 const params = new URLSearchParams(window.location.search);
 const GAME_ID = params.get('gameId');
 let POLL_TIMER = null;
-let ACTIVE_TAB = 'pbp';
+let ACTIVE_TAB = params.get('tab') || 'pbp';
 let BOX_TEAM = 'away';
 let BOX_SORT = {key:'pts',dir:-1};
 let GAME_DATA = null;

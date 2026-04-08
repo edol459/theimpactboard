@@ -379,14 +379,13 @@ nav {
 .spotlight-score-label { font-family: var(--ff-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink4); }
 .spotlight-score { font-family: var(--ff-mono); font-size: 22px; font-weight: 500; color: var(--orange); }
 .spotlight-chart { flex: 1; min-width: 0; max-height: 260px; overflow-y: auto; padding-right: 4px; }
-.sp-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-.sp-bar-label { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); width: 140px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.sp-bar-track { flex: 1; height: 8px; background: var(--paper3); border-radius: 4px; overflow: hidden; }
-.sp-bar-fill { height: 100%; border-radius: 4px; transition: width 0.45s cubic-bezier(.4,0,.2,1); }
-.sp-bar-fill.hi  { background: var(--green); }
-.sp-bar-fill.mid { background: var(--orange); }
-.sp-bar-fill.lo  { background: var(--red); }
-.sp-bar-pct { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); width: 32px; text-align: right; flex-shrink: 0; }
+.sp-stat-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+.sp-stat-pct  { font-family: var(--ff-mono); font-size: 11px; font-weight: 500; width: 28px; flex-shrink: 0; text-align: right; }
+.sp-stat-pct.hi  { color: var(--green); }
+.sp-stat-pct.mid { color: var(--orange); }
+.sp-stat-pct.lo  { color: var(--red); }
+.sp-stat-label { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); flex-shrink: 0; white-space: nowrap; }
+.sp-stat-value { font-family: var(--ff-mono); font-size: 10px; color: var(--ink2); flex-shrink: 0; }
 
 /* Results table */
 .builder-table-wrap { flex: 1; overflow: auto; }
@@ -780,7 +779,7 @@ tbody tr { animation: rowIn 0.2s ease both; }
                 <th>Team</th>
                 <th style="width:200px">Score</th>
                 <th>Breakdown</th>
-                <th style="text-align:right">Avg Pctile</th>
+                <th style="text-align:right;width:100px">Avg Pctile</th>
               </tr>
             </thead>
             <tbody id="builder-tbody"></tbody>
@@ -1112,10 +1111,11 @@ function showSpotlight(r) {
     const item = BUILDER_CATALOG.find(x => x.key===b.stat);
     const label = item ? item.label : b.stat;
     const cls = b.pctile >= 70 ? 'hi' : b.pctile <= 35 ? 'lo' : 'mid';
-    return `<div class="sp-bar-row">
-      <div class="sp-bar-label" title="${label}">${label}</div>
-      <div class="sp-bar-track"><div class="sp-bar-fill ${cls}" style="width:${b.pctile.toFixed(1)}%"></div></div>
-      <div class="sp-bar-pct">${b.pctile.toFixed(0)}</div>
+    const valStr = b.value != null ? b.value : '—';
+    return `<div class="sp-stat-row">
+      <div class="sp-stat-pct ${cls}">${b.pctile.toFixed(0)}<span style="font-size:8px;opacity:0.6">p</span></div>
+      <div class="sp-stat-label" title="${label}">${label}</div>
+      <div class="sp-stat-value">${valStr}</div>
     </div>`;
   }).join('');
   card.style.display = '';
@@ -1156,7 +1156,7 @@ function renderResults() {
       <td style="font-family:var(--ff-mono);font-size:11px;color:var(--ink3)">${r.team_abbr||'—'}</td>
       <td><div class="b-bar-wrap"><div class="b-bar-bg"><div class="b-bar-fill" style="width:${barPct}%"></div></div></div></td>
       <td><div class="b-breakdown" data-total="${r.breakdown.length}">${pills}${moreBtn}</div></td>
-      <td><span class="b-score">${r.score.toFixed(1)}</span></td>
+      <td style="text-align:right"><span class="b-score">${r.score.toFixed(1)}</span></td>
     </tr>`;
   }).join('');
 

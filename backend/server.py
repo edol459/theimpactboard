@@ -419,12 +419,12 @@ def run_builder():
         # Build stat→{player_id: pctile} lookup
         pct_maps = {r["stat_key"]: r["pctile_map"] for r in pctile_rows}
 
-        # Fetch qualifying players
+        # Fetch qualifying players with all raw stat columns
         pos_clause = "AND p.position_group = %s" if pos_filter != "ALL" else ""
         pos_params = [pos_filter] if pos_filter != "ALL" else []
 
         cur.execute(f"""
-            SELECT ps.player_id, p.player_name, p.position_group, ps.team_abbr, ps.min
+            SELECT ps.*, p.player_name, p.position_group
             FROM player_seasons ps
             JOIN players p ON ps.player_id = p.player_id
             WHERE ps.season = %s AND ps.season_type = %s
@@ -434,6 +434,39 @@ def run_builder():
         players = cur.fetchall()
 
         cur.close(); conn.close()
+
+        # Stats stored as season totals in player_seasons — divide by GP for per-game value
+        TOTAL_KEYS = {
+            'drives', 'drive_fga', 'drive_fgm', 'drive_pts', 'drive_passes', 'drive_pf', 'drive_tov',
+            'bad_pass_tov', 'lost_ball_tov', 'passes_made', 'passes_received', 'ast_pts_created',
+            'potential_ast', 'touches', 'paint_touches', 'elbow_touches',
+            'pull_up_fga', 'pull_up_fgm', 'pull_up_fg3a', 'cs_fga', 'cs_fgm', 'cs_fg3a',
+            'contested_shots', 'contested_2pt', 'contested_3pt', 'deflections',
+            'def_rim_fga', 'def_rim_fgm', 'screen_ast_pts',
+            'cd_fga_vt', 'cd_fga_tg', 'cd_fga_op', 'cd_fga_wo',
+            'cd_fgm_vt', 'cd_fgm_tg', 'cd_fgm_op', 'cd_fgm_wo',
+            'iso_fga', 'pnr_bh_fga', 'transition_fga', 'pts_paint',
+        }
+
+        def get_raw_value(row, stat):
+            """Return the display value for a stat from a player_seasons row."""
+            if stat == 'pot_ast_per_bad_pass_tov':
+                pa  = row.get('potential_ast')
+                bpt = row.get('bad_pass_tov')
+                if pa is not None and bpt and float(bpt) > 0:
+                    return round(float(pa) / float(bpt), 2)
+                return None
+            val = row.get(stat)
+            if val is None:
+                return None
+            val = float(val)
+            if stat in TOTAL_KEYS:
+                gp = row.get('gp')
+                if gp and float(gp) > 0:
+                    val = val / float(gp)
+                else:
+                    return None
+            return round(val, 2)
 
         # Score each player
         results = []
@@ -449,7 +482,8 @@ def run_builder():
                 pct  = pmap.get(pid) or pmap.get(int(pid))
                 if pct is not None:
                     w = impact_weights.get(stat, 1.0) if mode == 'impact' else 1.0
-                    breakdown.append({"stat": stat, "pctile": round(float(pct), 1), "weight": round(w, 4)})
+                    raw_val = get_raw_value(p, stat)
+                    breakdown.append({"stat": stat, "pctile": round(float(pct), 1), "weight": round(w, 4), "value": raw_val})
                     total_wpct += float(pct) * w
                     total_wgt  += w
                     covered    += 1

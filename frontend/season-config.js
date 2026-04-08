@@ -32,9 +32,9 @@
    * If currentSeason is not yet in the DB (e.g. early October), it is prepended.
    * Resolves when the dropdown is ready; never rejects (falls back to existing options).
    */
-  async function populateSeasonDropdown(selectEl, currentSeason) {
+  async function populateSeasonDropdown(selectEl, currentSeason, source = 'stats') {
     try {
-      const res = await fetch(`${_API}/api/seasons`);
+      const res = await fetch(`${_API}/api/seasons?source=${source}`);
       const data = await res.json();
       const all = [...new Set((data.seasons || []).map(s => s.season))].sort().reverse();
       if (!all.includes(currentSeason)) all.unshift(currentSeason);

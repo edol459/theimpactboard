@@ -1243,7 +1243,8 @@ document.getElementById('filterSeasonType').addEventListener('change', resetBrow
 // Populate season dropdown and set default season type to match
 populateSeasonDropdown(
   document.getElementById('filterSeason'),
-  computeCurrentSeason()
+  computeCurrentSeason(),
+  'games'
 ).then(() => {
   // Set season type to match the current default
   document.getElementById('filterSeasonType').value = computeCurrentSeasonType();

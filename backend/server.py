@@ -107,16 +107,21 @@ _ensure_tables()
 @app.route("/api/seasons")
 def get_seasons():
     try:
+        source = request.args.get("source", "stats")  # "stats" | "games"
         conn = get_conn()
         cur  = conn.cursor()
-        cur.execute("""
-            SELECT DISTINCT season, season_type
-            FROM player_seasons
-            UNION
-            SELECT DISTINCT season, season_type
-            FROM games
-            ORDER BY season DESC, season_type
-        """)
+        if source == "games":
+            cur.execute("""
+                SELECT DISTINCT season, season_type
+                FROM games
+                ORDER BY season DESC, season_type
+            """)
+        else:
+            cur.execute("""
+                SELECT DISTINCT season, season_type
+                FROM player_seasons
+                ORDER BY season DESC, season_type
+            """)
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify({"seasons": rows})

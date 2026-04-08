@@ -1077,13 +1077,17 @@ def get_live_boxscore(game_id):
             }
 
         def norm_team(t):
+            players_raw = t.get("players", [])
+            score = t.get("score", 0) or 0
+            if not score:
+                score = sum(int(p.get("statistics", {}).get("points", 0) or 0) for p in players_raw)
             return {
                 "teamId": t.get("teamId"),
                 "teamCity": t.get("teamCity", ""),
                 "teamName": t.get("teamName", ""),
                 "teamTricode": t.get("teamTricode", ""),
-                "score": t.get("score", 0),
-                "players": [norm_player(p) for p in t.get("players", [])],
+                "score": score,
+                "players": [norm_player(p) for p in players_raw],
             }
 
         game_meta = bd.get("game", {})

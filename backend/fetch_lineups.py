@@ -70,17 +70,30 @@ def fetch_team(cur, team_abbr, season):
         print(f"roster error: {e}", end=" | ", flush=True)
 
     print("lineups...", end=" ", flush=True)
-    ep = LeagueDashLineups(
-        team_id_nullable=team_id,
-        group_quantity=5,
-        season=season,
-        season_type_all_star="Regular Season",
-        measure_type_detailed_defense="Advanced",
-        per_mode_detailed="Totals",
-        timeout=60,
-    )
-    time.sleep(0.8)
-    df = ep.get_data_frames()[0]
+    df = None
+    for attempt in range(3):
+        try:
+            ep = LeagueDashLineups(
+                team_id_nullable=team_id,
+                group_quantity=5,
+                season=season,
+                season_type_all_star="Regular Season",
+                measure_type_detailed_defense="Advanced",
+                per_mode_detailed="Totals",
+                timeout=60,
+            )
+            time.sleep(0.8)
+            df = ep.get_data_frames()[0]
+            break
+        except Exception as e:
+            if attempt < 2:
+                print(f"lineup error (attempt {attempt+1}): {e}, retrying...", end=" ", flush=True)
+                time.sleep(5)
+            else:
+                print(f"lineup error: {e}")
+                return
+    if df is None:
+        return
 
     if df.empty:
         print("no lineups found")

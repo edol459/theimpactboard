@@ -1038,19 +1038,66 @@ def preview_page():
 @app.route("/api/live/boxscore/<game_id>")
 @app.route("/api/live/boxscore/<game_id>")
 def get_live_boxscore(game_id):
-    """Proxy NBA CDN live boxscore + auto-upsert completed games."""
+    """Proxy NBA CDN live boxscore + auto-upsert completed games.
+    Falls back to nba_api BoxScoreTraditionalV3 for historical games."""
+    # Try CDN first (works for current season)
     try:
         url  = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
         resp = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         game = data.get("game", data)
- 
-        # Auto-upsert if game is final (status 3)
         if game.get("gameStatus") == 3:
             _upsert_game_from_boxscore(game_id, game)
- 
         return jsonify(game)
+    except Exception:
+        pass
+
+    # CDN failed — fall back to nba_api for historical games
+    try:
+        from nba_api.stats.endpoints import boxscoretraditionalv3
+        box = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id, timeout=30)
+        raw = box.get_dict()
+        # Normalise to the same shape the frontend expects
+        bd = raw.get("boxScoreTraditional", {})
+        home_team = bd.get("homeTeam", {})
+        away_team = bd.get("awayTeam", {})
+
+        def norm_player(p):
+            s = p.get("statistics", {})
+            return {
+                "personId": p.get("personId"),
+                "name": f"{p.get('firstName','')} {p.get('familyName','')}".strip(),
+                "nameI": p.get("nameI", ""),
+                "jerseyNum": p.get("jerseyNum", ""),
+                "position": p.get("position", ""),
+                "starter": p.get("starter", "0"),
+                "played": p.get("played", "1"),
+                "statistics": s,
+            }
+
+        def norm_team(t):
+            return {
+                "teamId": t.get("teamId"),
+                "teamCity": t.get("teamCity", ""),
+                "teamName": t.get("teamName", ""),
+                "teamTricode": t.get("teamTricode", ""),
+                "score": t.get("score", 0),
+                "players": [norm_player(p) for p in t.get("players", [])],
+            }
+
+        game_meta = bd.get("game", {})
+        result = {
+            "gameId": game_id,
+            "gameStatus": 3,
+            "gameStatusText": "Final",
+            "homeTeam": norm_team(home_team),
+            "awayTeam": norm_team(away_team),
+            "gameTimeUTC": game_meta.get("gameTimeUTC", ""),
+            "period": game_meta.get("period", 4),
+            "gameClock": "",
+        }
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 404
  
@@ -1112,13 +1159,25 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
 # ── /api/live/pbp/<game_id> ───────────────────────────────────────
 @app.route("/api/live/pbp/<game_id>")
 def get_live_pbp(game_id):
-    """Proxy NBA CDN live play-by-play."""
+    """Proxy NBA CDN live play-by-play.
+    Falls back to nba_api PlayByPlayV3 for historical games."""
+    # Try CDN first
     try:
         url = f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
         resp = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         return jsonify(data.get("game", data))
+    except Exception:
+        pass
+
+    # Fall back to nba_api for historical games
+    try:
+        from nba_api.stats.endpoints import playbyplayv3
+        pbp = playbyplayv3.PlayByPlayV3(game_id=game_id, timeout=30)
+        raw = pbp.get_dict()
+        actions = raw.get("game", {}).get("actions", [])
+        return jsonify({"gameId": game_id, "actions": actions})
     except Exception as e:
         return jsonify({"error": str(e)}), 404
 

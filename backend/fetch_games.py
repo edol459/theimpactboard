@@ -64,17 +64,27 @@ def fetch_season_type(season_type_label: str, season_type_api: str):
     season_api = normalize_season(SEASON)
     print(f"\n📅 Fetching {season_api} {season_type_label}...")
 
-    try:
-        finder = leaguegamefinder.LeagueGameFinder(
-            season_nullable=season_api,
-            league_id_nullable="00",
-            season_type_nullable=season_type_api,
-        )
-        time.sleep(1)
-        df = finder.get_data_frames()[0]
-    except Exception as e:
-        print(f"   ❌ NBA API error: {e}")
-        return 0
+    df = None
+    for attempt in range(1, 4):
+        try:
+            if attempt > 1:
+                wait = attempt * 10
+                print(f"   ⏳ Retry {attempt}/3 in {wait}s...")
+                time.sleep(wait)
+            finder = leaguegamefinder.LeagueGameFinder(
+                season_nullable=season_api,
+                league_id_nullable="00",
+                season_type_nullable=season_type_api,
+                timeout=60,
+            )
+            time.sleep(1)
+            df = finder.get_data_frames()[0]
+            break
+        except Exception as e:
+            print(f"   ⚠️  Attempt {attempt} failed: {e}")
+            if attempt == 3:
+                print(f"   ❌ All retries exhausted.")
+                return 0
 
     if df.empty:
         print("   ℹ️  No games found.")

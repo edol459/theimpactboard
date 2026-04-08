@@ -138,6 +138,7 @@ def run():
     # so percentiles reflect per-game rate, not volume
     TOTAL_KEYS = {
         'drives', 'drive_fga', 'drive_fgm', 'drive_pts', 'drive_passes', 'drive_pf', 'drive_tov',
+        'bad_pass_tov', 'lost_ball_tov',
         'passes_made', 'passes_received',
         'ast_pts_created', 'potential_ast',
         'touches', 'paint_touches', 'elbow_touches',
@@ -187,6 +188,39 @@ def run():
                 updated_at = NOW()
         """, (SEASON, SEASON_TYPE, stat, json.dumps(pct_map)))
 
+        upserted += 1
+
+    # ── Derived stats (computed from multiple columns) ─────────────
+    # potential_ast / bad_pass_tov — both are season totals so GP cancels;
+    # the ratio is "how many potential assists per bad-pass turnover"
+    derived = [
+        (
+            "pot_ast_per_bad_pass_tov",
+            [
+                (int(r["player_id"]), float(r["potential_ast"]) / float(r["bad_pass_tov"]))
+                for r in rows
+                if r.get("potential_ast") is not None
+                and r.get("bad_pass_tov") is not None
+                and float(r["bad_pass_tov"]) > 0
+            ],
+            False,  # higher is better
+        ),
+    ]
+
+    for stat_key, pairs, invert in derived:
+        if len(pairs) < 5:
+            skipped += 1
+            continue
+        pct_map = compute_pctiles(pairs)
+        if invert:
+            pct_map = {pid: round(100 - pct, 2) for pid, pct in pct_map.items()}
+        wcur.execute("""
+            INSERT INTO player_pctiles (season, season_type, stat_key, pctile_map, updated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (season, season_type, stat_key) DO UPDATE SET
+                pctile_map = EXCLUDED.pctile_map,
+                updated_at = NOW()
+        """, (SEASON, SEASON_TYPE, stat_key, json.dumps(pct_map)))
         upserted += 1
 
     conn.commit()

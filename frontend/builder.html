@@ -802,10 +802,23 @@ const ST = {
   builderSelected: [],
   builderResults:  [],
   impactMode: false,
+  availableKeys: null,  // null = not yet loaded; Set once loaded
 };
+
+async function loadAvailableKeys() {
+  try {
+    const res  = await fetch(`${API}/api/builder/stats?season=${encodeURIComponent(ST.season)}&season_type=${encodeURIComponent(ST.seasonType)}`);
+    const data = await res.json();
+    ST.availableKeys = new Set(data.stat_keys || []);
+  } catch {
+    ST.availableKeys = null;  // on error, show everything
+  }
+  renderStatList(document.getElementById('builder-search')?.value.trim().toLowerCase() || '');
+}
 
 document.getElementById('season-select').addEventListener('change', function() {
   ST.season = this.value;
+  loadAvailableKeys();
 });
 
 // ── Builder stat catalog ──────────────────────────────────────
@@ -859,8 +872,9 @@ const BUILDER_CATALOG = [
   { group: 'Playmaking', key: 'ft_ast',           label: 'FT AST/G' },
   { group: 'Playmaking', key: 'passes_made',      label: 'Passes Made/G' },
   { group: 'Playmaking', key: 'passes_received',  label: 'Passes Received/G' },
-  { group: 'Playmaking', key: 'bad_pass_tov',     label: 'Bad Pass TOV/G' },
-  { group: 'Playmaking', key: 'lost_ball_tov',    label: 'Lost Ball TOV/G' },
+  { group: 'Playmaking', key: 'bad_pass_tov',              label: 'Bad Pass TOV/G' },
+  { group: 'Playmaking', key: 'lost_ball_tov',             label: 'Lost Ball TOV/G' },
+  { group: 'Playmaking', key: 'pot_ast_per_bad_pass_tov',  label: 'Pot. AST / Bad Pass TOV' },
   { group: 'Playmaking', key: 'screen_ast_pts',   label: 'Screen AST Pts/G' },
   { group: 'Playmaking', key: 'drive_ast',        label: 'Drive AST/G' },
   { group: 'Playmaking', key: 'drive_passes',     label: 'Drive Passes/G' },
@@ -956,6 +970,7 @@ function renderStatList(filter = '') {
   const list = document.getElementById('builder-stat-list');
   const groups = {};
   for (const item of BUILDER_CATALOG) {
+    if (ST.availableKeys !== null && !ST.availableKeys.has(item.key)) continue;
     if (filter && !item.label.toLowerCase().includes(filter) && !item.key.includes(filter)) continue;
     if (!groups[item.group]) groups[item.group] = [];
     groups[item.group].push(item);
@@ -1204,6 +1219,7 @@ document.getElementById('builder-select-all').addEventListener('click', () => {
 });
 
 renderStatList();
+loadAvailableKeys();
 </script>
 <script>
 // ── Nav auth (shared across all pages) ───────────────────────

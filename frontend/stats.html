@@ -1581,7 +1581,7 @@ const STAT_CATS = {
           { key: 'darko_box',  label: 'Box DPM',     fmt: '2f' },
           { key: 'min',        label: 'MIN',        fmt: 'int' },
           { key: 'off_rating', label: 'ORtg',        fmt: '1f' },
-          { key: 'def_rating', label: 'DRtg',        fmt: '1f' },
+          { key: 'def_rating', label: 'DRtg',        fmt: '1f', invert: true },
           { key: 'net_rating', label: 'NRtg',        fmt: '1f' },
           { key: 'pie',        label: 'PIE',         fmt: 'pct' },
         ]
@@ -1597,7 +1597,7 @@ const STAT_CATS = {
           { key: 'war',        label: 'WAR',          fmt: '2f' },
           { key: 'min',        label: 'MIN',          fmt: 'int' },
           { key: 'off_rating', label: 'ORtg',         fmt: '1f' },
-          { key: 'def_rating', label: 'DRtg',         fmt: '1f' },
+          { key: 'def_rating', label: 'DRtg',         fmt: '1f', invert: true },
           { key: 'net_rating', label: 'NRtg',         fmt: '1f' },
           { key: 'pie',        label: 'PIE',          fmt: 'pct' },
         ]
@@ -1612,7 +1612,7 @@ const STAT_CATS = {
           { key: 'd_net_pts100', label: 'Def Net/100',  fmt: '2f' },
           { key: 'net_rating',   label: 'NRtg',         fmt: '1f' },
           { key: 'off_rating',   label: 'ORtg',         fmt: '1f' },
-          { key: 'def_rating',   label: 'DRtg',         fmt: '1f' },
+          { key: 'def_rating',   label: 'DRtg',         fmt: '1f', invert: true },
           { key: 'min',          label: 'MIN',          fmt: 'int' },
         ]
       },
@@ -1627,7 +1627,7 @@ const STAT_CATS = {
           { key: 'clutch_usg_pct',    label: 'Clutch USG%',  fmt: 'pct' },
           { key: 'clutch_min',        label: 'Clutch MIN',   fmt: '1f' },
           { key: 'off_rating',        label: 'ORtg',        fmt: '1f' },
-          { key: 'def_rating',        label: 'DRtg',        fmt: '1f' },
+          { key: 'def_rating',        label: 'DRtg',        fmt: '1f', invert: true },
           { key: 'net_rating',        label: 'NRtg',        fmt: '1f' },
           { key: 'ts_pct',            label: 'TS%',         fmt: 'pct' },
           { key: 'usg_pct',           label: 'USG%',        fmt: 'pct' },
@@ -1662,7 +1662,7 @@ const STAT_CATS = {
       },
       shot_difficulty: {
         label: 'Shot Difficulty',
-        defaultSort: 'sq_avg_shot_quality',
+        defaultSort: 'sq_fg_pct_above_expected',
         cols: [
           ...BASE_COLS,
           { key: 'sq_avg_shot_quality',      label: 'Avg Shot Quality',    fmt: '2f' },
@@ -1715,7 +1715,7 @@ const STAT_CATS = {
         cols: [
           ...BASE_COLS,
           { key: 'off_rating', label: 'ORtg',    fmt: '1f' },
-          { key: 'def_rating', label: 'DRtg',    fmt: '1f' },
+          { key: 'def_rating', label: 'DRtg',    fmt: '1f', invert: true },
           { key: 'net_rating', label: 'NRtg',    fmt: '1f' },
           { key: 'ts_pct',     label: 'TS%',     fmt: 'pct' },
           { key: 'efg_pct',    label: 'eFG%',    fmt: 'pct' },
@@ -1998,7 +1998,7 @@ const STAT_CATS = {
         defaultSort: 'def_rating',
         cols: [
           ...BASE_COLS,
-          { key: 'def_rating',      label: 'DRtg',        fmt: '1f'  },
+          { key: 'def_rating',      label: 'DRtg',        fmt: '1f', invert: true  },
           { key: 'off_rating',      label: 'ORtg',        fmt: '1f'  },
           { key: 'net_rating',      label: 'NRtg',        fmt: '1f'  },
           { key: 'def_ws',          label: 'Def WS',      fmt: '2f'  },
@@ -2613,7 +2613,7 @@ function renderSubTabs(cat) {
       renderFilterPanel();
       const sub = STAT_CATS[ST.statCat].subs[ST.statGroup];
       ST.sortCol = sub?.defaultSort || 'pts';
-      ST.sortDir = 'desc';
+      ST.sortDir = LOWER_IS_BETTER.has(ST.sortCol) ? 'asc' : 'desc';
       renderStatsTable();
     });
   });
@@ -2628,7 +2628,7 @@ document.querySelectorAll('.stat-cat-btn').forEach(btn => {
     ST.statGroup = defaultGroup;
     const sub = STAT_CATS[ST.statCat].subs[defaultGroup];
     ST.sortCol = sub?.defaultSort || 'pts';
-    ST.sortDir = 'desc';
+    ST.sortDir = LOWER_IS_BETTER.has(ST.sortCol) ? 'asc' : 'desc';
     renderSubTabs(ST.statCat);
     renderStatsTable();
   });
@@ -2715,6 +2715,7 @@ function showDemoData() {
 // ── Render stats table ────────────────────────────────────────
 // Fmt types that represent counting stats and scale with games played
 const COUNTING_FMTS = new Set(['1f', 'int']);
+const LOWER_IS_BETTER = new Set(['def_rating']);
 
 // Columns that are already raw totals — never multiply by GP
 const RAW_TOTAL_KEYS = new Set(['gp', 'min']);
@@ -2814,7 +2815,7 @@ function renderStatsTable() {
         ST.sortDir = ST.sortDir === 'desc' ? 'asc' : 'desc';
       } else {
         ST.sortCol = col;
-        ST.sortDir = 'desc';
+        ST.sortDir = LOWER_IS_BETTER.has(col) ? 'asc' : 'desc';
       }
       renderStatsTable();
     });

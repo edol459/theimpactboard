@@ -198,6 +198,23 @@ nav {
 }
 .info-wrap:hover .info-tooltip { display: block; }
 
+/* ── Team filter dropdown ── */
+.team-select {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink2);
+  background: var(--paper2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: none;
+  height: 32px;
+  transition: border-color 0.15s;
+}
+.team-select:focus { border-color: var(--orange); }
+
 /* ── Toggle buttons (N-games, stat tabs) ── */
 .toggle-group {
   display: flex;
@@ -469,6 +486,9 @@ nav {
       </div>
     </div>
     <div class="header-controls">
+      <select class="team-select" id="team-select">
+        <option value="">All Teams</option>
+      </select>
       <div class="toggle-group" id="n-toggle">
         <button class="toggle-btn active" data-n="5">Last 5</button>
         <button class="toggle-btn" data-n="10">Last 10</button>
@@ -496,11 +516,12 @@ nav {
 <script>
 // ── State ──────────────────────────────────────────────────────
 const API = '';
-let season     = '';
-let seasonType = '';
-let currentN   = 5;
+let season      = '';
+let seasonType  = '';
+let currentN    = 5;
 let currentStat = 'pts';
-let trendsData  = null;   // cached response keyed by N
+let currentTeam = '';     // '' = all teams
+let trendsData  = null;
 const cache     = {};     // cache[n] = API response
 const chartMap  = {};     // chartMap[cardId] = Chart instance
 
@@ -564,12 +585,31 @@ async function loadTrends() {
     const url = `${API}/api/trends?season=${encodeURIComponent(season)}&season_type=${encodeURIComponent(seasonType)}&n=${currentN}`;
     const r   = await fetch(url);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    trendsData     = await r.json();
+    trendsData      = await r.json();
     cache[currentN] = trendsData;
+    populateTeams();
     renderBoards();
   } catch (e) {
     content.innerHTML = `<div class="state-msg">Error loading trends: ${e.message}</div>`;
   }
+}
+
+// ── Populate team dropdown from current trends data ────────────
+function populateTeams() {
+  if (!trendsData?.stats) return;
+  const teams = new Set();
+  for (const statData of Object.values(trendsData.stats)) {
+    for (const p of [...statData.risers, ...statData.fallers]) {
+      if (p.team_abbr) teams.add(p.team_abbr);
+    }
+  }
+  const sel = document.getElementById('team-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">All Teams</option>' +
+    [...teams].sort().map(t => `<option value="${t}">${t}</option>`).join('');
+  // Restore previous selection if still valid
+  if (prev && teams.has(prev)) sel.value = prev;
+  else { sel.value = ''; currentTeam = ''; }
 }
 
 // ── Render leaderboards ────────────────────────────────────────
@@ -593,8 +633,9 @@ function renderBoards() {
   Object.values(chartMap).forEach(c => c.destroy());
   for (const k in chartMap) delete chartMap[k];
 
-  const risers  = statData.risers.slice(0, 20);
-  const fallers = statData.fallers.slice(0, 20);
+  const filterTeam = p => !currentTeam || p.team_abbr === currentTeam;
+  const risers  = statData.risers.filter(filterTeam).slice(0, 20);
+  const fallers = statData.fallers.filter(filterTeam).slice(0, 20);
 
   content.innerHTML = `
     <div class="boards">
@@ -890,6 +931,11 @@ document.getElementById('stat-tabs').addEventListener('click', e => {
   document.querySelectorAll('.stat-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   currentStat = btn.dataset.stat;
+  renderBoards();
+});
+
+document.getElementById('team-select').addEventListener('change', e => {
+  currentTeam = e.target.value;
   renderBoards();
 });
 

@@ -32,7 +32,7 @@ Playoffs (optional, run after regular season):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STEP 2 — Team rosters & lineups
 Writes to:  team_rosters, team_lineups
-Powers:     On/Off tool
+Powers:     WoWY tool
 Time:       ~15 min
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -95,9 +95,9 @@ TABLE REFERENCE
   player_pctiles     — percentile rank per stat per season
                        queried by: /api/builder, /api/stat-keys
   team_rosters       — players per team per season
-                       queried by: /api/on-off (roster panel)
+                       queried by: /api/wowy (roster panel)
   team_lineups       — 5-man lineup on/off stats per team per season
-                       queried by: /api/on-off
+                       queried by: /api/wowy
   games              — completed game records (populated automatically
                        by the live scoreboard system, not by ingest scripts)
   game_reviews       — user ratings/reviews, tied to games table

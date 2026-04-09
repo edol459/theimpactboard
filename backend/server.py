@@ -688,6 +688,44 @@ def get_scoreboard():
     if is_past and date in _past_sb_cache:
         return jsonify(_past_sb_cache[date])
 
+    # For past dates, try the DB first (avoids nba_api outbound call that
+    # gets rate-limited / blocked on cloud IPs in production).
+    if is_past:
+        try:
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute("""
+                SELECT game_id, home_team_abbr, away_team_abbr,
+                       home_score, away_score
+                FROM games
+                WHERE game_date = %s
+                ORDER BY game_id
+            """, (date,))
+            db_rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            if db_rows:
+                games = [
+                    {
+                        "gameId":         row["game_id"],
+                        "gameStatus":     3,
+                        "gameStatusText": "Final",
+                        "period":         0,
+                        "gameClock":      "",
+                        "gameTimeUTC":    "",
+                        "away": {"abbr": row["away_team_abbr"], "score": row["away_score"],
+                                 "wins": None, "losses": None},
+                        "home": {"abbr": row["home_team_abbr"], "score": row["home_score"],
+                                 "wins": None, "losses": None},
+                    }
+                    for row in db_rows
+                ]
+                payload = {"games": games, "date": date}
+                _past_sb_cache[date] = payload
+                return jsonify(payload)
+        except Exception:
+            pass  # Fall through to nba_api
+
     try:
         from nba_api.stats.endpoints import scoreboardv3
 
@@ -695,6 +733,7 @@ def get_scoreboard():
         board = scoreboardv3.ScoreboardV3(
             game_date=dt.strftime("%Y-%m-%d"),
             league_id="00",
+            timeout=30,
         )
         gh_df = board.game_header.get_data_frame()
 
@@ -845,21 +884,37 @@ def get_top_performers():
         except Exception as e:
             return jsonify({"error": str(e), "players": [], "date": ""}), 200
     else:
-        # Get game IDs for this historical date
+        # Get game IDs for this historical date — try DB first to avoid
+        # nba_api calls that get rate-limited on cloud IPs.
+        actual_date = date
+        raw_games = []
         try:
-            from nba_api.stats.endpoints import scoreboardv3
-            dt = _dt.strptime(date, "%Y-%m-%d")
-            board = scoreboardv3.ScoreboardV3(
-                game_date=dt.strftime("%Y-%m-%d"),
-                league_id="00",
-            )
-            gh_df = board.game_header.get_data_frame()
-            raw_games = [{"gameId": str(r.get("gameId", "") or r.get("GAME_ID", ""))}
-                         for _, r in gh_df.iterrows()
-                         if r.get("gameId") or r.get("GAME_ID")]
-            actual_date = date
-        except Exception as e:
-            return jsonify({"error": str(e), "players": [], "date": date}), 200
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute("SELECT game_id FROM games WHERE game_date = %s", (date,))
+            db_rows = cur.fetchall()
+            cur.close()
+            conn.close()
+            raw_games = [{"gameId": r["game_id"]} for r in db_rows]
+        except Exception:
+            pass
+
+        if not raw_games:
+            # Fall back to nba_api with a timeout so we don't hang forever
+            try:
+                from nba_api.stats.endpoints import scoreboardv3
+                dt = _dt.strptime(date, "%Y-%m-%d")
+                board = scoreboardv3.ScoreboardV3(
+                    game_date=dt.strftime("%Y-%m-%d"),
+                    league_id="00",
+                    timeout=30,
+                )
+                gh_df = board.game_header.get_data_frame()
+                raw_games = [{"gameId": str(r.get("gameId", "") or r.get("GAME_ID", ""))}
+                             for _, r in gh_df.iterrows()
+                             if r.get("gameId") or r.get("GAME_ID")]
+            except Exception as e:
+                return jsonify({"error": str(e), "players": [], "date": date}), 200
 
     def get_gid(g):
         return g.get("gameId") or g.get("GAME_ID") or ""
@@ -1238,8 +1293,91 @@ def builder_page():
 def stats_page():
     return app.send_static_file("stats.html")
 
-@app.route("/api/onoff")
-def get_onoff():
+_PBPSTATS_TEAM_IDS = {
+    "ATL":1610612737,"BOS":1610612738,"BKN":1610612751,"CHA":1610612766,
+    "CHI":1610612741,"CLE":1610612739,"DAL":1610612742,"DEN":1610612743,
+    "DET":1610612765,"GSW":1610612744,"HOU":1610612745,"IND":1610612754,
+    "LAC":1610612746,"LAL":1610612747,"MEM":1610612763,"MIA":1610612748,
+    "MIL":1610612749,"MIN":1610612750,"NOP":1610612740,"NYK":1610612752,
+    "OKC":1610612760,"ORL":1610612753,"PHI":1610612755,"PHX":1610612756,
+    "POR":1610612757,"SAC":1610612758,"SAS":1610612759,"TOR":1610612761,
+    "UTA":1610612762,"WAS":1610612764,
+}
+
+# Cache pbpstats lineup responses: key=(team_abbr, season, leverage) → (fetched_at, lineups)
+# Past seasons never change so they're kept indefinitely; current season TTL is 1 hour.
+import time as _time
+_pbp_cache: dict = {}
+_PBP_CURRENT_TTL = 3600  # 1 hour for live season
+
+_ALL_LEV = {"Low", "Medium", "High", "VeryHigh"}
+
+def _fetch_pbp_lineups(team_abbr, season, leverage):
+    """Return parsed lineup list from pbpstats, using in-memory cache.
+
+    leverage: comma-separated string of leverage types to include,
+              e.g. "Medium,High,VeryHigh". Pass all four (or empty) for no filter.
+    """
+    # Normalise to a frozenset for a stable cache key
+    lev_set = frozenset(v.strip() for v in leverage.split(",") if v.strip()) if leverage else _ALL_LEV
+    cache_key = (team_abbr, season, lev_set)
+    current_season = get_current_season()
+    now = _time.monotonic()
+
+    if cache_key in _pbp_cache:
+        fetched_at, cached = _pbp_cache[cache_key]
+        if season != current_season or (now - fetched_at) < _PBP_CURRENT_TTL:
+            return cached
+
+    team_id = _PBPSTATS_TEAM_IDS[team_abbr]
+    params = {
+        "TeamId":     team_id,
+        "Season":     season,
+        "SeasonType": "Regular Season",
+        "Type":       "Team",
+    }
+
+    # Build URL manually so commas in Leverage are NOT percent-encoded —
+    # pbpstats expects literal commas and rejects %2C.
+    import urllib.parse as _urlparse
+    base_url = "https://api.pbpstats.com/get-wowy-stats/nba?" + _urlparse.urlencode(params)
+    if lev_set and lev_set != _ALL_LEV:
+        base_url += "&Leverage=" + ",".join(lev_set)
+
+    print(f"[pbpstats] GET {base_url}")
+    try:
+        resp = _requests.get(base_url, timeout=25)
+        resp.raise_for_status()
+    except _requests.exceptions.Timeout:
+        print(f"[pbpstats] TIMEOUT after 50s")
+        raise
+    except Exception as _e:
+        print(f"[pbpstats] ERROR {type(_e).__name__}: {_e}")
+        raise
+
+    lineups = []
+    for row in resp.json().get("multi_row_table_data", []):
+        if not row or not row.get("EntityId") or not row.get("Minutes"):
+            continue
+        pids     = [p for p in row["EntityId"].split("-") if p.strip()]
+        names    = [n.strip() for n in row.get("Name", "").split(",")]
+        off_poss = row.get("OffPoss") or 0
+        def_poss = row.get("DefPoss") or 0
+        points   = row.get("Points") or 0
+        opp_pts  = row.get("OpponentPoints") or 0
+        ortg = round(points  / off_poss * 100, 1) if off_poss else None
+        drtg = round(opp_pts / def_poss * 100, 1) if def_poss else None
+        net  = round(ortg - drtg, 1) if ortg is not None and drtg is not None else None
+        lineups.append({"pids": pids, "_ids": pids, "_names": names,
+                        "min": round(row["Minutes"]),
+                        "ortg": ortg, "drtg": drtg, "net": net})
+
+    _pbp_cache[cache_key] = (now, lineups)
+    return lineups
+
+@app.route("/api/wowy/roster")
+def get_wowy_roster():
+    """Fast endpoint: returns only roster from DB, no pbpstats call."""
     team_abbr = request.args.get("team", "").upper()
     season    = request.args.get("season", get_current_season())
 
@@ -1249,7 +1387,82 @@ def get_onoff():
     try:
         conn = get_conn()
         cur  = conn.cursor()
+        cur.execute("""
+            SELECT player_id, player_name, number, position
+            FROM team_rosters
+            WHERE team_abbr = %s AND season = %s
+            ORDER BY player_name
+        """, (team_abbr, season))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
 
+        return jsonify({
+            "roster": [
+                {"player_id": r["player_id"], "player_name": r["player_name"],
+                 "number": r["number"] or "", "position": r["position"] or ""}
+                for r in rows
+            ]
+        })
+    except Exception as exc:
+        import traceback
+        return jsonify({"error": str(exc), "trace": traceback.format_exc()}), 500
+
+@app.route("/api/wowy/lineups")
+def get_wowy_lineups():
+    """Returns leverage-filtered lineup data from wowy_lineups table (pre-fetched locally)."""
+    team_abbr = request.args.get("team", "").upper()
+    season    = request.args.get("season", get_current_season())
+
+    if not team_abbr:
+        return jsonify({"error": "team param required"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT group_id, player_ids, player_names, min, ortg, drtg, net
+            FROM wowy_lineups
+            WHERE team_abbr = %s AND season = %s
+            ORDER BY min DESC
+        """, (team_abbr, season))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        lineups = [
+            {
+                "pids":   list(r["player_ids"]),
+                "_ids":   list(r["player_ids"]),
+                "_names": list(r["player_names"]),
+                "min":    r["min"],
+                "ortg":   float(r["ortg"]) if r["ortg"] is not None else None,
+                "drtg":   float(r["drtg"]) if r["drtg"] is not None else None,
+                "net":    float(r["net"])  if r["net"]  is not None else None,
+            }
+            for r in rows
+        ]
+        return jsonify({"team": team_abbr, "season": season, "lineups": lineups})
+    except Exception as exc:
+        import traceback
+        return jsonify({"error": str(exc), "trace": traceback.format_exc()}), 500
+
+@app.route("/api/wowy")
+def get_wowy():
+    team_abbr = request.args.get("team", "").upper()
+    season    = request.args.get("season", get_current_season())
+    leverage  = request.args.get("leverage", "Low,Medium,High,VeryHigh")
+
+    if not team_abbr:
+        return jsonify({"error": "team param required"}), 400
+
+    if team_abbr not in _PBPSTATS_TEAM_IDS:
+        return jsonify({"error": f"Unknown team: {team_abbr}"}), 400
+
+    try:
+        # ── Roster from DB ────────────────────────────────────────
+        conn = get_conn()
+        cur  = conn.cursor()
         cur.execute("""
             SELECT player_id, player_name, number, position
             FROM team_rosters
@@ -1257,58 +1470,40 @@ def get_onoff():
             ORDER BY player_name
         """, (team_abbr, season))
         roster_rows = cur.fetchall()
-
-        cur.execute("""
-            SELECT player_ids, min, ortg, drtg, net, gp
-            FROM team_lineups
-            WHERE team_abbr = %s AND season = %s
-        """, (team_abbr, season))
-        lineup_rows = cur.fetchall()
-
         cur.close()
         conn.close()
 
-        if not roster_rows and not lineup_rows:
-            return jsonify({"error": f"No data found for {team_abbr} {season}. Run fetch_lineups.py first."}), 404
-
         roster = [
-            {
-                "player_id":   r["player_id"],
-                "player_name": r["player_name"],
-                "number":      r["number"] or "",
-                "position":    r["position"] or "",
-            }
+            {"player_id": r["player_id"], "player_name": r["player_name"],
+             "number": r["number"] or "", "position": r["position"] or ""}
             for r in roster_rows
         ]
 
-        lineups = [
-            {
-                "pids":     list(r["player_ids"]),
-                "min":      r["min"],
-                "ortg":     r["ortg"],
-                "drtg":     r["drtg"],
-                "net":      r["net"],
-                "gp":       r["gp"],
-            }
-            for r in lineup_rows
-        ]
+        # ── Lineups from pbpstats (cached) ────────────────────────
+        lineups = _fetch_pbp_lineups(team_abbr, season, leverage)
+
+        if not roster and not lineups:
+            return jsonify({"error": f"No data found for {team_abbr} {season}."}), 404
 
         return jsonify({
-            "team":    team_abbr,
-            "season":  season,
-            "roster":  roster,
-            "lineups": lineups,
+            "team":     team_abbr,
+            "season":   season,
+            "leverage": leverage,
+            "roster":   roster,
+            "lineups":  lineups,
         })
 
+    except _requests.exceptions.Timeout:
+        return jsonify({"error": "pbpstats API timed out. Try again."}), 504
     except Exception as exc:
         import traceback
         return jsonify({"error": str(exc), "trace": traceback.format_exc()}), 500
 
-# ── Serve onoff.html ──────────────────────────────────────────
-@app.route("/onoff")
-@app.route("/onoff.html")
-def onoff_page():
-    return app.send_static_file("onoff.html")
+# ── Serve wowy.html ──────────────────────────────────────────
+@app.route("/wowy")
+@app.route("/wowy.html")
+def wowy_page():
+    return app.send_static_file("wowy.html")
 
 
 

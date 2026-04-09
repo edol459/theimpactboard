@@ -14,6 +14,7 @@ Endpoints:
 
 import os
 import json
+import math
 from datetime import date
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -2503,6 +2504,390 @@ def user_profile(user_id):
 @app.route("/compare.html")
 def compare_page():
     return app.send_static_file("compare.html")
+
+
+# ── Matchups API ──────────────────────────────────────────────────
+
+_MATCHUP_SORT_LEADERS  = {'adj_delta', 'impact', 'possessions', 'min', 'avg_opp_fg_pct', 'avg_matchup_fg_pct'}
+_MATCHUP_SORT_PAIRINGS = {'adj_delta', 'possessions', 'opp_season_fg_pct', 'fg_pct'}
+
+@app.route("/api/matchups/leaders")
+def matchups_leaders():
+    """Top defenders ranked by opponent-adjusted FG% allowed, computed from player_matchups."""
+    season      = request.args.get("season",      DEFAULT_SEASON)
+    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+    min_poss    = max(0, int(request.args.get("min_poss", 200)))
+    sort_col    = request.args.get("sort", "impact")
+    sort_dir    = request.args.get("dir",  "desc").lower()
+    limit       = min(int(request.args.get("limit", 150)), 300)
+    pos_filter  = request.args.get("pos",  "ALL").strip().upper()
+    team_filter = request.args.get("team", "ALL").strip().upper()
+
+    if sort_col not in _MATCHUP_SORT_LEADERS:
+        sort_col = "adj_delta"
+    dir_sql = "ASC" if sort_dir == "asc" else "DESC"
+
+    col_map = {
+        "adj_delta":          "adj_delta",
+        "impact":             "impact",
+        "possessions":        "possessions",
+        "min":                "ps.min",
+        "avg_opp_fg_pct":     "avg_opp_fg_pct",
+        "avg_matchup_fg_pct": "avg_matchup_fg_pct",
+    }
+
+    extra_where  = []
+    extra_params = []
+    if pos_filter  != "ALL":
+        extra_where.append("p.position_group = %s")
+        extra_params.append(pos_filter)
+    if team_filter != "ALL":
+        extra_where.append("ps.team_abbr = %s")
+        extra_params.append(team_filter)
+    extra_sql = ("AND " + " AND ".join(extra_where)) if extra_where else ""
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"""
+            SELECT
+                p.player_id,
+                p.player_name,
+                p.position_group,
+                ps.team_abbr,
+                SUM(pm.adj_delta * pm.possessions)         / NULLIF(SUM(pm.possessions), 0) AS adj_delta,
+                SUM(pm.adj_delta * pm.possessions)                                           AS impact,
+                SUM(pm.opp_season_fg_pct * pm.possessions) / NULLIF(SUM(pm.possessions), 0) AS avg_opp_fg_pct,
+                SUM(pm.fg_pct * pm.possessions)            / NULLIF(SUM(pm.possessions), 0) AS avg_matchup_fg_pct,
+                SUM(pm.possessions) AS possessions,
+                ps.min
+            FROM player_matchups pm
+            JOIN players p ON pm.defender_id = p.player_id
+            LEFT JOIN player_seasons ps ON pm.defender_id = ps.player_id
+                AND pm.season = ps.season AND pm.season_type = ps.season_type
+            WHERE pm.season = %s AND pm.season_type = %s
+              {extra_sql}
+            GROUP BY p.player_id, p.player_name, p.position_group, ps.team_abbr, ps.min
+            HAVING SUM(pm.possessions) >= %s
+            ORDER BY {col_map[sort_col]} {dir_sql} NULLS LAST
+            LIMIT %s
+        """, [season, season_type] + extra_params + [min_poss, limit])
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"defenders": rows, "season": season, "n": len(rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/matchups/pairings")
+def matchups_pairings():
+    """Individual defender×attacker pairing results."""
+    season      = request.args.get("season",      DEFAULT_SEASON)
+    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+    min_poss    = max(0, int(request.args.get("min_poss", 100)))
+    sort_col    = request.args.get("sort", "adj_delta")
+    sort_dir    = request.args.get("dir",  "desc").lower()
+    limit       = min(int(request.args.get("limit", 150)), 300)
+    pos_filter  = request.args.get("pos",  "ALL").strip().upper()
+    team_filter = request.args.get("team", "ALL").strip().upper()
+
+    if sort_col not in _MATCHUP_SORT_PAIRINGS:
+        sort_col = "adj_delta"
+    dir_sql = "ASC" if sort_dir == "asc" else "DESC"
+
+    col_map = {
+        "adj_delta":         "pm.adj_delta",
+        "possessions":       "pm.possessions",
+        "opp_season_fg_pct": "pm.opp_season_fg_pct",
+        "fg_pct":            "pm.fg_pct",
+    }
+
+    extra_where  = []
+    extra_params = []
+    if pos_filter  != "ALL":
+        extra_where.append("dp.position_group = %s")
+        extra_params.append(pos_filter)
+    if team_filter != "ALL":
+        extra_where.append("dps.team_abbr = %s")
+        extra_params.append(team_filter)
+    extra_sql = ("AND " + " AND ".join(extra_where)) if extra_where else ""
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"""
+            SELECT
+                dp.player_id   AS defender_id,
+                dp.player_name AS defender_name,
+                dps.team_abbr  AS defender_team,
+                op.player_id   AS attacker_id,
+                op.player_name AS attacker_name,
+                ops.team_abbr  AS attacker_team,
+                pm.possessions,
+                pm.fg_pct,
+                pm.opp_season_fg_pct,
+                pm.adj_delta,
+                pm.fga,
+                pm.fgm
+            FROM player_matchups pm
+            JOIN players dp ON pm.defender_id = dp.player_id
+            JOIN players op ON pm.offensive_player_id = op.player_id
+            LEFT JOIN player_seasons dps ON pm.defender_id = dps.player_id
+                AND dps.season = pm.season AND dps.season_type = pm.season_type
+            LEFT JOIN player_seasons ops ON pm.offensive_player_id = ops.player_id
+                AND ops.season = pm.season AND ops.season_type = pm.season_type
+            WHERE pm.season = %s AND pm.season_type = %s
+              AND pm.possessions >= %s
+              {extra_sql}
+            ORDER BY {col_map[sort_col]} {dir_sql} NULLS LAST
+            LIMIT %s
+        """, [season, season_type, min_poss] + extra_params + [limit])
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"pairings": rows, "season": season, "n": len(rows)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/matchups/defender/<int:player_id>")
+def matchups_defender(player_id):
+    """Full matchup card for a specific defender."""
+    season      = request.args.get("season",      DEFAULT_SEASON)
+    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        cur.execute("""
+            SELECT
+                p.player_id,
+                p.player_name,
+                p.position_group,
+                ps.team_abbr,
+                ps.matchup_def_fg_pct_adj AS adj_delta,
+                ps.matchup_poss           AS possessions,
+                ps.min
+            FROM player_seasons ps
+            JOIN players p ON ps.player_id = p.player_id
+            WHERE ps.player_id = %s AND ps.season = %s AND ps.season_type = %s
+        """, (player_id, season, season_type))
+        defender = cur.fetchone()
+
+        cur.execute("""
+            SELECT
+                op.player_id       AS attacker_id,
+                op.player_name     AS attacker_name,
+                ops.team_abbr      AS attacker_team,
+                op.position_group  AS attacker_pos,
+                pm.possessions,
+                pm.fg_pct,
+                pm.opp_season_fg_pct,
+                pm.adj_delta,
+                pm.fga,
+                pm.fgm
+            FROM player_matchups pm
+            JOIN players op ON pm.offensive_player_id = op.player_id
+            LEFT JOIN player_seasons ops ON pm.offensive_player_id = ops.player_id
+                AND ops.season = pm.season AND ops.season_type = pm.season_type
+            WHERE pm.defender_id = %s AND pm.season = %s AND pm.season_type = %s
+            ORDER BY pm.possessions DESC NULLS LAST
+        """, (player_id, season, season_type))
+        matchups = [dict(r) for r in cur.fetchall()]
+
+        cur.close(); conn.close()
+        if not defender:
+            return jsonify({"error": "Player not found"}), 404
+        return jsonify({"defender": dict(defender), "matchups": matchups, "season": season, "n": len(matchups)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/matchups")
+@app.route("/matchups.html")
+def matchups_page():
+    return app.send_static_file("matchups.html")
+
+
+# ── /api/trends ───────────────────────────────────────────────
+# Returns risers and fallers for each of the 5 tracked stats.
+# delta = avg of last N games  minus  avg of all prior games
+# Only players with >= 10 mpg in their last N games are included.
+# Players must have more than N games played so there are prior games to compare.
+
+TREND_STATS = [
+    {"key": "pts",    "label": "PPG"},
+    {"key": "ts_pct", "label": "TS%"},
+    {"key": "fg3m",   "label": "3PM"},
+    {"key": "ast",    "label": "APG"},
+    {"key": "reb",    "label": "RPG"},
+]
+
+def _safe(v):
+    """Convert float-like values to JSON-safe Python float. NaN/Inf → None."""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return v
+
+
+@app.route("/api/trends")
+def get_trends():
+    season      = request.args.get("season",      DEFAULT_SEASON)
+    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+    n           = int(request.args.get("n", 5))
+    if n not in (5, 10, 15):
+        n = 5
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        results = {}
+        all_player_ids = set()
+
+        for stat in TREND_STATS:
+            col = stat["key"]
+            # ts_pct and pts require a minimum FGA to be a valid data point
+            fga_gate = "AND fga >= 5" if col in ("ts_pct", "pts") else ""
+            cur.execute(f"""
+                WITH ranked AS (
+                    SELECT
+                        player_id,
+                        player_name,
+                        game_date,
+                        {col},
+                        min,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY player_id
+                            ORDER BY game_date DESC
+                        ) AS rn,
+                        COUNT(*) OVER (PARTITION BY player_id) AS total_games
+                    FROM player_gamelogs
+                    WHERE season = %s
+                      AND season_type = %s
+                      AND {col} IS NOT NULL
+                      AND min IS NOT NULL
+                      AND NOT ({col} = 'NaN'::real)
+                      {fga_gate}
+                ),
+                last_n AS (
+                    SELECT
+                        player_id,
+                        player_name,
+                        AVG({col})::numeric(7,4) AS last_n_avg,
+                        AVG(min)::numeric(6,2)   AS last_n_mpg,
+                        total_games
+                    FROM ranked
+                    WHERE rn <= %s
+                    GROUP BY player_id, player_name, total_games
+                    HAVING AVG(min) >= 10
+                ),
+                prior AS (
+                    SELECT
+                        player_id,
+                        AVG({col})::numeric(7,4) AS prior_avg
+                    FROM ranked
+                    WHERE rn > %s
+                    GROUP BY player_id
+                    HAVING COUNT(*) >= %s
+                )
+                SELECT
+                    l.player_id,
+                    l.player_name,
+                    l.last_n_avg,
+                    l.last_n_mpg,
+                    p.prior_avg,
+                    (l.last_n_avg - p.prior_avg)::numeric(7,4) AS delta
+                FROM last_n l
+                JOIN prior p ON p.player_id = l.player_id
+                ORDER BY delta DESC
+            """, (season, season_type, n, n, n))
+
+            rows = [dict(r) for r in cur.fetchall()]
+            for r in rows:
+                for k in ("last_n_avg", "last_n_mpg", "prior_avg", "delta"):
+                    r[k] = _safe(r[k])
+                all_player_ids.add(r["player_id"])
+
+            risers  = [r for r in rows if r["delta"] is not None and r["delta"] >= 0]
+            fallers = sorted(
+                [r for r in rows if r["delta"] is not None and r["delta"] < 0],
+                key=lambda x: x["delta"]
+            )
+            results[col] = {"label": stat["label"], "risers": risers, "fallers": fallers}
+
+        # Add most-recent team_abbr to every player row (parsed from matchup)
+        if all_player_ids:
+            cur.execute("""
+                SELECT DISTINCT ON (player_id)
+                    player_id,
+                    SUBSTRING(matchup FROM 1 FOR 3) AS team_abbr
+                FROM player_gamelogs
+                WHERE player_id = ANY(%s)
+                  AND season = %s
+                  AND season_type = %s
+                  AND matchup IS NOT NULL
+                ORDER BY player_id, game_date DESC
+            """, (list(all_player_ids), season, season_type))
+            team_map = {r["player_id"]: r["team_abbr"] for r in cur.fetchall()}
+            for stat_data in results.values():
+                for r in stat_data["risers"] + stat_data["fallers"]:
+                    r["team_abbr"] = team_map.get(r["player_id"])
+
+        cur.close()
+        conn.close()
+        return jsonify({"n": n, "season": season, "season_type": season_type, "stats": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── /api/trends/gamelog ───────────────────────────────────────
+# Returns the full game log for a single player (for the line graph).
+
+@app.route("/api/trends/gamelog")
+def get_trends_gamelog():
+    player_id   = request.args.get("player_id",   type=int)
+    season      = request.args.get("season",      DEFAULT_SEASON)
+    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+
+    if not player_id:
+        return jsonify({"error": "player_id required"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT game_id, game_date, matchup, wl, min, fga, pts, ast, reb, fg3m, ts_pct
+            FROM player_gamelogs
+            WHERE player_id = %s
+              AND season = %s
+              AND season_type = %s
+            ORDER BY game_date ASC
+        """, (player_id, season, season_type))
+        rows = [dict(r) for r in cur.fetchall()]
+        float_cols = ("min", "fga", "pts", "ast", "reb", "fg3m", "ts_pct")
+        for r in rows:
+            if r["game_date"]:
+                r["game_date"] = r["game_date"].strftime("%Y-%m-%d")
+            for k in float_cols:
+                r[k] = _safe(r[k])
+            # Parse team from matchup (first 3 chars: "BOS vs. MIA" → "BOS")
+            r["team_abbr"] = r["matchup"][:3] if r.get("matchup") else None
+        cur.close()
+        conn.close()
+        return jsonify({"games": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/trends")
+@app.route("/trends.html")
+def trends_page():
+    return app.send_static_file("trends.html")
 
 
 if __name__ == "__main__":

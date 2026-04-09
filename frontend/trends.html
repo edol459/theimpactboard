@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trends · ydkball</title>
+<meta name="description" content="See which NBA players are trending up or down based on recent game-by-game stats.">
+<meta property="og:site_name" content="ydkball">
+<meta property="og:title" content="Trends · ydkball">
+<meta property="og:description" content="NBA player stat trends — risers and fallers over the last 5, 10, or 15 games.">
+<meta property="og:image" content="https://ydkball.net/logo.png">
+<meta property="og:url" content="https://ydkball.net/trends">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Trends · ydkball">
+<meta name="twitter:description" content="NBA player stat trends — risers and fallers over the last 5, 10, or 15 games.">
+<meta name="twitter:image" content="https://ydkball.net/logo.png">
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --ink:       #0c0c0d;
+  --ink2:      #2a2a2e;
+  --ink3:      #6b6b78;
+  --ink4:      #a8a8b3;
+  --paper:     #F5F0E8;
+  --paper2:    #eeecea;
+  --paper3:    #e5e2dc;
+  --rule:      #d8d5cf;
+  --orange:    #e8530a;
+  --orange-lt: #fff0ea;
+  --green:     #1a7a4a;
+  --green-lt:  #eaf5ee;
+  --red:       #c0392b;
+  --red-lt:    #fdf0ee;
+
+  --ff-serif: 'DM Serif Display', Georgia, serif;
+  --ff-sans:  'Instrument Sans', system-ui, sans-serif;
+  --ff-mono:  'DM Mono', 'Courier New', monospace;
+
+  --nav-h: 56px;
+}
+
+html { scroll-behavior: smooth; overflow-x: clip; }
+body {
+  font-family: var(--ff-sans);
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+/* ── Nav ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--nav-h);
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 32px;
+  z-index: 100;
+}
+.nav-wordmark {
+  font-family: var(--ff-serif);
+  font-size: 20px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.nav-logo { height: 26px; width: auto; margin-right: 8px; }
+.nav-wordmark span { color: var(--orange); }
+.nav-tabs { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
+.nav-tab {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.nav-tab:hover  { color: var(--ink); background: var(--paper2); }
+.nav-tab.active { color: var(--ink); background: var(--paper3); }
+.nav-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.nav-auth-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1.5px solid var(--rule); }
+.nav-auth-name { font-family: var(--ff-mono); font-size: 11px; color: var(--ink3); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-signin-btn { font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 5px 12px; background: var(--orange); color: #fff; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; transition: opacity 0.15s; }
+.nav-signin-btn:hover { opacity: 0.85; }
+.nav-signout-btn { font-family: var(--ff-mono); font-size: 10px; color: var(--ink3); background: none; border: none; cursor: pointer; padding: 4px 6px; }
+.nav-signout-btn:hover { color: var(--ink); }
+
+/* ── Page shell ── */
+.page {
+  padding-top: var(--nav-h);
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-bottom: 80px;
+}
+
+/* ── Header ── */
+.page-header {
+  padding: 32px 0 24px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.page-title {
+  font-family: var(--ff-serif);
+  font-size: 30px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.page-meta {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  letter-spacing: 0.04em;
+  padding-bottom: 2px;
+}
+.header-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── Info tooltip ── */
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.info-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink4);
+  color: var(--ink4);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  flex-shrink: 0;
+  margin-left: 8px;
+  margin-bottom: 2px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.info-icon:hover { border-color: var(--ink2); color: var(--ink2); }
+.info-tooltip {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  line-height: 1.7;
+  padding: 10px 14px;
+  border-radius: 6px;
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+}
+.info-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--ink);
+}
+.info-wrap:hover .info-tooltip { display: block; }
+
+/* ── Toggle buttons (N-games, stat tabs) ── */
+.toggle-group {
+  display: flex;
+  background: var(--paper2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.toggle-btn {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  background: none;
+  border: none;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  border-right: 1px solid var(--rule);
+}
+.toggle-btn:last-child { border-right: none; }
+.toggle-btn:hover  { color: var(--ink); background: var(--paper3); }
+.toggle-btn.active { color: var(--ink); background: var(--paper); font-weight: 500; }
+
+/* ── Stat tabs ── */
+.stat-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 20px 0 0;
+  flex-wrap: wrap;
+}
+.stat-tab {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink3);
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.stat-tab:hover  { color: var(--ink2); border-color: var(--ink4); }
+.stat-tab.active { color: var(--ink); background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ── Loading / error ── */
+.state-msg {
+  font-family: var(--ff-mono);
+  font-size: 13px;
+  color: var(--ink3);
+  text-align: center;
+  padding: 60px 0;
+}
+
+/* ── Two-column leaderboard ── */
+.boards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding-top: 24px;
+}
+.board-col {}
+.board-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.board-heading-label {
+  font-family: var(--ff-serif);
+  font-size: 18px;
+  letter-spacing: -0.01em;
+}
+.board-heading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.board-heading-dot.green { background: var(--green); }
+.board-heading-dot.red   { background: var(--red); }
+.board-count {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  margin-left: auto;
+}
+
+/* ── Player card ── */
+.player-card {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--paper);
+  transition: border-color 0.15s;
+}
+.player-card:hover { border-color: var(--ink4); }
+.player-card-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  gap: 12px;
+  user-select: none;
+}
+.player-rank {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  color: var(--ink4);
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.player-headshot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  border: 1.5px solid var(--rule);
+  flex-shrink: 0;
+  background: var(--paper2);
+}
+.player-info { flex: 1 1 0; min-width: 0; }
+.player-name {
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-team {
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  color: var(--ink3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: 1px;
+}
+.player-nums {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.num-block { text-align: right; }
+.num-label {
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  color: var(--ink4);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.num-val {
+  font-family: var(--ff-mono);
+  font-size: 14px;
+  color: var(--ink2);
+  font-weight: 500;
+}
+.num-delta {
+  font-family: var(--ff-mono);
+  font-size: 15px;
+  font-weight: 500;
+}
+.num-delta.pos { color: var(--green); }
+.num-delta.neg { color: var(--red); }
+.card-chevron {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--ink4);
+  transition: transform 0.2s;
+}
+.player-card.open .card-chevron { transform: rotate(180deg); }
+
+/* ── Expanded graph panel ── */
+.card-panel {
+  display: none;
+  padding: 0 16px 16px;
+  border-top: 1px solid var(--rule);
+}
+.player-card.open .card-panel { display: block; }
+.chart-wrap {
+  position: relative;
+  height: 200px;
+  margin-top: 12px;
+}
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  color: var(--ink3);
+  letter-spacing: 0.04em;
+}
+.legend-swatch {
+  width: 10px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* ── Empty state ── */
+.empty-col {
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  color: var(--ink4);
+  text-align: center;
+  padding: 32px 0;
+}
+
+/* ── Responsive ── */
+@media (max-width: 700px) {
+  .boards { grid-template-columns: 1fr; }
+  .nav-tabs { overflow-x: auto; scrollbar-width: none; }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .nav-tab { white-space: nowrap; padding: 5px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <a class="nav-wordmark" href="/"><img class="nav-logo" src="/logo.png" alt="">ydk<span>ball</span></a>
+  <div class="nav-tabs">
+    <a class="nav-tab" href="/stats">Stats</a>
+    <a class="nav-tab" href="/reviews">BasketBoxd</a>
+    <a class="nav-tab" href="/builder">Builder</a>
+    <a class="nav-tab" href="/wowy">WoWY</a>
+    <a class="nav-tab" href="/compare">Compare</a>
+    <a class="nav-tab" href="/matchups">Matchups</a>
+    <a class="nav-tab active" href="/trends">Trends</a>
+  </div>
+  <div class="nav-auth" id="nav-auth-slot"></div>
+</nav>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div style="display:flex;align-items:flex-start;gap:0">
+      <div>
+        <div style="display:flex;align-items:center">
+          <div class="page-title">Trends</div>
+          <div class="info-wrap">
+            <div class="info-icon">i</div>
+            <div class="info-tooltip">
+              Min. 10 min/game in last N games<br>
+              PPG &amp; TS%: min. 5 FGA to count a game<br>
+              Must have ≥ N prior qualifying games<br>
+              Delta = last N avg − prior season avg
+            </div>
+          </div>
+        </div>
+        <div class="page-meta" id="page-meta">Loading season…</div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="toggle-group" id="n-toggle">
+        <button class="toggle-btn active" data-n="5">Last 5</button>
+        <button class="toggle-btn" data-n="10">Last 10</button>
+        <button class="toggle-btn" data-n="15">Last 15</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat tabs -->
+  <div class="stat-tabs" id="stat-tabs">
+    <button class="stat-tab active" data-stat="pts">PPG</button>
+    <button class="stat-tab" data-stat="ts_pct">TS%</button>
+    <button class="stat-tab" data-stat="fg3m">3PM</button>
+    <button class="stat-tab" data-stat="ast">APG</button>
+    <button class="stat-tab" data-stat="reb">RPG</button>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+    <div class="state-msg">Loading…</div>
+  </div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+const API = '';
+let season     = '';
+let seasonType = '';
+let currentN   = 5;
+let currentStat = 'pts';
+let trendsData  = null;   // cached response keyed by N
+const cache     = {};     // cache[n] = API response
+const chartMap  = {};     // chartMap[cardId] = Chart instance
+
+// ── Format helpers ─────────────────────────────────────────────
+function fmtStat(key, val) {
+  if (val === null || val === undefined) return '—';
+  if (key === 'ts_pct') return (val * 100).toFixed(1) + '%';
+  return val.toFixed(1);
+}
+function fmtDelta(key, val) {
+  if (val === null || val === undefined) return '—';
+  const sign = val >= 0 ? '+' : '';
+  if (key === 'ts_pct') return sign + (val * 100).toFixed(1) + '%';
+  return sign + val.toFixed(1);
+}
+
+// ── Init ───────────────────────────────────────────────────────
+async function init() {
+  try {
+    const r = await fetch(`${API}/api/current-season`);
+    const d = await r.json();
+    season     = d.season;
+    seasonType = d.season_type;
+    document.getElementById('page-meta').textContent =
+      `${season} · ${seasonType} · min 10 mpg in last N`;
+  } catch (e) {
+    document.getElementById('page-meta').textContent = 'Season data unavailable';
+  }
+  await loadTrends();
+}
+
+// ── Auth nav slot (mirrors other pages) ───────────────────────
+async function loadAuth() {
+  try {
+    const r = await fetch(`${API}/api/me`);
+    if (!r.ok) throw new Error();
+    const u = await r.json();
+    const slot = document.getElementById('nav-auth-slot');
+    slot.innerHTML = `
+      <img class="nav-auth-avatar" src="${u.avatar_url || ''}" alt="">
+      <span class="nav-auth-name">${u.display_name}</span>
+      <a href="/profile" class="nav-tab">Profile</a>
+      <button class="nav-signout-btn" onclick="fetch('/api/auth/logout',{method:'POST'}).then(()=>location.reload())">Sign out</button>
+    `;
+  } catch {
+    document.getElementById('nav-auth-slot').innerHTML =
+      `<a class="nav-signin-btn" href="/api/auth/login">Sign in</a>`;
+  }
+}
+
+// ── Load trends data ───────────────────────────────────────────
+async function loadTrends() {
+  const content = document.getElementById('content');
+  if (cache[currentN]) {
+    trendsData = cache[currentN];
+    renderBoards();
+    return;
+  }
+  content.innerHTML = '<div class="state-msg">Loading…</div>';
+  try {
+    const url = `${API}/api/trends?season=${encodeURIComponent(season)}&season_type=${encodeURIComponent(seasonType)}&n=${currentN}`;
+    const r   = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    trendsData     = await r.json();
+    cache[currentN] = trendsData;
+    renderBoards();
+  } catch (e) {
+    content.innerHTML = `<div class="state-msg">Error loading trends: ${e.message}</div>`;
+  }
+}
+
+// ── Render leaderboards ────────────────────────────────────────
+function renderBoards() {
+  if (!trendsData || !trendsData.stats) return;
+  const statData = trendsData.stats[currentStat];
+  if (!statData) return;
+
+  const content = document.getElementById('content');
+
+  // If every stat has zero players, the season is too new to have N prior games
+  const allEmpty = Object.values(trendsData.stats)
+    .every(s => s.risers.length === 0 && s.fallers.length === 0);
+  if (allEmpty) {
+    content.innerHTML = `<div class="state-msg" style="padding:80px 0">
+      New season — no trends yet. Check back once players have ${trendsData.n * 2}+ qualifying games.
+    </div>`;
+    return;
+  }
+  // Destroy any open charts
+  Object.values(chartMap).forEach(c => c.destroy());
+  for (const k in chartMap) delete chartMap[k];
+
+  const risers  = statData.risers.slice(0, 20);
+  const fallers = statData.fallers.slice(0, 20);
+
+  content.innerHTML = `
+    <div class="boards">
+      <div class="board-col" id="board-risers">
+        <div class="board-heading">
+          <div class="board-heading-dot green"></div>
+          <div class="board-heading-label">Risers</div>
+          <div class="board-count">${risers.length} players</div>
+        </div>
+        ${risers.length ? risers.map((p, i) => cardHTML(p, i + 1, 'pos')).join('') : '<div class="empty-col">No risers found</div>'}
+      </div>
+      <div class="board-col" id="board-fallers">
+        <div class="board-heading">
+          <div class="board-heading-dot red"></div>
+          <div class="board-heading-label">Fallers</div>
+          <div class="board-count">${fallers.length} players</div>
+        </div>
+        ${fallers.length ? fallers.map((p, i) => cardHTML(p, i + 1, 'neg')).join('') : '<div class="empty-col">No fallers found</div>'}
+      </div>
+    </div>
+  `;
+
+  // Attach click handlers
+  document.querySelectorAll('.player-card-header').forEach(header => {
+    header.addEventListener('click', () => toggleCard(header.closest('.player-card')));
+  });
+}
+
+function cardHTML(player, rank, dir) {
+  const cardId   = `card-${player.player_id}-${currentN}-${currentStat}`;
+  const n        = currentN;
+  const lastN    = fmtStat(currentStat, player.last_n_avg);
+  const prior    = fmtStat(currentStat, player.prior_avg);
+  const delta    = fmtDelta(currentStat, player.delta);
+  const nLabel   = `Last ${n}`;
+  const team     = player.team_abbr || '';
+  const imgSrc   = `https://cdn.nba.com/headshots/nba/latest/260x190/${player.player_id}.png`;
+  return `
+    <div class="player-card" id="${cardId}"
+         data-player-id="${player.player_id}"
+         data-player-name="${escHtml(player.player_name)}">
+      <div class="player-card-header">
+        <span class="player-rank">${rank}</span>
+        <img class="player-headshot" src="${imgSrc}"
+             onerror="this.style.visibility='hidden'" alt="">
+        <div class="player-info">
+          <div class="player-name">${escHtml(player.player_name)}</div>
+          <div class="player-team">${escHtml(team)}</div>
+        </div>
+        <div class="player-nums">
+          <div class="num-block">
+            <div class="num-label">${nLabel}</div>
+            <div class="num-val">${lastN}</div>
+          </div>
+          <div class="num-block">
+            <div class="num-label">Prior avg</div>
+            <div class="num-val">${prior}</div>
+          </div>
+          <div class="num-block">
+            <div class="num-delta ${dir}">${delta}</div>
+          </div>
+        </div>
+        <svg class="card-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4,6 8,10 12,6"/>
+        </svg>
+      </div>
+      <div class="card-panel">
+        <div class="chart-wrap">
+          <canvas id="chart-${cardId}"></canvas>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#a8a8b3"></div>
+            Prior games
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:${dir === 'pos' ? '#1a7a4a' : '#c0392b'}"></div>
+            Last ${n} games
+          </div>
+          <div class="legend-item">
+            <div class="legend-swatch" style="background:#e8530a;height:1px;"></div>
+            Prior avg
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Toggle card open / closed ──────────────────────────────────
+async function toggleCard(card) {
+  const wasOpen = card.classList.contains('open');
+  card.classList.toggle('open', !wasOpen);
+  if (wasOpen) return;
+
+  const playerId   = card.dataset.playerId;
+  const cardId     = card.id;
+  const canvasEl   = document.getElementById(`chart-${cardId}`);
+  if (!canvasEl) return;
+
+  // Fetch gamelog
+  let games;
+  try {
+    const url = `${API}/api/trends/gamelog?player_id=${playerId}&season=${encodeURIComponent(season)}&season_type=${encodeURIComponent(seasonType)}`;
+    const r   = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d   = await r.json();
+    games     = d.games || [];
+  } catch (err) {
+    console.error('gamelog fetch error:', err);
+    canvasEl.parentElement.innerHTML = '<div class="state-msg" style="padding:20px 0">Could not load game log.</div>';
+    return;
+  }
+
+  if (!games.length) {
+    canvasEl.parentElement.innerHTML = '<div class="state-msg" style="padding:20px 0">No game log data yet.</div>';
+    return;
+  }
+
+  const statKey      = currentStat;
+  const n            = currentN;
+  const needsFgaGate = statKey === 'ts_pct' || statKey === 'pts';
+
+  // For gated stats, only plot qualifying games so the chart matches the leaderboard exactly
+  const chartGames = needsFgaGate ? games.filter(g => (g.fga || 0) >= 5) : games;
+  const splitAt    = Math.max(0, chartGames.length - n);
+
+  const labels = chartGames.map(g => formatDate(g.game_date));
+  const values = chartGames.map(g => {
+    const v = g[statKey];
+    if (v === null || v === undefined) return null;
+    return statKey === 'ts_pct' ? parseFloat((v * 100).toFixed(2)) : parseFloat(v.toFixed(2));
+  });
+
+  // Prior average: qualifying games before the last-N window
+  const priorVals = values.slice(0, splitAt).filter(v => v !== null);
+  const priorAvg  = priorVals.length
+    ? parseFloat((priorVals.reduce((a, b) => a + b, 0) / priorVals.length).toFixed(2))
+    : null;
+
+  // Point colors: last-N window → accent, prior → muted
+  const dir         = card.querySelector('.num-delta').classList.contains('pos') ? 'pos' : 'neg';
+  const accentColor = dir === 'pos' ? '#1a7a4a' : '#c0392b';
+  const pointColors = values.map((_, i) => i >= splitAt ? accentColor : '#a8a8b3');
+  const pointRadii  = values.map((_, i) => i >= splitAt ? 4 : 3);
+
+  if (chartMap[cardId]) {
+    chartMap[cardId].destroy();
+    delete chartMap[cardId];
+  }
+
+  const ctx = canvasEl.getContext('2d');
+  const yLabel = statKey === 'ts_pct' ? 'TS%' :
+                 statKey === 'pts'    ? 'Points' :
+                 statKey === 'ast'    ? 'Assists' :
+                 statKey === 'reb'    ? 'Rebounds' : '3PM';
+
+  // Inline plugin: shade the last-N region
+  const shadePlugin = {
+    id: 'lastNShade',
+    beforeDraw(chart) {
+      if (splitAt <= 0 || splitAt >= chartGames.length) return;
+      const { ctx: c, chartArea, scales } = chart;
+      const xScale = scales.x;
+      // midpoint between last prior game and first last-N game
+      const pxA = xScale.getPixelForValue(splitAt - 1);
+      const pxB = xScale.getPixelForValue(splitAt);
+      const x0  = (pxA + pxB) / 2;
+      c.save();
+      c.fillStyle = dir === 'pos' ? 'rgba(26,122,74,0.07)' : 'rgba(192,57,43,0.07)';
+      c.fillRect(x0, chartArea.top, chartArea.right - x0, chartArea.height);
+      c.restore();
+    }
+  };
+
+  // Prior-avg reference line drawn as an extra dataset
+  const datasets = [{
+    data: values,
+    borderColor: '#c8c4bc',
+    borderWidth: 1.5,
+    pointBackgroundColor: pointColors,
+    pointBorderColor: pointColors,
+    pointRadius: pointRadii,
+    pointHoverRadius: 5,
+    tension: 0.3,
+    fill: false,
+    spanGaps: true,
+  }];
+
+  if (priorAvg !== null) {
+    datasets.push({
+      data: labels.map(() => priorAvg),
+      borderColor: '#e8530a',
+      borderWidth: 1.5,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      fill: false,
+      spanGaps: true,
+    });
+  }
+
+  chartMap[cardId] = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      onClick(event, elements) {
+        const el = elements.find(e => e.datasetIndex === 0);
+        if (!el) return;
+        const game = chartGames[el.index];
+        if (game?.game_id) {
+          window.location.href = `/game?gameId=${game.game_id}&tab=box`;
+        }
+      },
+      onHover(event, elements) {
+        const target = event.native?.target;
+        if (target) target.style.cursor = elements.some(e => e.datasetIndex === 0) ? 'pointer' : 'default';
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: item => item.datasetIndex === 0,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v === null) return '—';
+              return `${yLabel}: ${statKey === 'ts_pct' ? v.toFixed(1) + '%' : v.toFixed(1)}`;
+            },
+            afterLabel: ctx => {
+              const i = ctx.dataIndex;
+              return i >= splitAt ? `(last ${n})` : '(prior)';
+            }
+          },
+          backgroundColor: '#0c0c0d',
+          titleColor: '#a8a8b3',
+          bodyColor: '#F5F0E8',
+          padding: 10,
+          cornerRadius: 4,
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 10 },
+            color: '#a8a8b3',
+            maxTicksLimit: 8,
+            maxRotation: 0,
+          }
+        },
+        y: {
+          grid: { color: '#e5e2dc', lineWidth: 1 },
+          border: { display: false },
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 10 },
+            color: '#a8a8b3',
+            callback: v => statKey === 'ts_pct' ? v.toFixed(0) + '%' : v,
+          }
+        }
+      }
+    },
+    plugins: [shadePlugin],
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function formatDate(str) {
+  if (!str) return '';
+  const d = new Date(str + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Event bindings ─────────────────────────────────────────────
+document.getElementById('n-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('.toggle-btn');
+  if (!btn) return;
+  document.querySelectorAll('#n-toggle .toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentN = parseInt(btn.dataset.n);
+  loadTrends();
+});
+
+document.getElementById('stat-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.stat-tab');
+  if (!btn) return;
+  document.querySelectorAll('.stat-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentStat = btn.dataset.stat;
+  renderBoards();
+});
+
+// ── Boot ───────────────────────────────────────────────────────
+loadAuth();
+init();
+</script>
+</body>
+</html>

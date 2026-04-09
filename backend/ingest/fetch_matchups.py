@@ -326,7 +326,7 @@ for did, d in defender_adj.items():
     cur.execute("""
         UPDATE player_seasons
         SET matchup_def_fg_pct_adj = %s, matchup_poss = %s
-        WHERE player_id = %s AND season = %s AND season_type = %s AND league = 'NBA'
+        WHERE player_id = %s AND season = %s AND season_type = %s
     """, (d['matchup_def_fg_pct_adj'], d['matchup_poss'], did, SEASON, SEASON_TYPE))
     if cur.rowcount > 0: updated += 1
 

@@ -14,8 +14,9 @@ Steps:
   3.  fetch_closest_defender.py — closest defender shot data
   4.  fetch_matchups.py        — opponent-adjusted matchup defensive metric
   5.  fetch_nba_stats.py       — gravity, shot quality, leverage
-  6.  fetch_lineups.py         — 5-man lineup data for WoWY tool
-  7.  compute_pctiles.py       — recompute percentiles for Builder
+  6.  fetch_gamelogs.py        — per-game logs for Trends page
+  7.  fetch_lineups.py         — 5-man lineup data for WoWY tool
+  8.  compute_pctiles.py       — recompute percentiles for Builder
 
 Scheduled via: run_daily_local.bat (Windows Task Scheduler)
 """
@@ -113,6 +114,11 @@ def main():
         (
             'fetch_nba_stats.py',
             'NBA Stats (gravity, shot quality, leverage)',
+            season_args,
+        ),
+        (
+            'fetch_gamelogs.py',
+            'Per-game logs (Trends)',
             season_args,
         ),
         # ── Rosters (nba_api, requires residential IP) ────────

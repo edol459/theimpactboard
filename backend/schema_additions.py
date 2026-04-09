@@ -18,6 +18,37 @@ if not DATABASE_URL:
 
 NEW_TABLES = """
 
+-- ── Player Game Logs ──────────────────────────────────────────────────────────
+-- One row per player per game. Populated by fetch_gamelogs.py.
+-- Used by the Trends page for rolling-average sparklines and leaderboard deltas.
+CREATE TABLE IF NOT EXISTS player_gamelogs (
+    id          SERIAL PRIMARY KEY,
+    player_id   INTEGER REFERENCES players(player_id) ON DELETE CASCADE,
+    player_name TEXT    NOT NULL,
+    season      TEXT    NOT NULL,
+    season_type TEXT    NOT NULL,
+    game_id     TEXT    NOT NULL,
+    game_date   DATE    NOT NULL,
+    matchup     TEXT,
+    wl          TEXT,
+    min         REAL,
+    pts         REAL,
+    ast         REAL,
+    reb         REAL,
+    fg3m        REAL,
+    fgm         REAL,
+    fga         REAL,
+    ftm         REAL,
+    fta         REAL,
+    ts_pct      REAL,
+    UNIQUE(player_id, game_id, season_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gamelogs_player_season
+    ON player_gamelogs(player_id, season, season_type, game_date DESC);
+CREATE INDEX IF NOT EXISTS idx_gamelogs_season
+    ON player_gamelogs(season, season_type, game_date DESC);
+
 -- ── Users ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id              SERIAL PRIMARY KEY,

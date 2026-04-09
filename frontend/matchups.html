@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Matchups · ydkball</title>
+<meta name="description" content="See who has defended who the best this NBA season — possession-level matchup data.">
+<meta property="og:site_name" content="ydkball">
+<meta property="og:title" content="Matchups · ydkball">
+<meta property="og:description" content="Possession-level defensive matchup data for every NBA player.">
+<meta property="og:image" content="https://ydkball.net/logo.png">
+<meta property="og:url" content="https://ydkball.net/matchups">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Matchups · ydkball">
+<meta name="twitter:description" content="Possession-level defensive matchup data for every NBA player.">
+<meta name="twitter:image" content="https://ydkball.net/logo.png">
+<link rel="icon" type="image/png" href="/logo.png">
+<link rel="apple-touch-icon" href="/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink:       #0c0c0d;
+  --ink2:      #2a2a2e;
+  --ink3:      #6b6b78;
+  --ink4:      #a8a8b3;
+  --paper:     #F5F0E8;
+  --paper2:    #eeecea;
+  --paper3:    #e5e2dc;
+  --rule:      #d8d5cf;
+  --orange:    #e8530a;
+  --orange-lt: #fff0ea;
+  --green:     #1a7a4a;
+  --green-lt:  #eaf4ee;
+  --red:       #c0392b;
+  --red-lt:    #fdf0ee;
+  --ff-serif: 'DM Serif Display', Georgia, serif;
+  --ff-sans:  'Instrument Sans', system-ui, sans-serif;
+  --ff-mono:  'DM Mono', 'Courier New', monospace;
+  --nav-h: 56px;
+  font-size: 15px;
+}
+html { scroll-behavior: smooth; overflow-x: clip; -webkit-text-size-adjust: 100%; }
+body {
+  position: relative;
+  font-family: var(--ff-sans);
+  background: var(--paper);
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+body::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  opacity: 0.022; pointer-events: none; z-index: 9999;
+}
+
+/* ── Nav ─────────────────────────────────────────────────────── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--nav-h); background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  display: flex; align-items: center;
+  padding: 0 24px; gap: 24px; z-index: 100;
+}
+.nav-wordmark {
+  font-family: var(--ff-serif); font-size: 20px;
+  color: var(--ink); letter-spacing: -0.01em;
+  text-decoration: none; flex-shrink: 0;
+  display: flex; align-items: center;
+}
+.nav-logo { height: 26px; width: auto; margin-right: 8px; }
+.nav-wordmark span { color: var(--orange); }
+.nav-links { display: flex; gap: 2px; flex: 1 1 0; min-width: 0; overflow: hidden; }
+.nav-link {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink3); text-decoration: none;
+  padding: 6px 14px; border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.nav-link:hover { color: var(--ink); background: var(--paper2); }
+.nav-link.active { color: var(--ink); background: var(--paper3); }
+
+/* ── Layout ──────────────────────────────────────────────────── */
+.app { padding-top: var(--nav-h); display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── Controls bar ────────────────────────────────────────────── */
+.controls-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper); position: sticky;
+  top: var(--nav-h); z-index: 50; flex-shrink: 0;
+}
+.ctrl-group { display: flex; align-items: center; gap: 8px; }
+.ctrl-label {
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink4); white-space: nowrap;
+}
+.ctrl-select {
+  font-family: var(--ff-sans); font-size: 13px;
+  background: var(--paper2); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 6px;
+  padding: 6px 10px; cursor: pointer; outline: none;
+  transition: border-color 0.15s;
+}
+.ctrl-select:focus { border-color: var(--orange); }
+
+.controls-divider { width: 1px; height: 20px; background: var(--rule); flex-shrink: 0; }
+
+/* ── View tabs ───────────────────────────────────────────────── */
+.view-tabs { display: flex; gap: 2px; margin-left: auto; }
+.vtab {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--ink3); background: none; border: none;
+  padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.vtab:hover { color: var(--ink); background: var(--paper2); }
+.vtab.active { color: var(--ink); background: var(--paper3); }
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.spin {
+  display: inline-block; width: 18px; height: 18px;
+  border: 2px solid var(--rule); border-top-color: var(--orange);
+  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-msg {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; padding: 80px 32px;
+  font-family: var(--ff-mono); font-size: 12px;
+  color: var(--ink3); letter-spacing: 0.04em;
+  text-align: center; line-height: 1.9;
+}
+
+/* ── Player card header ──────────────────────────────────────── */
+.card-header {
+  display: flex; align-items: center; gap: 20px;
+  padding: 20px 28px 18px;
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+.card-back-btn {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--ink3); background: none; border: none;
+  cursor: pointer; padding: 0; display: flex; align-items: center; gap: 5px;
+  transition: color 0.15s; flex-shrink: 0;
+}
+.card-back-btn:hover { color: var(--orange); }
+.card-divider { width: 1px; height: 36px; background: var(--rule); flex-shrink: 0; }
+.card-headshot {
+  width: 52px; height: 52px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--rule);
+  background: var(--paper3); flex-shrink: 0;
+}
+.card-player-info { flex: 1; min-width: 0; }
+.card-player-name {
+  font-family: var(--ff-serif); font-size: 22px;
+  color: var(--ink); letter-spacing: -0.01em; line-height: 1.1;
+}
+.card-player-meta {
+  font-family: var(--ff-mono); font-size: 10px;
+  color: var(--ink4); letter-spacing: 0.05em;
+  text-transform: uppercase; margin-top: 3px;
+}
+.card-stats { display: flex; gap: 24px; flex-shrink: 0; }
+.card-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.card-stat-val {
+  font-family: var(--ff-mono); font-size: 20px; font-weight: 500;
+  color: var(--ink); line-height: 1;
+}
+.card-stat-val.good { color: var(--green); }
+.card-stat-val.bad  { color: var(--red); }
+.card-stat-lbl {
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink4);
+}
+.card-sort-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 28px; border-bottom: 1px solid var(--rule);
+  background: var(--paper2); flex-shrink: 0; flex-wrap: wrap;
+}
+.card-sort-lbl {
+  font-family: var(--ff-mono); font-size: 9px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink4);
+}
+.sort-chip {
+  font-family: var(--ff-mono); font-size: 10px;
+  color: var(--ink3); background: var(--paper3);
+  border: 1px solid var(--rule); border-radius: 4px;
+  padding: 3px 8px; cursor: pointer; letter-spacing: 0.04em;
+  transition: all 0.12s;
+}
+.sort-chip:hover { color: var(--ink); border-color: var(--ink3); }
+.sort-chip.active { color: var(--orange); border-color: var(--orange); background: var(--orange-lt); }
+
+/* ── Main table ──────────────────────────────────────────────── */
+.table-wrap { flex: 1; overflow: auto; }
+table.mt {
+  width: 100%; border-collapse: collapse;
+  font-family: var(--ff-sans); font-size: 13px;
+}
+table.mt thead { position: sticky; top: 0; z-index: 2; background: var(--paper); }
+table.mt thead th {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.07em; text-transform: uppercase; font-weight: 500;
+  padding: 10px 16px 8px; text-align: center; color: var(--ink3);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+  cursor: pointer; user-select: none; transition: color 0.12s;
+}
+table.mt thead th:hover { color: var(--ink); }
+table.mt thead th.sorted { color: var(--orange); }
+table.mt thead th.th-left { text-align: left; }
+table.mt tbody tr { border-bottom: 1px solid var(--paper3); transition: background 0.1s; }
+table.mt tbody tr:last-child { border-bottom: none; }
+table.mt tbody tr:hover { background: var(--paper2); cursor: pointer; }
+table.mt tbody td { padding: 11px 16px; text-align: center; color: var(--ink); vertical-align: middle; }
+table.mt tbody td.td-left { text-align: left; }
+table.mt tbody td.td-mono { font-family: var(--ff-mono); font-size: 12px; }
+table.mt tbody td.td-dim  { color: var(--ink3); }
+.td-rank { font-family: var(--ff-mono); font-size: 11px; color: var(--ink4); }
+
+/* adj delta chip */
+.adj-chip {
+  display: inline-block;
+  font-family: var(--ff-mono); font-size: 12px; font-weight: 500;
+  padding: 3px 8px; border-radius: 4px; line-height: 1;
+}
+.adj-chip.good { color: var(--green); background: var(--green-lt); }
+.adj-chip.bad  { color: var(--red);   background: var(--red-lt);   }
+.adj-chip.neu  { color: var(--ink3);  background: var(--paper3);   }
+
+/* player name cell */
+.player-cell { display: flex; align-items: center; gap: 10px; }
+.player-thumb {
+  width: 32px; height: 32px; border-radius: 50%;
+  object-fit: cover; background: var(--paper3);
+  border: 1px solid var(--rule); flex-shrink: 0;
+}
+.player-cell-info { display: flex; flex-direction: column; gap: 1px; }
+.player-cell-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+.player-cell-sub  { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); }
+
+/* pairing cell */
+.pairing-cell { display: flex; align-items: center; gap: 6px; }
+.pairing-arrow { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); flex-shrink: 0; }
+
+/* results header strip */
+.results-strip {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 14px 28px 10px; border-bottom: 1px solid var(--rule); flex-shrink: 0;
+}
+.results-title { font-family: var(--ff-serif); font-size: 20px; color: var(--ink); }
+.results-meta  { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); letter-spacing: 0.04em; }
+
+/* ── Section containers ───────────────────────────────────────── */
+#leaderboard-section, #card-section { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#card-section { display: none; }
+
+/* ── Tooltip ─────────────────────────────────────────────────── */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+  background: var(--ink2); color: #fff;
+  font-family: var(--ff-sans); font-size: 12px; font-weight: 400;
+  line-height: 1.5; letter-spacing: 0; text-transform: none;
+  white-space: pre-line; text-align: left;
+  padding: 8px 11px; border-radius: 6px;
+  width: max-content; max-width: 240px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s; z-index: 200;
+}
+[data-tip]::before {
+  content: '';
+  position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+  border: 5px solid transparent; border-top-color: var(--ink2);
+  opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 200;
+}
+[data-tip]:hover::after, [data-tip]:hover::before { opacity: 1; }
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root { --nav-h: 100px; }
+  nav { height: auto; flex-wrap: wrap; gap: 0; padding: 0 16px; }
+  .nav-wordmark { padding: 13px 0; }
+  .nav-links { order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; border-top: 1px solid var(--rule); padding: 7px 0 9px; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-link { white-space: nowrap; padding: 5px 12px; }
+  .controls-bar { padding: 10px 16px; gap: 8px; }
+  .view-tabs { margin-left: 0; }
+  .card-header { padding: 14px 16px; gap: 12px; }
+  .card-stats { gap: 14px; }
+  .results-strip { padding: 12px 16px 8px; }
+  .card-sort-row { padding: 8px 16px; }
+  table.mt tbody td, table.mt thead th { padding: 10px 10px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-wordmark" href="/"><img class="nav-logo" src="/logo.png" alt="">ydk<span>ball</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="/stats">Stats</a>
+    <a class="nav-link" href="/reviews">BasketBoxd</a>
+    <a class="nav-link" href="/builder">Builder</a>
+    <a class="nav-link" href="/wowy">WoWY</a>
+    <a class="nav-link" href="/compare">Compare</a>
+    <a class="nav-link active" href="/matchups">Matchups</a>
+    <a class="nav-link" href="/trends">Trends</a>
+  </div>
+</nav>
+
+<div class="app">
+
+  <!-- Controls bar -->
+  <div class="controls-bar">
+    <div class="ctrl-group">
+      <span class="ctrl-label">Season</span>
+      <select class="ctrl-select" id="season-sel"></select>
+    </div>
+    <div class="ctrl-group">
+      <select class="ctrl-select" id="type-sel">
+        <option value="Regular Season">Regular Season</option>
+        <option value="Playoffs">Playoffs</option>
+      </select>
+    </div>
+    <div class="controls-divider"></div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Min Poss</span>
+      <select class="ctrl-select" id="poss-sel"></select>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Position</span>
+      <select class="ctrl-select" id="pos-sel">
+        <option value="ALL">All</option>
+        <option value="G">G</option>
+        <option value="GF">G-F</option>
+        <option value="F">F</option>
+        <option value="FC">F-C</option>
+        <option value="C">C</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">Team</span>
+      <select class="ctrl-select" id="team-sel">
+        <option value="ALL">All</option>
+        <option>ATL</option><option>BOS</option><option>BKN</option><option>CHA</option>
+        <option>CHI</option><option>CLE</option><option>DAL</option><option>DEN</option>
+        <option>DET</option><option>GSW</option><option>HOU</option><option>IND</option>
+        <option>LAC</option><option>LAL</option><option>MEM</option><option>MIA</option>
+        <option>MIL</option><option>MIN</option><option>NOP</option><option>NYK</option>
+        <option>OKC</option><option>ORL</option><option>PHI</option><option>PHX</option>
+        <option>POR</option><option>SAC</option><option>SAS</option><option>TOR</option>
+        <option>UTA</option><option>WAS</option>
+      </select>
+    </div>
+    <div class="view-tabs">
+      <button class="vtab active" data-view="defenders" onclick="switchView('defenders',this)">Top Defenders</button>
+      <button class="vtab" data-view="pairings" onclick="switchView('pairings',this)">Best Matchups</button>
+    </div>
+  </div>
+
+  <!-- ── Leaderboard section ──────────────────────────────────── -->
+  <div id="leaderboard-section">
+    <div class="results-strip">
+      <span class="results-title" id="results-title">Top Defenders</span>
+      <span class="results-meta" id="results-meta"></span>
+    </div>
+    <div class="table-wrap">
+      <div class="state-msg" id="lb-state"><span class="spin"></span> Loading…</div>
+      <table class="mt" id="lb-table" style="display:none">
+        <thead id="lb-thead"></thead>
+        <tbody id="lb-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Player card section ─────────────────────────────────── -->
+  <div id="card-section">
+    <div class="card-header">
+      <button class="card-back-btn" onclick="clearCard()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 2L4 7l5 5"/>
+        </svg>
+        All Defenders
+      </button>
+      <div class="card-divider"></div>
+      <img class="card-headshot" id="card-headshot" src="" alt="">
+      <div class="card-player-info">
+        <div class="card-player-name" id="card-name">—</div>
+        <div class="card-player-meta" id="card-meta">—</div>
+      </div>
+      <div class="card-stats">
+        <div class="card-stat">
+          <div class="card-stat-val" id="card-adj">—</div>
+          <div class="card-stat-lbl">Adj Delta</div>
+        </div>
+        <div class="card-stat">
+          <div class="card-stat-val" id="card-poss">—</div>
+          <div class="card-stat-lbl">Poss</div>
+        </div>
+        <div class="card-stat">
+          <div class="card-stat-val" id="card-min">—</div>
+          <div class="card-stat-lbl">Minutes</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-sort-row">
+      <span class="card-sort-lbl">Sort by</span>
+      <button class="sort-chip active" data-col="possessions" onclick="setCardSort('possessions',this)">Possessions</button>
+      <button class="sort-chip" data-col="adj_delta" onclick="setCardSort('adj_delta',this)">Adj Delta</button>
+      <button class="sort-chip" data-col="opp_season_fg_pct" onclick="setCardSort('opp_season_fg_pct',this)">Assignment Difficulty</button>
+      <button class="sort-chip" data-col="fg_pct" onclick="setCardSort('fg_pct',this)">Matchup FG%</button>
+    </div>
+
+    <div class="table-wrap">
+      <div class="state-msg" id="card-state" style="display:none"><span class="spin"></span> Loading…</div>
+      <table class="mt" id="card-table">
+        <thead>
+          <tr>
+            <th class="th-left">Attacker</th>
+            <th class="th-left">Team</th>
+            <th>Poss</th>
+            <th>FGA</th>
+            <th>Season FG%</th>
+            <th>Matchup FG%</th>
+            <th>Adj Delta</th>
+          </tr>
+        </thead>
+        <tbody id="card-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- .app -->
+
+<script>
+const API = window.location.protocol === 'file:' ? 'http://localhost:5000' : '';
+
+const S = {
+  season:     '',
+  seasonType: 'Regular Season',
+  view:       'defenders',   // 'defenders' | 'pairings'
+  minPoss:    200,
+  pos:        'ALL',
+  team:       'ALL',
+  // leaderboard sort state
+  lbSort: { col: 'adj_delta', dir: 'desc' },
+  // card sort
+  cardSort: 'possessions',
+  cardDir:  'desc',
+  // cached raw data for client-side re-sort
+  lbData:   [],
+  cardData: [],
+};
+
+// ── Seasons ───────────────────────────────────────────────────
+async function loadSeasons() {
+  try {
+    const res  = await fetch(`${API}/api/seasons`);
+    const data = await res.json();
+    const sel  = document.getElementById('season-sel');
+    const seasons = [...new Set((data.seasons || []).map(r => r.season))].sort().reverse();
+    seasons.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s;
+      sel.appendChild(opt);
+    });
+    // Try to pick the current season from /api/current-season
+    const csr = await fetch(`${API}/api/current-season`);
+    const csd = await csr.json();
+    if (csd.season && seasons.includes(csd.season)) sel.value = csd.season;
+    S.season     = sel.value;
+    S.seasonType = csd.season_type || 'Regular Season';
+    document.getElementById('type-sel').value = S.seasonType;
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── Controls wiring ───────────────────────────────────────────
+document.getElementById('season-sel').addEventListener('change', function() {
+  S.season = this.value; refresh();
+});
+document.getElementById('type-sel').addEventListener('change', function() {
+  S.seasonType = this.value; refresh();
+});
+document.getElementById('poss-sel').addEventListener('change', function() {
+  S.minPoss = parseInt(this.value); refresh();
+});
+document.getElementById('pos-sel').addEventListener('change', function() {
+  S.pos = this.value; refresh();
+});
+document.getElementById('team-sel').addEventListener('change', function() {
+  S.team = this.value; refresh();
+});
+
+function refresh() {
+  if (S.view === 'defenders') fetchLeaders();
+  else fetchPairings();
+}
+
+// ── View switching ────────────────────────────────────────────
+const POSS_OPTS = {
+  defenders: [{v:'100'},{v:'200',sel:true},{v:'300'},{v:'500'},{v:'750'}],
+  pairings:  [{v:'50'},{v:'100',sel:true},{v:'150'},{v:'200'},{v:'300'}],
+};
+
+function buildPossOpts(view) {
+  const sel = document.getElementById('poss-sel');
+  sel.innerHTML = '';
+  POSS_OPTS[view].forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o.v; opt.textContent = o.v;
+    if (o.sel) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  S.minPoss = parseInt(sel.value);
+}
+
+function switchView(view, btn) {
+  S.view = view;
+  document.querySelectorAll('.vtab').forEach(b => b.classList.toggle('active', b === btn));
+  buildPossOpts(view);
+  clearCard();
+  refresh();
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function pct(v) {
+  if (v == null) return '—';
+  return (v * 100).toFixed(1) + '%';
+}
+function fmtAdj(v) {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '';
+  return sign + (v * 100).toFixed(1);
+}
+function adjChip(v) {
+  if (v == null) return '<span class="adj-chip neu">—</span>';
+  const cls = v > 0.005 ? 'good' : v < -0.005 ? 'bad' : 'neu';
+  const sign = v >= 0 ? '+' : '';
+  return `<span class="adj-chip ${cls}">${sign}${(v*100).toFixed(1)}</span>`;
+}
+function impactChip(v) {
+  if (v == null) return '<span class="adj-chip neu">—</span>';
+  const cls = v > 0.5 ? 'good' : v < -0.5 ? 'bad' : 'neu';
+  const sign = v >= 0 ? '+' : '';
+  return `<span class="adj-chip ${cls}">${sign}${v.toFixed(1)}</span>`;
+}
+function headshotUrl(pid) {
+  return `https://cdn.nba.com/headshots/nba/latest/260x190/${pid}.png`;
+}
+function playerThumb(pid) {
+  return `<img class="player-thumb" src="${headshotUrl(pid)}" alt="" onerror="this.style.display='none'">`;
+}
+function round1(v) { return v == null ? '—' : Math.round(v); }
+
+// ── Leaderboard: Top Defenders ────────────────────────────────
+async function fetchLeaders() {
+  showLbState('<span class="spin"></span> Loading…');
+  document.getElementById('results-title').textContent = 'Top Defenders';
+  S.lbSort = { col: 'impact', dir: 'desc' };
+  try {
+    const url = `${API}/api/matchups/leaders?season=${encodeURIComponent(S.season)}&season_type=${encodeURIComponent(S.seasonType)}&min_poss=${S.minPoss}&pos=${S.pos}&team=${S.team}&limit=200`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) { showLbState(data.error); return; }
+    S.lbData = data.defenders || [];
+    renderLeaders();
+  } catch(e) {
+    showLbState('Error loading data.');
+  }
+}
+
+function renderLeaders() {
+  if (!S.lbData.length) {
+    showLbState('No matchup data found for this season.<br>Run fetch_matchups.py to populate.');
+    return;
+  }
+  const rows = [...S.lbData].sort((a, b) => {
+    let va = a[S.lbSort.col] ?? -Infinity;
+    let vb = b[S.lbSort.col] ?? -Infinity;
+    return S.lbSort.dir === 'desc' ? vb - va : va - vb;
+  });
+
+  const meta = `${rows.length} defenders · min ${S.minPoss} poss · ${S.season} ${S.seasonType}`;
+  document.getElementById('results-meta').textContent = meta;
+
+  // Build thead
+  const cols = [
+    { key: '',                   label: '#',                  sortable: false, cls: 'th-left' },
+    { key: 'player_name',        label: 'Defender',           sortable: false, cls: 'th-left' },
+    { key: 'min',                label: 'Min',                sortable: true },
+    { key: 'possessions',        label: 'Poss',               sortable: true },
+    { key: 'avg_opp_fg_pct',     label: 'Avg Opp FG%',       sortable: true, tip: 'Possession-weighted avg FG% of all attackers this defender faced on the season.\n\nHigher = tougher assignment slate.' },
+    { key: 'avg_matchup_fg_pct', label: 'Avg Matchup FG%',   sortable: true, tip: 'Possession-weighted avg FG% opponents actually shot when guarded by this defender.\n\nLower = better.' },
+    { key: 'adj_delta',          label: 'Adj Delta',          sortable: true, tip: 'Rate stat — FG% points below their season average opponents shoot against this defender, averaged across all possessions.\n\nFormula: Σ((opp_season_fg% − matchup_fg%) × poss) / Σ(poss)\n\nIgnores volume: +5% on 300 poss ranks the same as +5% on 800 poss.' },
+    { key: 'impact',             label: 'Adj Delta × Poss ▲', sortable: true, tip: 'Adj Delta × total possessions defended.\n\nRewards defenders who perform well over more possessions — the numerator of Adj Delta before dividing.\n\nFormula: Σ(adj_delta × poss)\n\nPositive = better.' },
+  ];
+  const thead = document.getElementById('lb-thead');
+  thead.innerHTML = '<tr>' + cols.map(c => {
+    const sorted  = c.key === S.lbSort.col;
+    const arrow   = sorted ? (S.lbSort.dir === 'desc' ? ' ↓' : ' ↑') : '';
+    const tipAttr = c.tip ? ` data-tip="${c.tip.replace(/"/g, '&quot;')}"` : '';
+    return `<th class="${c.cls||''}${sorted?' sorted':''}"${tipAttr} ${c.sortable?`onclick="sortLb('${c.key}')"`:''}>${c.label}${arrow}</th>`;
+  }).join('') + '</tr>';
+
+  // Build tbody
+  const tbody = document.getElementById('lb-tbody');
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr onclick="openCard(${r.player_id},'${escHtml(r.player_name)}','${r.team_abbr||''}',${r.adj_delta??'null'},${r.possessions??'null'},${r.min??'null'})">
+      <td class="td-left td-rank">${i+1}</td>
+      <td class="td-left">
+        <div class="player-cell">
+          ${playerThumb(r.player_id)}
+          <div class="player-cell-info">
+            <span class="player-cell-name">${escHtml(r.player_name)}</span>
+            <span class="player-cell-sub">${[r.team_abbr, r.position_group].filter(Boolean).join(' · ')}</span>
+          </div>
+        </div>
+      </td>
+      <td class="td-mono td-dim">${round1(r.min)}</td>
+      <td class="td-mono">${round1(r.possessions)}</td>
+      <td class="td-mono td-dim">${pct(r.avg_opp_fg_pct)}</td>
+      <td class="td-mono">${pct(r.avg_matchup_fg_pct)}</td>
+      <td>${adjChip(r.adj_delta)}</td>
+      <td>${impactChip(r.impact)}</td>
+    </tr>
+  `).join('');
+
+  hideLbState();
+}
+
+function sortLb(col) {
+  if (S.lbSort.col === col) {
+    S.lbSort.dir = S.lbSort.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    S.lbSort = { col, dir: 'desc' };
+  }
+  renderLeaders();
+}
+
+// ── Leaderboard: Best Pairings ────────────────────────────────
+async function fetchPairings() {
+  showLbState('<span class="spin"></span> Loading…');
+  document.getElementById('results-title').textContent = 'Best Defensive Matchups';
+  S.lbSort = { col: 'adj_delta', dir: 'desc' };
+  try {
+    const url = `${API}/api/matchups/pairings?season=${encodeURIComponent(S.season)}&season_type=${encodeURIComponent(S.seasonType)}&min_poss=${S.minPoss}&pos=${S.pos}&team=${S.team}&limit=200`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) { showLbState(data.error); return; }
+    S.lbData = data.pairings || [];
+    renderPairings();
+  } catch(e) {
+    showLbState('Error loading data.');
+  }
+}
+
+function renderPairings() {
+  if (!S.lbData.length) {
+    showLbState('No pairing data found for this season.<br>Run fetch_matchups.py to populate.');
+    return;
+  }
+  const rows = [...S.lbData].sort((a, b) => {
+    const keyMap = {
+      adj_delta: 'adj_delta', possessions: 'possessions',
+      opp_season_fg_pct: 'opp_season_fg_pct', fg_pct: 'fg_pct',
+    };
+    const k  = keyMap[S.lbSort.col] || 'adj_delta';
+    let va = a[k] ?? -Infinity;
+    let vb = b[k] ?? -Infinity;
+    return S.lbSort.dir === 'desc' ? vb - va : va - vb;
+  });
+
+  const meta = `${rows.length} matchups · min ${S.minPoss} poss/pairing · ${S.season} ${S.seasonType}`;
+  document.getElementById('results-meta').textContent = meta;
+
+  const cols = [
+    { key: '', label: '#', sortable: false, cls: 'th-left' },
+    { key: 'defender_name', label: 'Defender', sortable: false, cls: 'th-left' },
+    { key: 'attacker_name', label: 'vs. Attacker', sortable: false, cls: 'th-left' },
+    { key: 'possessions', label: 'Poss', sortable: true },
+    { key: 'opp_season_fg_pct', label: 'Opp FG% (season)', sortable: true },
+    { key: 'fg_pct', label: 'Matchup FG%', sortable: true },
+    { key: 'adj_delta', label: 'Adj Delta ▲', sortable: true },
+  ];
+  const thead = document.getElementById('lb-thead');
+  thead.innerHTML = '<tr>' + cols.map(c => {
+    const sorted = c.key === S.lbSort.col;
+    const arrow  = sorted ? (S.lbSort.dir === 'desc' ? ' ↓' : ' ↑') : '';
+    return `<th class="${c.cls||''}${sorted?' sorted':''}" ${c.sortable?`onclick="sortLb('${c.key}')"`:''}>${c.label}${arrow}</th>`;
+  }).join('') + '</tr>';
+
+  const tbody = document.getElementById('lb-tbody');
+  tbody.innerHTML = rows.map((r, i) => {
+    return `
+    <tr onclick="openCard(${r.defender_id},'${escHtml(r.defender_name)}','${r.defender_team||''}',null,null,null)" style="cursor:pointer">
+      <td class="td-left td-rank">${i+1}</td>
+      <td class="td-left">
+        <div class="player-cell">
+          ${playerThumb(r.defender_id)}
+          <div class="player-cell-info">
+            <span class="player-cell-name">${escHtml(r.defender_name)}</span>
+            <span class="player-cell-sub">${r.defender_team||''}</span>
+          </div>
+        </div>
+      </td>
+      <td class="td-left">
+        <div class="player-cell">
+          ${playerThumb(r.attacker_id)}
+          <div class="player-cell-info">
+            <span class="player-cell-name">${escHtml(r.attacker_name)}</span>
+            <span class="player-cell-sub">${r.attacker_team||''}</span>
+          </div>
+        </div>
+      </td>
+      <td class="td-mono">${round1(r.possessions)}</td>
+      <td class="td-mono td-dim">${pct(r.opp_season_fg_pct)}</td>
+      <td class="td-mono">${pct(r.fg_pct)}</td>
+      <td>${adjChip(r.adj_delta)}</td>
+    </tr>`;
+  }).join('');
+
+  hideLbState();
+}
+
+function sortLb(col) {
+  if (S.lbSort.col === col) {
+    S.lbSort.dir = S.lbSort.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    S.lbSort = { col, dir: 'desc' };
+  }
+  if (S.view === 'defenders') renderLeaders();
+  else renderPairings();
+}
+
+// ── Player card ───────────────────────────────────────────────
+async function openCard(playerId, name, team, adjDelta, poss, min) {
+  // Show card section
+  document.getElementById('leaderboard-section').style.display = 'none';
+  document.getElementById('card-section').style.display = 'flex';
+
+  // Fill header immediately with what we know
+  document.getElementById('card-headshot').src = headshotUrl(playerId);
+  document.getElementById('card-headshot').onerror = function() { this.style.opacity = '0'; };
+  document.getElementById('card-name').textContent = name;
+  document.getElementById('card-meta').textContent = team;
+
+  const adjEl  = document.getElementById('card-adj');
+  const possEl = document.getElementById('card-poss');
+  const minEl  = document.getElementById('card-min');
+
+  if (adjDelta != null) {
+    adjEl.textContent = fmtAdj(adjDelta);
+    adjEl.className = 'card-stat-val ' + (adjDelta > 0.005 ? 'good' : adjDelta < -0.005 ? 'bad' : '');
+  } else {
+    adjEl.textContent = '…';
+    adjEl.className = 'card-stat-val';
+  }
+  possEl.textContent = poss != null ? round1(poss) : '…';
+  minEl.textContent  = min  != null ? round1(min)  : '…';
+
+  // Show loading in table
+  document.getElementById('card-state').style.display = 'flex';
+  document.getElementById('card-table').style.display = 'none';
+
+  // Reset card sort
+  S.cardSort = 'possessions'; S.cardDir = 'desc';
+  document.querySelectorAll('.sort-chip').forEach(c => c.classList.toggle('active', c.dataset.col === 'possessions'));
+
+  try {
+    const url = `${API}/api/matchups/defender/${playerId}?season=${encodeURIComponent(S.season)}&season_type=${encodeURIComponent(S.seasonType)}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) { document.getElementById('card-state').innerHTML = data.error; return; }
+
+    // Update header with fresh data
+    const d = data.defender || {};
+    document.getElementById('card-meta').textContent = [d.team_abbr, d.position_group].filter(Boolean).join(' · ');
+    if (d.adj_delta != null) {
+      adjEl.textContent = fmtAdj(d.adj_delta);
+      adjEl.className = 'card-stat-val ' + (d.adj_delta > 0.005 ? 'good' : d.adj_delta < -0.005 ? 'bad' : '');
+    }
+    if (d.possessions != null) possEl.textContent = round1(d.possessions);
+    if (d.min != null)         minEl.textContent  = round1(d.min);
+
+    S.cardData = data.matchups || [];
+    renderCard();
+  } catch(e) {
+    document.getElementById('card-state').innerHTML = 'Error loading matchup data.';
+  }
+}
+
+function renderCard() {
+  const rows = [...S.cardData].sort((a, b) => {
+    let va = a[S.cardSort] ?? -Infinity;
+    let vb = b[S.cardSort] ?? -Infinity;
+    return S.cardDir === 'desc' ? vb - va : va - vb;
+  });
+
+  const tbody = document.getElementById('card-tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="td-left">
+        <div class="player-cell">
+          ${playerThumb(r.attacker_id)}
+          <div class="player-cell-info">
+            <span class="player-cell-name">${escHtml(r.attacker_name)}</span>
+            <span class="player-cell-sub">${r.attacker_pos||''}</span>
+          </div>
+        </div>
+      </td>
+      <td class="td-mono td-dim">${r.attacker_team||'—'}</td>
+      <td class="td-mono">${round1(r.possessions)}</td>
+      <td class="td-mono td-dim">${r.fga != null ? Math.round(r.fga) : '—'}</td>
+      <td class="td-mono td-dim">${pct(r.opp_season_fg_pct)}</td>
+      <td class="td-mono">${pct(r.fg_pct)}</td>
+      <td>${adjChip(r.adj_delta)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('card-state').style.display = 'none';
+  document.getElementById('card-table').style.display = '';
+}
+
+function setCardSort(col, btn) {
+  if (S.cardSort === col) {
+    S.cardDir = S.cardDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    S.cardSort = col;
+    S.cardDir  = 'desc';
+  }
+  document.querySelectorAll('.sort-chip').forEach(c => c.classList.toggle('active', c === btn));
+  renderCard();
+}
+
+function clearCard() {
+  document.getElementById('card-section').style.display = 'none';
+  document.getElementById('leaderboard-section').style.display = 'flex';
+}
+
+// ── LB state helpers ──────────────────────────────────────────
+function showLbState(html) {
+  document.getElementById('lb-state').innerHTML = html;
+  document.getElementById('lb-state').style.display = 'flex';
+  document.getElementById('lb-table').style.display = 'none';
+}
+function hideLbState() {
+  document.getElementById('lb-state').style.display = 'none';
+  document.getElementById('lb-table').style.display = '';
+}
+
+// ── XSS escape ───────────────────────────────────────────────
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+async function init() {
+  buildPossOpts('defenders');
+  await loadSeasons();
+  fetchLeaders();
+}
+init();
+</script>
+</body>
+</html>

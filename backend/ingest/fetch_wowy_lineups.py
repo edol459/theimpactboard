@@ -81,7 +81,7 @@ def get_all_seasons(conn):
     return seasons
 
 
-def fetch_team_season(cur, team_abbr, season, retries=3):
+def fetch_team_season(cur, team_abbr, season, retries=5):
     team_id = TEAM_IDS[team_abbr]
     params = {
         "TeamId":     team_id,
@@ -99,7 +99,7 @@ def fetch_team_season(cur, team_abbr, season, retries=3):
             resp.raise_for_status()
             break
         except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout):
-            wait = 15 * (attempt + 1)
+            wait = 15 * (2 ** attempt)
             if attempt < retries - 1:
                 print(f"    timeout, retrying in {wait}s…")
                 time.sleep(wait)
@@ -107,7 +107,7 @@ def fetch_team_season(cur, team_abbr, season, retries=3):
                 print(f"    gave up after {retries} timeouts")
                 return 0
         except requests.exceptions.HTTPError as e:
-            wait = 20 * (attempt + 1)
+            wait = 20 * (2 ** attempt)
             if attempt < retries - 1:
                 print(f"    HTTP {e.response.status_code}, retrying in {wait}s…")
                 time.sleep(wait)
@@ -183,6 +183,8 @@ def main():
     print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     total_rows = 0
+    failed = []  # (abbr, season) pairs that returned 0 lineups
+
     for s_idx, season in enumerate(seasons, 1):
         print(f"── Season {season} ({s_idx}/{len(seasons)}) ──")
         for t_idx, abbr in enumerate(teams, 1):
@@ -191,9 +193,38 @@ def main():
             conn.commit()
             print(f"{count} lineups")
             total_rows += count
+            if count == 0:
+                failed.append((abbr, season))
             # Be polite between calls — pbpstats rate-limits aggressive clients
             if not (s_idx == len(seasons) and t_idx == len(teams)):
                 time.sleep(3.0)
+
+    # Retry pass for any teams that got 0 lineups
+    MAX_RETRY_PASSES = 5
+    retry_pass = 0
+    while failed and retry_pass < MAX_RETRY_PASSES:
+        retry_pass += 1
+        wait = 60 * retry_pass
+        print(f"\n── Retry pass {retry_pass}/{MAX_RETRY_PASSES}: {len(failed)} team(s) — waiting {wait}s before starting… ──")
+        time.sleep(wait)
+        still_failed = []
+        for t_idx, (abbr, season) in enumerate(failed, 1):
+            print(f"  [{t_idx:2}/{len(failed)}] {abbr} ({season})… ", end="", flush=True)
+            count = fetch_team_season(cur, abbr, season)
+            conn.commit()
+            print(f"{count} lineups")
+            if count == 0:
+                still_failed.append((abbr, season))
+            else:
+                total_rows += count
+            if t_idx < len(failed):
+                time.sleep(5.0)
+        failed = still_failed
+
+    if failed:
+        print(f"\nWarning: {len(failed)} team(s) still failed after all retry passes:")
+        for abbr, season in failed:
+            print(f"  {abbr} {season}")
 
     cur.close()
     conn.close()

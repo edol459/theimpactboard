@@ -229,13 +229,13 @@ nav {
 .table-scroll { flex: 1; overflow: auto; }
 table.wt {
   width: 100%; border-collapse: collapse;
-  font-family: var(--ff-sans); font-size: 13px; min-width: 520px;
+  font-family: var(--ff-sans); font-size: 13px; min-width: 360px;
 }
 table.wt thead { position: sticky; top: 0; z-index: 2; background: var(--paper); }
 table.wt thead th {
   font-family: var(--ff-mono); font-size: 10px;
   letter-spacing: 0.07em; text-transform: uppercase; font-weight: 500;
-  padding: 10px 28px 8px; text-align: right; color: var(--ink3);
+  padding: 10px 14px 8px; text-align: center; color: var(--ink3);
   border-bottom: 1px solid var(--rule); white-space: nowrap;
 }
 table.wt thead th.th-lineup { text-align: left; }
@@ -249,7 +249,7 @@ table.wt tbody tr.row-diff {
   border-bottom: 1px solid var(--rule);
 }
 table.wt tbody td {
-  padding: 13px 28px; text-align: right; color: var(--ink); vertical-align: middle;
+  padding: 13px 14px; text-align: center; color: var(--ink); vertical-align: middle;
 }
 table.wt tbody td.td-lineup { text-align: left; }
 
@@ -680,7 +680,7 @@ function renderResults(rows) {
   const allOnRow  = rows.find(r => r.onSet.size === selArr.length);
   const allOffRow = rows.find(r => r.onSet.size === 0);
   let diffHtml = '';
-  if (allOnRow && allOffRow && selArr.length > 1) {
+  if (allOnRow && allOffRow) {
     const dOrtg = allOnRow.ortg != null && allOffRow.ortg != null ? +(allOnRow.ortg - allOffRow.ortg).toFixed(1) : null;
     const dDrtg = allOnRow.drtg != null && allOffRow.drtg != null ? +(allOnRow.drtg - allOffRow.drtg).toFixed(1) : null;
     const dNet  = allOnRow.net  != null && allOffRow.net  != null ? +(allOnRow.net  - allOffRow.net ).toFixed(1) : null;

@@ -342,7 +342,7 @@ nav {
   flex-shrink: 0;
   background: var(--paper2);
 }
-.player-info { flex: 1 1 0; min-width: 0; }
+.player-info { flex: 1 1 0; min-width: 0; overflow: hidden; }
 .player-name {
   font-family: var(--ff-sans);
   font-size: 14px;
@@ -444,6 +444,22 @@ nav {
   .nav-tabs { overflow-x: auto; scrollbar-width: none; }
   .nav-tabs::-webkit-scrollbar { display: none; }
   .nav-tab { white-space: nowrap; padding: 5px 12px; }
+  .header-controls { gap: 8px; }
+  .toggle-btn { padding: 6px 10px; }
+}
+
+@media (max-width: 500px) {
+  .page { padding-left: 14px; padding-right: 14px; }
+  .player-card-header { padding: 10px 12px; gap: 8px; }
+  .player-headshot { width: 30px; height: 30px; }
+  /* Hide Prior Avg on small screens — rank + headshot + name + last-N + delta still fit */
+  .num-prior { display: none; }
+  .player-nums { gap: 10px; flex-shrink: 1; }
+  .num-val { font-size: 13px; }
+  .num-delta { font-size: 14px; }
+  .num-label { font-size: 8px; }
+  .stat-tabs { gap: 4px; }
+  .stat-tab { padding: 5px 10px; font-size: 10px; }
 }
 </style>
 </head>
@@ -690,7 +706,7 @@ function cardHTML(player, rank, dir) {
             <div class="num-label">${nLabel}</div>
             <div class="num-val">${lastN}</div>
           </div>
-          <div class="num-block">
+          <div class="num-block num-prior">
             <div class="num-label">Prior avg</div>
             <div class="num-val">${prior}</div>
           </div>

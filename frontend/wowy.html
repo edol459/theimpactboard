@@ -341,7 +341,7 @@ table.wt tbody td.td-lineup { text-align: left; }
 .nav-signout-btn:hover { color: var(--ink); }
 
 /* ── Mobile ──────────────────────────────────────────────────── */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   :root { --nav-h: 88px; }
   nav { height: auto; padding: 0 16px; flex-wrap: wrap; gap: 0; align-items: center; }
   .nav-wordmark { padding: 13px 0; }
@@ -354,23 +354,6 @@ table.wt tbody td.td-lineup { text-align: left; }
   .nav-tabs::-webkit-scrollbar { display: none; }
   .nav-tab { white-space: nowrap; padding: 5px 12px; }
 
-  /* Compact table so all columns fit in one screenshot */
-  table.wt { min-width: 0; font-size: 12px; }
-  table.wt thead th { padding: 8px 6px 7px; font-size: 9px; letter-spacing: 0.04em; }
-  table.wt thead th:first-child { padding-left: 16px; }
-  table.wt thead th:last-child { padding-right: 16px; }
-  table.wt tbody td { padding: 10px 6px; }
-  table.wt tbody td:first-child { padding-left: 16px; }
-  table.wt tbody td:last-child { padding-right: 16px; }
-  table.wt thead th.th-lineup,
-  table.wt tbody td.td-lineup { width: 1px; white-space: nowrap; }
-  .wowy-lineup { gap: 6px; }
-  .wc img { width: 32px; height: 32px; }
-  .wc-name { font-size: 9px; }
-  .td-min { font-size: 11px; }
-}
-
-@media (max-width: 768px) {
   /* Stack sidebar above main */
   .app { flex-direction: column; }
   .sidebar {
@@ -384,6 +367,21 @@ table.wt tbody td.td-lineup { text-align: left; }
   .results-head { padding: 12px 16px 10px; }
   .sidebar-head { padding-top: 28px; }
   .sel-strip { padding: 10px 16px; }
+
+  /* Compact table — applies whenever sidebar stacks */
+  table.wt { min-width: 0; font-size: 12px; }
+  table.wt thead th { padding: 8px 6px 7px; font-size: 9px; letter-spacing: 0.04em; }
+  table.wt thead th:first-child { padding-left: 16px; }
+  table.wt thead th:last-child { padding-right: 16px; }
+  table.wt tbody td { padding: 10px 6px; }
+  table.wt tbody td:first-child { padding-left: 16px; }
+  table.wt tbody td:last-child { padding-right: 16px; }
+  table.wt thead th.th-lineup,
+  table.wt tbody td.td-lineup { width: 1px; white-space: nowrap; }
+  .wowy-lineup { gap: 6px; }
+  .wc img { width: 32px; height: 32px; }
+  .wc-name { font-size: 9px; }
+  .td-min { font-size: 11px; }
 
   /* Table: ensure horizontal scroll */
   .table-scroll { overflow-x: auto; }

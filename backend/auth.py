@@ -124,6 +124,25 @@ def me():
     user = current_user()
     if not user:
         return jsonify({"user": None}), 401
+
+    # Fetch avatar_url and favorite_team fresh from DB — these can be large
+    # (data URLs) or recently changed, so we don't rely on the session cookie.
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "SELECT avatar_url, favorite_team FROM users WHERE id = %s",
+            (user["id"],)
+        )
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if row:
+            user = dict(user)
+            user["avatar_url"]    = row["avatar_url"] or ""
+            user["favorite_team"] = row["favorite_team"] or ""
+    except Exception:
+        pass  # fall back to session values if DB is unavailable
+
     return jsonify({"user": user})
 
 

@@ -2221,11 +2221,6 @@ def update_avatar():
         conn.commit()
         cur.close(); conn.close()
 
-        from flask import session
-        if "user" in session:
-            session["user"]["avatar_url"] = data
-            session.modified = True
-
         return jsonify({"ok": True, "avatar_url": data})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

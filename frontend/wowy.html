@@ -340,9 +340,9 @@ table.wt tbody td.td-lineup { text-align: left; }
 }
 .nav-signout-btn:hover { color: var(--ink); }
 
-/* Hide drawer chrome on desktop */
+/* Drawer handle never used — desktop only */
 .drawer-handle { display: none; }
-/* Sidebar left, main right on desktop (DOM order is reversed for mobile) */
+/* Sidebar left, main right on desktop (DOM order reversed for mobile) */
 .sidebar { order: -1; }
 .main    { order:  0; }
 
@@ -360,75 +360,65 @@ table.wt tbody td.td-lineup { text-align: left; }
   .nav-tabs::-webkit-scrollbar { display: none; }
   .nav-tab { white-space: nowrap; padding: 5px 12px; }
 
-  /* Main (chart) fills the screen above the drawer */
+  /* Sidebar becomes a sticky top control strip */
   .app { flex-direction: column; }
-  .main { min-width: 0; overflow: visible; flex: 1; }
-  .results-head { padding: 12px 16px 10px; }
-  .sel-strip { padding: 10px 16px; }
+  .sidebar {
+    width: 100%; height: auto; order: -1;
+    position: sticky; top: var(--nav-h); z-index: 80;
+    border-right: none; border-bottom: 1px solid var(--rule);
+    background: var(--paper); overflow: visible;
+  }
+
+  /* Team + season selects side by side */
+  .sidebar-head {
+    display: flex; gap: 10px; padding: 14px 14px;
+    align-items: flex-end;
+  }
+  .sidebar-head > * {max-width: 120px; min-width: 0; }
+  .sidebar-head > *:first-child { flex: 2; }
+  .sidebar-title { display: none; }
+  .ctrl-select { margin-bottom: 0; font-size: 12px; padding: 6px 8px; }
+  .ctrl-label { font-size: 8px; }
+
+  /* Player filmstrip — horizontal scroll */
+  .players-scroll {
+    overflow-x: auto; overflow-y: hidden;
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--rule);
+    scrollbar-width: none; max-height: none;
+  }
+  .players-scroll::-webkit-scrollbar { display: none; }
+  .players-scroll-label { display: none; }
+  .player-grid { display: flex; flex-direction: row; gap: 8px; width: max-content; }
+  .player-card { width: 62px; padding: 6px 4px 5px; gap: 3px; }
+  .player-headshot { width: 42px; height: 42px; }
+  .player-headshot-fallback { width: 42px; height: 42px; font-size: 11px; }
+  .player-card-name { font-size: 9px; }
+  .player-card-pos { display: none; }
+  .sidebar-footer { display: none !important; }
+
+  /* Results */
+  .main { min-width: 0; overflow: visible; }
+  .results-head { padding: 12px 14px 10px; }
+  .sel-strip { padding: 8px 14px; gap: 8px; }
+  .sel-avatar img { width: 28px; height: 28px; }
+  .sel-avatar-name { font-size: 9px; }
 
   /* Compact table */
   table.wt { min-width: 0; font-size: 12px; }
   table.wt thead th { padding: 8px 6px 7px; font-size: 9px; letter-spacing: 0.04em; }
-  table.wt thead th:first-child { padding-left: 16px; }
-  table.wt thead th:last-child { padding-right: 16px; }
+  table.wt thead th:first-child { padding-left: 14px; }
+  table.wt thead th:last-child  { padding-right: 14px; }
   table.wt tbody td { padding: 10px 6px; }
-  table.wt tbody td:first-child { padding-left: 16px; }
-  table.wt tbody td:last-child { padding-right: 16px; }
+  table.wt tbody td:first-child { padding-left: 14px; }
+  table.wt tbody td:last-child  { padding-right: 14px; }
   table.wt thead th.th-lineup,
   table.wt tbody td.td-lineup { width: 1px; white-space: nowrap; }
   .wowy-lineup { gap: 6px; }
-  .wc img { width: 32px; height: 32px; }
+  .wc img { width: 30px; height: 30px; }
   .wc-name { font-size: 9px; }
   .td-min { font-size: 11px; }
   .table-scroll { overflow-x: auto; }
-
-  .drawer-handle { display: flex; }
-
-  /* ── Bottom drawer ── */
-  .sidebar {
-    position: fixed; left: 0; right: 0; bottom: 0;
-    width: 100%; height: auto;
-    border-right: none; border-top: 1px solid var(--rule);
-    border-radius: 16px 16px 0 0;
-    background: var(--paper);
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.10);
-    z-index: 90;
-    transform: translateY(calc(100% - 50px));
-    transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
-    overflow: hidden;
-  }
-  .sidebar.drawer-open {
-    transform: translateY(0);
-  }
-  /* Drag handle / toggle strip */
-  .drawer-handle {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 18px; height: 52px; cursor: pointer; flex-shrink: 0;
-    border-bottom: 1px solid var(--rule);
-  }
-  .drawer-handle-pill {
-    position: absolute; left: 50%; transform: translateX(-50%);
-    width: 36px; height: 4px; border-radius: 2px; background: var(--rule);
-    top: 10px;
-  }
-  .drawer-handle-label {
-    font-family: var(--ff-mono); font-size: 11px;
-    letter-spacing: 0.06em; text-transform: uppercase;
-    color: var(--ink3);
-  }
-  .drawer-handle-caret {
-    font-size: 14px; color: var(--ink4);
-    transition: transform 0.3s;
-  }
-  .sidebar.drawer-open .drawer-handle-caret { transform: rotate(180deg); }
-
-  /* Constrain scrollable player area inside drawer */
-  .sidebar-head { padding: 14px 18px 12px; }
-  .players-scroll { max-height: 44vh; overflow-y: auto; }
-  .player-grid { grid-template-columns: repeat(3, 1fr); }
-
-  /* Space at bottom of main so content isn't hidden behind the closed drawer */
-  .main { padding-bottom: 52px; }
 }
 
 </style>
@@ -457,11 +447,6 @@ table.wt tbody td.td-lineup { text-align: left; }
     </div>
   </main>
   <aside class="sidebar" id="sidebar">
-    <div class="drawer-handle" id="drawer-handle" onclick="toggleDrawer()">
-      <div class="drawer-handle-pill"></div>
-      <span class="drawer-handle-label" id="drawer-label">Choose Players</span>
-      <span class="drawer-handle-caret">▲</span>
-    </div>
     <div class="sidebar-head">
       <div class="sidebar-title">WoWY</div>
       <label class="ctrl-label" for="team-select">Team</label>
@@ -854,16 +839,6 @@ async function navSignOut() {
 }
 initNavAuth();
 
-// ── Mobile drawer ─────────────────────────────────────────────
-function toggleDrawer() {
-  if (window.innerWidth > 768) return;
-  document.getElementById('sidebar').classList.toggle('drawer-open');
-}
-
-// Open drawer by default on mobile
-if (window.innerWidth <= 768) {
-  document.getElementById('sidebar').classList.add('drawer-open');
-}
 </script>
 </body>
 </html>

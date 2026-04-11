@@ -91,7 +91,7 @@ def google_login():
     # registered redirect URI. In production on Railway (https), remove this.
     redirect_uri = url_for("auth.google_callback", _external=True,
                            _scheme="http" if os.getenv("FLASK_ENV") != "production" else "https")
-    return oauth.google.authorize_redirect(redirect_uri)
+    return oauth.google.authorize_redirect(redirect_uri, prompt="select_account")
 
 
 @auth_bp.route("/google/callback")
@@ -154,6 +154,14 @@ def me():
 
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """Clear the session."""
+    """Clear the session (fetch-based)."""
     session.clear()
     return jsonify({"ok": True})
+
+
+@auth_bp.route("/logout")
+def logout_get():
+    """Clear the session and redirect — reliable on iOS PWA where fetch drops cookies."""
+    next_url = request.args.get("next", "/")
+    session.clear()
+    return redirect(next_url)

@@ -448,9 +448,8 @@ async function loadAuth() {
   }
 }
 
-async function signOut() {
-  await fetch('/auth/logout', { method: 'POST' });
-  window.location.reload();
+function signOut() {
+  window.location.href = '/auth/logout?next=/';
 }
 
 // ── Load profile ──────────────────────────────────────────────

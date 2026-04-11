@@ -1121,14 +1121,8 @@ async function renderSidebarUserStats() {
   }
 }
 
-async function signOut() {
-  await fetch('/auth/logout', { method: 'POST' });
-  currentUser = null;
-  const slot = document.getElementById('nav-auth-slot');
-  if (slot) slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=/reviews">Sign in</a>`;
-  renderSidebarAuth();
-  renderSidebarUserStats();
-  showToast('Signed out.');
+function signOut() {
+  window.location.href = '/auth/logout?next=/reviews';
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

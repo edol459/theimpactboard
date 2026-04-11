@@ -540,6 +540,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ── Past-date cache (immutable data — cache forever) ─────────────
 _past_sb_cache: dict = {}   # date -> payload dict
 
+# ── Future-date cache (schedule can change — TTL 60 min) ──────────
+_future_sb_cache: dict = {}  # date -> {"payload": dict, "ts": float}
+
 # ── Today's scoreboard — kept fresh by background poller ─────────
 _today_sb = {"games": [], "date": "", "raw": []}
 _today_sb_lock = _threading.Lock()
@@ -695,6 +698,12 @@ def get_scoreboard():
     if is_past and date in _past_sb_cache:
         return jsonify(_past_sb_cache[date])
 
+    # Future dates — cache for 60 minutes
+    if not is_past and date != _game_today and date in _future_sb_cache:
+        entry = _future_sb_cache[date]
+        if _time.time() - entry["ts"] < 3600:
+            return jsonify(entry["payload"])
+
     # For past dates, try the DB first (avoids nba_api outbound call that
     # gets rate-limited / blocked on cloud IPs in production).
     if is_past:
@@ -748,6 +757,8 @@ def get_scoreboard():
             payload = {"games": [], "date": date}
             if is_past:
                 _past_sb_cache[date] = payload
+            elif date != _game_today:
+                _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
             return jsonify(payload)
 
         rows = [(str(row.get("gameId", "") or row.get("GAME_ID", "")), row)
@@ -810,6 +821,8 @@ def get_scoreboard():
         payload = {"games": games, "date": date}
         if is_past:
             _past_sb_cache[date] = payload
+        elif date != _game_today:
+            _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
         return jsonify(payload)
 
     except Exception as e:

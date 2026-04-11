@@ -600,9 +600,8 @@ async function loadAuth() {
     slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
   }
 }
-async function navSignOut() {
-  await fetch('/auth/logout', { method: 'POST' });
-  window.location.reload();
+function navSignOut() {
+  window.location.href = '/auth/logout?next=' + encodeURIComponent(window.location.pathname);
 }
 
 // ── Load trends data ───────────────────────────────────────────

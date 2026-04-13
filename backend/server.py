@@ -49,12 +49,11 @@ def get_current_season() -> str:
 
 
 def get_current_season_type() -> str:
+    """Returns 'Playoffs' during late April–June, else 'Regular Season'."""
     today = date.today()
     m, d = today.month, today.day
-    if m in (5, 6) or (m == 4 and d >= 20):
+    if (m == 4 and d >= 20) or m in (5, 6):
         return "Playoffs"
-    if m == 4 and d >= 13:
-        return "PlayIn"
     return "Regular Season"
 
 
@@ -2839,9 +2838,8 @@ def _safe(v):
 
 @app.route("/api/trends")
 def get_trends():
-    season      = request.args.get("season",      DEFAULT_SEASON)
-    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
-    n           = int(request.args.get("n", 5))
+    season = request.args.get("season", DEFAULT_SEASON)
+    n      = int(request.args.get("n", 5))
     if n not in (5, 10, 15):
         n = 5
 
@@ -2871,7 +2869,6 @@ def get_trends():
                         COUNT(*) OVER (PARTITION BY player_id) AS total_games
                     FROM player_gamelogs
                     WHERE season = %s
-                      AND season_type = %s
                       AND {col} IS NOT NULL
                       AND min IS NOT NULL
                       AND NOT ({col} = 'NaN'::real)
@@ -2908,7 +2905,7 @@ def get_trends():
                 FROM last_n l
                 JOIN prior p ON p.player_id = l.player_id
                 ORDER BY delta DESC
-            """, (season, season_type, n, n, n))
+            """, (season, n, n, n))
 
             rows = [dict(r) for r in cur.fetchall()]
             for r in rows:
@@ -2932,10 +2929,9 @@ def get_trends():
                 FROM player_gamelogs
                 WHERE player_id = ANY(%s)
                   AND season = %s
-                  AND season_type = %s
                   AND matchup IS NOT NULL
                 ORDER BY player_id, game_date DESC
-            """, (list(all_player_ids), season, season_type))
+            """, (list(all_player_ids), season))
             team_map = {r["player_id"]: r["team_abbr"] for r in cur.fetchall()}
             for stat_data in results.values():
                 for r in stat_data["risers"] + stat_data["fallers"]:
@@ -2943,7 +2939,7 @@ def get_trends():
 
         cur.close()
         conn.close()
-        return jsonify({"n": n, "season": season, "season_type": season_type, "stats": results})
+        return jsonify({"n": n, "season": season, "stats": results})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2953,9 +2949,8 @@ def get_trends():
 
 @app.route("/api/trends/gamelog")
 def get_trends_gamelog():
-    player_id   = request.args.get("player_id",   type=int)
-    season      = request.args.get("season",      DEFAULT_SEASON)
-    season_type = request.args.get("season_type", DEFAULT_SEASON_TYPE)
+    player_id = request.args.get("player_id", type=int)
+    season    = request.args.get("season",    DEFAULT_SEASON)
 
     if not player_id:
         return jsonify({"error": "player_id required"}), 400
@@ -2968,9 +2963,8 @@ def get_trends_gamelog():
             FROM player_gamelogs
             WHERE player_id = %s
               AND season = %s
-              AND season_type = %s
             ORDER BY game_date ASC
-        """, (player_id, season, season_type))
+        """, (player_id, season))
         rows = [dict(r) for r in cur.fetchall()]
         float_cols = ("min", "fga", "pts", "ast", "reb", "fg3m", "ts_pct")
         for r in rows:

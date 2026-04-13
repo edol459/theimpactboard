@@ -29,22 +29,24 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 
 def get_current_season():
-    """Detect active season from DB."""
+    """Always returns Regular Season — impact metrics (DARKO, LEBRON, Net Pts)
+    only publish regular season data, so we always write to those rows."""
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur  = conn.cursor()
         cur.execute("""
-            SELECT season, season_type FROM player_seasons
-            ORDER BY season DESC, season_type LIMIT 1
+            SELECT season FROM player_seasons
+            WHERE season_type = 'Regular Season'
+            ORDER BY season DESC LIMIT 1
         """)
         row = cur.fetchone()
         cur.close()
         conn.close()
         if row:
-            return row[0], row[1]
+            return row[0], 'Regular Season'
     except Exception as e:
         print(f"⚠️  Could not detect season from DB: {e}")
-    return os.getenv('NBA_SEASON', '2025-26'), os.getenv('NBA_SEASON_TYPE', 'Regular Season')
+    return os.getenv('NBA_SEASON', '2025-26'), 'Regular Season'
 
 
 def run(script, label, extra_args=None):

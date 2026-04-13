@@ -339,19 +339,15 @@ nav {
     <div class="page-subtitle">Compare stats between any two NBA players</div>
   </div>
 
-  <!-- Controls -->
-  <div class="controls-bar">
-    <select class="season-select" id="season-type-select">
-      <option value="Regular Season">Regular Season</option>
-      <option value="Playoffs">Playoffs</option>
-    </select>
-  </div>
-
   <!-- Player pickers -->
   <div class="pickers">
     <div class="picker-wrap" id="picker-a-wrap">
       <div class="picker-label">Player 1</div>
       <select class="season-select" id="season-a-select" style="width:100%;margin-bottom:6px"></select>
+      <select class="season-select" id="season-type-a-select" style="width:100%;margin-bottom:6px">
+        <option value="Regular Season" selected>Regular Season</option>
+        <option value="Playoffs">Playoffs</option>
+      </select>
       <input class="picker-search" id="picker-a-input" type="text" placeholder="Search player…" autocomplete="off">
       <div class="picker-dropdown" id="picker-a-dropdown"></div>
       <div class="player-card" id="card-a">
@@ -369,6 +365,10 @@ nav {
     <div class="picker-wrap" id="picker-b-wrap">
       <div class="picker-label">Player 2</div>
       <select class="season-select" id="season-b-select" style="width:100%;margin-bottom:6px"></select>
+      <select class="season-select" id="season-type-b-select" style="width:100%;margin-bottom:6px">
+        <option value="Regular Season" selected>Regular Season</option>
+        <option value="Playoffs">Playoffs</option>
+      </select>
       <input class="picker-search" id="picker-b-input" type="text" placeholder="Search player…" autocomplete="off">
       <div class="picker-dropdown" id="picker-b-dropdown"></div>
       <div class="player-card" id="card-b">
@@ -664,7 +664,8 @@ const ALL_STATS = [
 const ST = {
   seasonA: computeCurrentSeason(),
   seasonB: computeCurrentSeason(),
-  seasonType: computeCurrentSeasonType(),
+  seasonTypeA: 'Regular Season',
+  seasonTypeB: 'Regular Season',
   playerA: null,  // { player_id, player_name, team_abbr, position_group, stats:{} }
   playerB: null,
   activeGroup: 'overall',
@@ -890,10 +891,10 @@ function renderComparison() {
 // ── Player picker logic ──────────────────────────────────────────
 let pickerTimers = {};
 
-async function searchPlayers(q, season) {
+async function searchPlayers(q, season, seasonType) {
   if (!q || q.length < 2) return [];
   try {
-    const params = new URLSearchParams({ season, season_type: ST.seasonType, q, limit: 12 });
+    const params = new URLSearchParams({ season, season_type: seasonType, q, limit: 12 });
     const res = await fetch(`${API}/api/players?${params}`);
     const data = await res.json();
     return data.players || [];
@@ -916,7 +917,8 @@ function setupPicker(side) {
     if (!q) { dropdown.classList.remove('open'); dropdown.innerHTML = ''; return; }
     pickerTimers[side] = setTimeout(async () => {
       const season = side === 'a' ? ST.seasonA : ST.seasonB;
-      const players = await searchPlayers(q, season);
+      const seasonType = side === 'a' ? ST.seasonTypeA : ST.seasonTypeB;
+      const players = await searchPlayers(q, season, seasonType);
       focused = -1;
       if (!players.length) {
         dropdown.innerHTML = '<div style="padding:12px;font-family:var(--ff-mono);font-size:11px;color:var(--ink4)">No players found</div>';
@@ -977,7 +979,8 @@ function setupPicker(side) {
     // Fetch full stats
     try {
       const season = side === 'a' ? ST.seasonA : ST.seasonB;
-      const params = new URLSearchParams({ player_id: p.player_id, season, season_type: ST.seasonType });
+      const seasonType = side === 'a' ? ST.seasonTypeA : ST.seasonTypeB;
+      const params = new URLSearchParams({ player_id: p.player_id, season, season_type: seasonType });
       const res = await fetch(`${API}/api/stats?${params}`);
       const data = await res.json();
       const stats = data.stats || {};
@@ -1004,21 +1007,22 @@ document.getElementById('season-b-select').addEventListener('change', async func
   ST.seasonB = this.value;
   if (ST.playerB) { await reloadPlayer('b'); renderComparison(); }
 });
-document.getElementById('season-type-select').addEventListener('change', async function() {
-  ST.seasonType = this.value;
-  const reloads = [];
-  if (ST.playerA) reloads.push(reloadPlayer('a'));
-  if (ST.playerB) reloads.push(reloadPlayer('b'));
-  await Promise.all(reloads);
-  renderComparison();
+document.getElementById('season-type-a-select').addEventListener('change', async function() {
+  ST.seasonTypeA = this.value;
+  if (ST.playerA) { await reloadPlayer('a'); renderComparison(); }
+});
+document.getElementById('season-type-b-select').addEventListener('change', async function() {
+  ST.seasonTypeB = this.value;
+  if (ST.playerB) { await reloadPlayer('b'); renderComparison(); }
 });
 
 async function reloadPlayer(side) {
   const player = side === 'a' ? ST.playerA : ST.playerB;
   if (!player) return;
   const season = side === 'a' ? ST.seasonA : ST.seasonB;
+  const seasonType = side === 'a' ? ST.seasonTypeA : ST.seasonTypeB;
   try {
-    const params = new URLSearchParams({ player_id: player.player_id, season, season_type: ST.seasonType });
+    const params = new URLSearchParams({ player_id: player.player_id, season, season_type: seasonType });
     const res = await fetch(`${API}/api/stats?${params}`);
     const data = await res.json();
     if (data.stats) {
@@ -1037,8 +1041,6 @@ async function loadSeasons() {
   ]);
   ST.seasonA = document.getElementById('season-a-select').value;
   ST.seasonB = document.getElementById('season-b-select').value;
-  // Sync season-type dropdown to computed default
-  document.getElementById('season-type-select').value = ST.seasonType;
 }
 
 // ── Nav auth ─────────────────────────────────────────────────────

@@ -1334,6 +1334,10 @@ tbody tr {
       <div class="page-title">Player Stats</div>
       <div class="page-subtitle" id="page-subtitle"></div>
       <select class="season-select" id="season-select"></select>
+      <select class="season-select" id="season-type-select">
+        <option value="Regular Season" selected>Regular Season</option>
+        <option value="Playoffs">Playoffs</option>
+      </select>
     </div>
 
     <!-- Toolbar -->
@@ -1532,7 +1536,7 @@ const API = window.location.protocol === 'file:'
 // ── State ────────────────────────────────────────────────────
 const ST = {
   season:      computeCurrentSeason(),
-  seasonType:  computeCurrentSeasonType(),
+  seasonType:  'Regular Season',
   view:        'stats',
 
   // Stats table
@@ -2561,6 +2565,14 @@ document.getElementById('season-select').addEventListener('change', function() {
   loadStats();
 });
 
+// ── Season type select ────────────────────────────────────────
+document.getElementById('season-type-select').addEventListener('change', function() {
+  ST.seasonType = this.value;
+  const display = ST.season.replace('-', '–');
+  document.getElementById('page-subtitle').textContent = `${display} · ${ST.seasonType}`;
+  loadStats();
+});
+
 // ── Two-level stat nav wiring ─────────────────────────────────
 function renderSubTabs(cat) {
   const subs = STAT_CATS[cat].subs;
@@ -3254,6 +3266,7 @@ renderSubTabs(ST.statCat);  // populates sub-tabs, contextual filters, clears fi
 // Populate season dropdown from API, then set subtitle to match
 populateSeasonDropdown(document.getElementById('season-select'), ST.season).then(() => {
   const display = ST.season.replace('-', '–');
+  document.getElementById('season-type-select').value = ST.seasonType;
   document.getElementById('page-subtitle').textContent = `${display} · ${ST.seasonType}`;
 });
 

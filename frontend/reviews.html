@@ -871,8 +871,10 @@
         <span class="filter-label">Season</span>
         <select class="filter-select" id="filterSeason"></select>
         <select class="filter-select" id="filterSeasonType">
+          <option value="">All</option>
           <option value="Regular Season">Regular Season</option>
           <option value="Playoffs">Playoffs</option>
+          <option value="PlayIn">Play-In</option>
         </select>
         <span class="filter-label" style="margin-left:8px">Team</span>
         <select class="filter-select" id="filterTeam">
@@ -1261,8 +1263,8 @@ populateSeasonDropdown(
   computeCurrentSeason(),
   'games'
 ).then(() => {
-  // Set season type to match the current default
-  document.getElementById('filterSeasonType').value = computeCurrentSeasonType();
+  // Default to showing all season types
+  document.getElementById('filterSeasonType').value = '';
 });
 
 function resetBrowse() {

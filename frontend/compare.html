@@ -416,12 +416,12 @@ const STAT_GROUPS = [
     label: 'Overall',
     stats: [
       { key: 'darko_dpm',   label: 'DARKO DPM',  fmt: '2f' },
-      { key: 'pts',         label: 'PTS',         fmt: '1f' },
-      { key: 'reb',         label: 'REB',         fmt: '1f' },
-      { key: 'ast',         label: 'AST',         fmt: '1f' },
-      { key: 'stl',         label: 'STL',         fmt: '1f' },
-      { key: 'blk',         label: 'BLK',         fmt: '1f' },
-      { key: 'tov',         label: 'TOV',         fmt: '1f', invert: true },
+      { key: 'pts',         label: 'PTS',         fmt: '1f', perGame: true },
+      { key: 'reb',         label: 'REB',         fmt: '1f', perGame: true },
+      { key: 'ast',         label: 'AST',         fmt: '1f', perGame: true },
+      { key: 'stl',         label: 'STL',         fmt: '1f', perGame: true },
+      { key: 'blk',         label: 'BLK',         fmt: '1f', perGame: true },
+      { key: 'tov',         label: 'TOV',         fmt: '1f', invert: true, perGame: true },
       { key: 'ts_pct',      label: 'TS%',         fmt: 'pct' },
       { key: 'fg_pct',      label: 'FG%',         fmt: 'pct' },
       { key: 'fg3_pct',     label: '3P%',         fmt: 'pct' },
@@ -438,15 +438,15 @@ const STAT_GROUPS = [
     id: 'scoring',
     label: 'Scoring',
     stats: [
-      { key: 'pts',            label: 'PTS',         fmt: '1f' },
-      { key: 'fgm',            label: 'FGM',         fmt: '1f' },
-      { key: 'fga',            label: 'FGA',         fmt: '1f' },
+      { key: 'pts',            label: 'PTS',         fmt: '1f', perGame: true },
+      { key: 'fgm',            label: 'FGM',         fmt: '1f', perGame: true },
+      { key: 'fga',            label: 'FGA',         fmt: '1f', perGame: true },
       { key: 'fg_pct',         label: 'FG%',         fmt: 'pct' },
-      { key: 'fg3m',           label: '3PM',         fmt: '1f' },
-      { key: 'fg3a',           label: '3PA',         fmt: '1f' },
+      { key: 'fg3m',           label: '3PM',         fmt: '1f', perGame: true },
+      { key: 'fg3a',           label: '3PA',         fmt: '1f', perGame: true },
       { key: 'fg3_pct',        label: '3P%',         fmt: 'pct' },
-      { key: 'ftm',            label: 'FTM',         fmt: '1f' },
-      { key: 'fta',            label: 'FTA',         fmt: '1f' },
+      { key: 'ftm',            label: 'FTM',         fmt: '1f', perGame: true },
+      { key: 'fta',            label: 'FTA',         fmt: '1f', perGame: true },
       { key: 'ft_pct',         label: 'FT%',         fmt: 'pct' },
       { key: 'ts_pct',         label: 'TS%',         fmt: 'pct' },
       { key: 'efg_pct',        label: 'eFG%',        fmt: 'pct' },
@@ -461,18 +461,18 @@ const STAT_GROUPS = [
     id: 'playmaking',
     label: 'Playmaking',
     stats: [
-      { key: 'ast',             label: 'AST',             fmt: '1f' },
-      { key: 'tov',             label: 'TOV',             fmt: '1f', invert: true },
+      { key: 'ast',             label: 'AST',             fmt: '1f', perGame: true },
+      { key: 'tov',             label: 'TOV',             fmt: '1f', invert: true, perGame: true },
       { key: 'ast_to',          label: 'AST/TOV',         fmt: '2f' },
       { key: 'ast_pct',         label: 'AST%',            fmt: 'pct' },
-      { key: 'passes_made',     label: 'Passes',          fmt: '1f' },
-      { key: 'ast_pts_created', label: 'AST Pts Created', fmt: '1f' },
-      { key: 'potential_ast',   label: 'Potential AST',   fmt: '1f' },
-      { key: 'secondary_ast',   label: 'Secondary AST',   fmt: '1f' },
-      { key: 'ft_ast',          label: 'FT AST',          fmt: '1f' },
-      { key: 'bad_pass_tov',    label: 'Bad Pass TOV',    fmt: '1f', invert: true },
-      { key: 'drives',          label: 'Drives',          fmt: '1f' },
-      { key: 'drive_ast',       label: 'Drive AST',       fmt: '1f' },
+      { key: 'passes_made',     label: 'Passes',          fmt: '1f', perGame: true },
+      { key: 'ast_pts_created', label: 'AST Pts Created', fmt: '1f', perGame: true },
+      { key: 'potential_ast',   label: 'Potential AST',   fmt: '1f', perGame: true },
+      { key: 'secondary_ast',   label: 'Secondary AST',   fmt: '1f', perGame: true },
+      { key: 'ft_ast',          label: 'FT AST',          fmt: '1f', perGame: true },
+      { key: 'bad_pass_tov',    label: 'Bad Pass TOV',    fmt: '1f', invert: true, perGame: true },
+      { key: 'drives',          label: 'Drives',          fmt: '1f', perGame: true },
+      { key: 'drive_ast',       label: 'Drive AST',       fmt: '1f', perGame: true },
     ]
   },
   {
@@ -482,44 +482,44 @@ const STAT_GROUPS = [
       { key: 'darko_ddpm',      label: 'DARKO DDPM',      fmt: '2f' },
       { key: 'def_rating',      label: 'Def Rtg',         fmt: '1f', invert: true },
       { key: 'def_ws',          label: 'Def Win Shares',  fmt: '2f' },
-      { key: 'stl',             label: 'STL',             fmt: '1f' },
-      { key: 'blk',             label: 'BLK',             fmt: '1f' },
-      { key: 'dreb',            label: 'DREB',            fmt: '1f' },
+      { key: 'stl',             label: 'STL',             fmt: '1f', perGame: true },
+      { key: 'blk',             label: 'BLK',             fmt: '1f', perGame: true },
+      { key: 'dreb',            label: 'DREB',            fmt: '1f', perGame: true },
       { key: 'dreb_pct',        label: 'DREB%',           fmt: 'pct' },
-      { key: 'def_rim_fga',     label: 'Rim FGA Def',     fmt: '1f' },
+      { key: 'def_rim_fga',     label: 'Rim FGA Def',     fmt: '1f', perGame: true },
       { key: 'def_rim_fg_pct',  label: 'Rim FG% Def',     fmt: 'pct', invert: true },
-      { key: 'contested_shots', label: 'Cont. Shots',     fmt: '1f' },
-      { key: 'deflections',     label: 'Deflections',     fmt: '1f' },
-      { key: 'charges_drawn',   label: 'Charges Drawn',   fmt: '1f' },
+      { key: 'contested_shots', label: 'Cont. Shots',     fmt: '1f', perGame: true },
+      { key: 'deflections',     label: 'Deflections',     fmt: '1f', perGame: true },
+      { key: 'charges_drawn',   label: 'Charges Drawn',   fmt: '1f', perGame: true },
     ]
   },
   {
     id: 'rebounding',
     label: 'Rebounding',
     stats: [
-      { key: 'reb',      label: 'REB',    fmt: '1f' },
-      { key: 'oreb',     label: 'OREB',   fmt: '1f' },
-      { key: 'dreb',     label: 'DREB',   fmt: '1f' },
-      { key: 'oreb_pct', label: 'OREB%',  fmt: 'pct' },
-      { key: 'dreb_pct', label: 'DREB%',  fmt: 'pct' },
-      { key: 'reb_pct',  label: 'REB%',   fmt: 'pct' },
-      { key: 'box_outs', label: 'Box Outs',fmt: '1f' },
-      { key: 'off_box_outs', label: 'Off Box Outs', fmt: '1f' },
-      { key: 'def_box_outs', label: 'Def Box Outs', fmt: '1f' },
+      { key: 'reb',      label: 'REB',         fmt: '1f', perGame: true },
+      { key: 'oreb',     label: 'OREB',        fmt: '1f', perGame: true },
+      { key: 'dreb',     label: 'DREB',        fmt: '1f', perGame: true },
+      { key: 'oreb_pct', label: 'OREB%',       fmt: 'pct' },
+      { key: 'dreb_pct', label: 'DREB%',       fmt: 'pct' },
+      { key: 'reb_pct',  label: 'REB%',        fmt: 'pct' },
+      { key: 'box_outs', label: 'Box Outs',    fmt: '1f', perGame: true },
+      { key: 'off_box_outs', label: 'Off Box Outs', fmt: '1f', perGame: true },
+      { key: 'def_box_outs', label: 'Def Box Outs', fmt: '1f', perGame: true },
     ]
   },
   {
     id: 'hustle',
     label: 'Hustle',
     stats: [
-      { key: 'contested_shots', label: 'Cont. Shots',    fmt: '1f' },
-      { key: 'deflections',     label: 'Deflections',    fmt: '1f' },
-      { key: 'charges_drawn',   label: 'Charges Drawn',  fmt: '1f' },
-      { key: 'screen_assists',  label: 'Screen AST',     fmt: '1f' },
-      { key: 'screen_ast_pts',  label: 'Screen AST Pts', fmt: '1f' },
-      { key: 'loose_balls',     label: 'Loose Balls',    fmt: '1f' },
-      { key: 'box_outs',        label: 'Box Outs',       fmt: '1f' },
-      { key: 'drives',          label: 'Drives',         fmt: '1f' },
+      { key: 'contested_shots', label: 'Cont. Shots',    fmt: '1f', perGame: true },
+      { key: 'deflections',     label: 'Deflections',    fmt: '1f', perGame: true },
+      { key: 'charges_drawn',   label: 'Charges Drawn',  fmt: '1f', perGame: true },
+      { key: 'screen_assists',  label: 'Screen AST',     fmt: '1f', perGame: true },
+      { key: 'screen_ast_pts',  label: 'Screen AST Pts', fmt: '1f', perGame: true },
+      { key: 'loose_balls',     label: 'Loose Balls',    fmt: '1f', perGame: true },
+      { key: 'box_outs',        label: 'Box Outs',       fmt: '1f', perGame: true },
+      { key: 'drives',          label: 'Drives',         fmt: '1f', perGame: true },
       { key: 'dist_miles',      label: 'Distance (mi)',  fmt: '2f' },
       { key: 'avg_speed',       label: 'Avg Speed',      fmt: '2f' },
     ]
@@ -701,6 +701,27 @@ function fmtDiff(diff, format, invert) {
 }
 
 // ── Render group tabs ────────────────────────────────────────────
+// Stats stored as season totals in DB — must divide by GP for per-game display
+const STORED_AS_TOTAL_KEYS = new Set([
+  'bad_pass_tov', 'lost_ball_tov',
+  'contested_shots', 'contested_2pt', 'contested_3pt',
+  'deflections', 'charges_drawn',
+  'screen_assists', 'screen_ast_pts',
+  'loose_balls', 'box_outs', 'off_box_outs', 'def_box_outs',
+  'cd_fga_vt', 'cd_fgm_vt', 'cd_fga_tg', 'cd_fgm_tg',
+  'cd_fga_op', 'cd_fgm_op', 'cd_fga_wo', 'cd_fgm_wo',
+]);
+
+function getStatVal(stats, key) {
+  const raw = stats[key];
+  if (raw == null) return null;
+  if (STORED_AS_TOTAL_KEYS.has(key)) {
+    const gp = stats['gp'];
+    return (gp != null && gp > 0) ? raw / gp : null;
+  }
+  return raw;
+}
+
 function renderGroupTabs() {
   const container = document.getElementById('group-tabs');
   container.innerHTML = STAT_GROUPS.map(g => `
@@ -828,8 +849,8 @@ function renderComparison() {
   const bImg = `https://cdn.nba.com/headshots/nba/latest/260x190/${b.player_id}.png`;
 
   const rows = stats.map(stat => {
-    const va = a.stats[stat.key];
-    const vb = b.stats[stat.key];
+    const va = getStatVal(a.stats, stat.key);
+    const vb = getStatVal(b.stats, stat.key);
     const hasA = va !== null && va !== undefined;
     const hasB = vb !== null && vb !== undefined;
 
@@ -857,7 +878,7 @@ function renderComparison() {
           <span class="compare-val">${fmt(va, stat.fmt)}</span>
           ${aBadge}
         </div>
-        <div class="compare-stat-label">${stat.label}</div>
+        <div class="compare-stat-label">${stat.label}${stat.perGame ? '<span style="font-size:9px;opacity:0.55;margin-left:2px">/g</span>' : ''}</div>
         <div class="compare-cell right">
           ${bBadge}
           <span class="compare-val">${fmt(vb, stat.fmt)}</span>

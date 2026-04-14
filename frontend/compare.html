@@ -790,9 +790,9 @@ function renderCustomStatGrid(q) {
 
 // ── Comparison render ────────────────────────────────────────────
 const DARKO_SWAP = {
-  darko_dpm:  { key: 'lebron',   label: 'LeBron',   fmt: '2f' },
-  darko_odpm: { key: 'o_lebron', label: 'O-LeBron', fmt: '2f' },
-  darko_ddpm: { key: 'd_lebron', label: 'D-LeBron', fmt: '2f' },
+  darko_dpm:  { key: 'lebron',   label: 'LEBRON',   fmt: '2f' },
+  darko_odpm: { key: 'o_lebron', label: 'O-LEBRON', fmt: '2f' },
+  darko_ddpm: { key: 'd_lebron', label: 'D-LEBRON', fmt: '2f' },
   darko_box:  null,
 };
 
@@ -893,7 +893,7 @@ function renderComparison() {
           <img class="compare-header-headshot" src="${aImg}" alt="" onerror="this.style.display='none'">
           <div>
             <div class="compare-header-name">${a.player_name}</div>
-            <div class="compare-header-meta">${a.team_abbr || ''} · ${a.position_group || ''}</div>
+            <div class="compare-header-meta">${a.team_abbr || ''} · ${a.position_group || ''} · ${ST.seasonA} ${ST.seasonTypeA}</div>
           </div>
         </div>
         <div class="compare-header-center">${ST.seasonA === ST.seasonB ? ST.seasonA : 'vs'}</div>
@@ -901,7 +901,7 @@ function renderComparison() {
           <img class="compare-header-headshot" src="${bImg}" alt="" onerror="this.style.display='none'">
           <div style="text-align:right">
             <div class="compare-header-name">${b.player_name}</div>
-            <div class="compare-header-meta">${b.team_abbr || ''} · ${b.position_group || ''}</div>
+            <div class="compare-header-meta">${b.team_abbr || ''} · ${b.position_group || ''} · ${ST.seasonB} ${ST.seasonTypeB}</div>
           </div>
         </div>
       </div>
@@ -1010,7 +1010,7 @@ function setupPicker(side) {
 
       cardImg.src = `https://cdn.nba.com/headshots/nba/latest/260x190/${p.player_id}.png`;
       cardName.textContent = p.player_name;
-      cardMeta.textContent = `${p.team_abbr || ''} · ${p.position_group || ''} · ${season}`;
+      cardMeta.textContent = `${p.team_abbr || ''} · ${p.position_group || ''} · ${season} ${seasonType}`;
       card.classList.add('visible');
       renderComparison();
     } catch(e) {
@@ -1049,7 +1049,7 @@ async function reloadPlayer(side) {
     if (data.stats) {
       player.stats = data.stats;
       const meta = document.getElementById(`card-${side}-meta`);
-      if (meta) meta.textContent = `${player.team_abbr || ''} · ${player.position_group || ''} · ${season}`;
+      if (meta) meta.textContent = `${player.team_abbr || ''} · ${player.position_group || ''} · ${season} ${seasonType}`;
     }
   } catch(e) { console.error(e); }
 }

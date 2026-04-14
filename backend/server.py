@@ -577,12 +577,9 @@ def _poll_today_scoreboard():
                     _today_sb["date"]  = cdn_date
                     _today_sb["raw"]   = raw_games
             elif cdn_date < game_today:
-                # CDN is showing a past date — no games scheduled today
-                with _today_sb_lock:
-                    _today_sb["games"] = []
-                    _today_sb["date"]  = game_today
-                    _today_sb["raw"]   = []
-            # If cdn_date > game_today (shouldn't happen), leave cache intact
+                # CDN is lagging behind — leave cache unpopulated so the
+                # endpoint falls through to ScoreboardV3 for today's games
+                pass
         except Exception:
             pass
         _threading.Event().wait(30)

@@ -285,6 +285,26 @@ table.box-table tfoot td:first-child{text-align:left;}
   transition: border-color 0.15s, color 0.15s;
 }
 .btn-add-tag:hover { border-color: var(--orange); color: var(--orange); }
+.btn-attended {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px dashed var(--ink4); background: none; cursor: pointer;
+  color: var(--ink4); transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.btn-attended svg { width: 13px; height: 13px; }
+.btn-attended:hover { border-color: var(--ink2); color: var(--ink2); }
+.btn-attended.on {
+  border-style: solid; border-color: var(--ink2);
+  background: var(--ink2); color: var(--paper);
+}
+.attended-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: 20px; padding: 2px 8px 2px 6px;
+  font-family: var(--ff-mono); font-size: 11px; color: var(--ink3);
+}
+.attended-badge svg { width: 11px; height: 11px; flex-shrink: 0; }
 /* Tag picker popover */
 .tag-picker {
   position: fixed; z-index: 9000; width: 272px;
@@ -780,6 +800,7 @@ const STAR_ON  = '#00C030';
 const STAR_OFF = '#d8d5cf';
 let _reviewUser    = null;
 let _currentTags   = [];
+let _attended      = false;
 let _boxscoreData  = null;
 let _pickerEl      = null;
 let _pickerPlayers = [];
@@ -850,6 +871,7 @@ async function loadReviewsPanel(append = false) {
   if (!append) {
     _reviewOffset = 0;
     _currentTags  = [];
+    _attended     = false;
     closeTagPicker();
     container.innerHTML = '<div class="reviews-loading">Loading…</div>';
     panel.dataset.loaded = '1';
@@ -956,7 +978,10 @@ function reviewItemHTML(r) {
         <span class="review-date">${fmtShortDate(r.created_at)}</span>
       </div>
       ${r.review_text ? `<p class="review-text">${r.review_text}</p>` : ''}
-      ${r.tags && r.tags.length ? `<div class="review-tags">${r.tags.map(t => tagPillHTML(t)).join('')}</div>` : ''}
+      ${(r.tags && r.tags.length) || r.attended ? `<div class="review-tags">
+        ${r.attended ? `<span class="attended-badge">${_PERSON_SVG}attended</span>` : ''}
+        ${r.tags ? r.tags.map(t => tagPillHTML(t)).join('') : ''}
+      </div>` : ''}
       <div class="review-footer">
         <button class="btn-like${r.liked_by_me ? ' liked' : ''}" data-review-id="${r.id}" title="Like this review">
           ${heartIcon}<span class="like-count">${likeLabel}</span>
@@ -1031,11 +1056,12 @@ function wireWriteSection() {
           del.addEventListener('click', deleteReview);
           btn.parentElement.appendChild(del);
         }
-        // Pre-fill tags
+        // Pre-fill tags + attended
         if (existing.tags && existing.tags.length) {
           _currentTags = existing.tags.slice();
-          renderWriteTags();
         }
+        _attended = !!existing.attended;
+        renderWriteTags();
       }
     }).catch(() => {});
 
@@ -1112,7 +1138,7 @@ async function submitReview() {
     const r = await fetch(`/api/games/${GAME_ID}/reviews`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({rating: _pickedRating, review_text: text, tags: _currentTags}),
+      body: JSON.stringify({rating: _pickedRating, review_text: text, tags: _currentTags, attended: _attended}),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error);
@@ -1171,6 +1197,11 @@ function _parseMins(str) {
   return m ? parseInt(m[1]) : 0;
 }
 
+const _PERSON_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="10" cy="6.5" r="3"/>
+  <path d="M3 18c0-3.866 3.134-7 7-7s7 3.134 7 7"/>
+</svg>`;
+
 function tagPillHTML(t) {
   return `<span class="review-tag">
     <img class="tag-headshot" src="${_headshotUrl(t.player_id)}" onerror="this.style.display='none'" alt="">
@@ -1192,9 +1223,15 @@ function renderWriteTags() {
   if (_currentTags.length < 5) {
     html += `<button class="btn-add-tag" id="btn-add-tag" title="Add a stat context tag">+</button>`;
   }
+  html += `<button class="btn-attended${_attended ? ' on' : ''}" id="btn-attended" title="${_attended ? 'Remove — I was there' : 'I was at this game'}">${_PERSON_SVG}</button>`;
   row.innerHTML = html;
   const addBtn = document.getElementById('btn-add-tag');
   if (addBtn) addBtn.addEventListener('click', e => { e.stopPropagation(); openTagPicker(addBtn); });
+  document.getElementById('btn-attended').addEventListener('click', e => {
+    e.stopPropagation();
+    _attended = !_attended;
+    renderWriteTags();
+  });
   row.querySelectorAll('.write-tag-x').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();

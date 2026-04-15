@@ -1627,6 +1627,7 @@ def _format_review(r: dict) -> dict:
         "like_count":     int(r.get("like_count", 0)),
         "liked_by_me":    bool(r.get("liked_by_me", False)),
         "tags":           r.get("tags") or [],
+        "attended":       bool(r.get("attended", False)),
     }
 
 
@@ -1814,15 +1815,15 @@ def submit_review(game_id):
                 "stat_display": str(t.get("stat_display", ""))[:20],
             })
 
+    attended = bool(body.get("attended", False))
+
     try:
         conn = get_conn()
         cur  = conn.cursor()
 
-        # One-time idempotent migration for the tags column
-        cur.execute("""
-            ALTER TABLE game_reviews
-            ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'
-        """)
+        # One-time idempotent migrations
+        cur.execute("ALTER TABLE game_reviews ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]'")
+        cur.execute("ALTER TABLE game_reviews ADD COLUMN IF NOT EXISTS attended BOOLEAN DEFAULT FALSE")
 
         cur.execute("SELECT game_id FROM games WHERE game_id = %s", (game_id,))
         if not cur.fetchone():
@@ -1830,15 +1831,16 @@ def submit_review(game_id):
             return jsonify({"error": "Game not found"}), 404
 
         cur.execute("""
-            INSERT INTO game_reviews (user_id, game_id, rating, review_text, tags)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO game_reviews (user_id, game_id, rating, review_text, tags, attended)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id, game_id) DO UPDATE SET
                 rating      = EXCLUDED.rating,
                 review_text = EXCLUDED.review_text,
                 tags        = EXCLUDED.tags,
+                attended    = EXCLUDED.attended,
                 updated_at  = NOW()
             RETURNING *
-        """, (user["id"], game_id, rating, review_text, _json.dumps(clean_tags)))
+        """, (user["id"], game_id, rating, review_text, _json.dumps(clean_tags), attended))
 
         review = dict(cur.fetchone())
         cur.execute("SELECT avatar_url, favorite_team FROM users WHERE id = %s", (user["id"],))

@@ -801,6 +801,13 @@
   .tag-headshot { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: var(--rule); flex-shrink: 0; }
   .tag-val { font-weight: 600; color: var(--ink); }
   .tag-lbl { color: var(--ink-3); margin-left: 1px; }
+  .attended-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--bg-card); border: 1px solid var(--rule);
+    border-radius: 20px; padding: 2px 8px 2px 6px;
+    font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  }
+  .attended-badge svg { width: 11px; height: 11px; flex-shrink: 0; }
 
   @media (max-width: 768px) {
     .page { grid-template-columns: 1fr; gap: 32px; }
@@ -1061,6 +1068,11 @@ function _esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+const _PERSON_SVG = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="10" cy="6.5" r="3"/>
+  <path d="M3 18c0-3.866 3.134-7 7-7s7 3.134 7 7"/>
+</svg>`;
+
 function tagPillHTML(t) {
   return `<span class="review-tag">
     <img class="tag-headshot" src="https://cdn.nba.com/headshots/nba/latest/260x190/${t.player_id}.png" onerror="this.style.display='none'" alt="">
@@ -1205,7 +1217,10 @@ async function loadRecent(append = false) {
             <span class="review-date">${fmtShortDate(r.game_date)}</span>
           </div>
           ${r.review_text ? `<p class="review-text">${r.review_text}</p>` : ''}
-          ${r.tags && r.tags.length ? `<div class="review-tags">${r.tags.map(tagPillHTML).join('')}</div>` : ''}
+          ${(r.tags && r.tags.length) || r.attended ? `<div class="review-tags">
+            ${r.attended ? `<span class="attended-badge">${_PERSON_SVG}attended</span>` : ''}
+            ${r.tags ? r.tags.map(tagPillHTML).join('') : ''}
+          </div>` : ''}
         </div>
       `;
       feed.appendChild(div);

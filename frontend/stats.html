@@ -2732,19 +2732,15 @@ const LOWER_IS_BETTER = new Set(['def_rating']);
 // Columns that are already raw totals — never multiply by GP
 const RAW_TOTAL_KEYS = new Set(['gp', 'min']);
 
-// Stats fetched with PerMode=Totals and stored as season totals in the DB.
-// Per-game mode must divide by GP; totals mode returns as-is (don't re-multiply).
+// Stats stored as season totals in the DB (fetched with PerMode=Totals and NOT
+// pre-divided by GP during ingest). Per-game mode must divide by GP; totals
+// mode returns as-is.
+// NOTE: hustle and closest-defender counts are pre-divided by GP in
+// fetch_season.py (via pg()), so they are NOT listed here — they are treated
+// as ordinary per-game values and scaled like any other counting stat.
 const STORED_AS_TOTAL_KEYS = new Set([
-  // Misc (LeagueDashPlayerStats Totals)
+  // Misc (LeagueDashPlayerStats Totals) — stored raw by fetch_stats.py
   'bad_pass_tov', 'lost_ball_tov',
-  // Hustle (LeagueHustleStatsPlayer Totals)
-  'contested_shots', 'contested_2pt', 'contested_3pt',
-  'deflections', 'charges_drawn',
-  'screen_assists', 'screen_ast_pts',
-  'loose_balls', 'box_outs', 'off_box_outs', 'def_box_outs',
-  // Closest defender (LeagueDashPlayerPtShot Totals)
-  'cd_fga_vt', 'cd_fgm_vt', 'cd_fga_tg', 'cd_fgm_tg',
-  'cd_fga_op', 'cd_fgm_op', 'cd_fga_wo', 'cd_fgm_wo',
 ]);
 
 // Returns the value to display for a cell, applying per-game vs totals mode

@@ -533,7 +533,6 @@ if __name__ == "__main__":` block.
 """
 
 import requests as _requests
-import threading as _threading
 from datetime import datetime as _dt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -543,9 +542,8 @@ _past_sb_cache: dict = {}   # date -> payload dict
 # ── Future-date cache (schedule can change — TTL 60 min) ──────────
 _future_sb_cache: dict = {}  # date -> {"payload": dict, "ts": float}
 
-# ── Today's scoreboard — kept fresh by background poller ─────────
-_today_sb = {"games": [], "date": "", "raw": []}
-_today_sb_lock = _threading.Lock()
+# ── Today's scoreboard — short-lived cache so live-game polls don't hammer ScoreboardV3 ──
+_today_sb_cache: dict = {}   # {"payload": dict, "ts": float}
 
 def _compute_game_today():
     try:
@@ -558,39 +556,7 @@ def _compute_game_today():
         return (now_et - timedelta(days=1)).strftime('%Y-%m-%d')
     return now_et.strftime('%Y-%m-%d')
 
-def _poll_today_scoreboard():
-    """Background thread: refresh today's scoreboard every 30 s."""
-    while True:
-        try:
-            game_today = _compute_game_today()
-            url  = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
-            resp = _requests.get(url, headers=_CDN_HEADERS, timeout=12)
-            resp.raise_for_status()
-            data      = resp.json()
-            raw_games = data.get("scoreboard", {}).get("games", [])
-            cdn_date  = data.get("scoreboard", {}).get("gameDate", "")
-
-            if cdn_date == game_today:
-                games = [_norm_cdn_game(g) for g in raw_games]
-                with _today_sb_lock:
-                    _today_sb["games"] = games
-                    _today_sb["date"]  = cdn_date
-                    _today_sb["raw"]   = raw_games
-            elif cdn_date < game_today:
-                # CDN is showing a past date — no games scheduled today
-                with _today_sb_lock:
-                    _today_sb["games"] = []
-                    _today_sb["date"]  = game_today
-                    _today_sb["raw"]   = []
-            # If cdn_date > game_today (shouldn't happen), leave cache intact
-        except Exception:
-            pass
-        _threading.Event().wait(30)
-
-# Start the background poller as a daemon thread on import
-_threading.Thread(target=_poll_today_scoreboard, daemon=True, name="SBPoller").start()
-
-# Headers for NBA CDN (live data — boxscore/pbp proxy)
+# Headers for NBA CDN (live boxscore proxy)
 _CDN_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
     "Referer":    "https://www.nba.com/",
@@ -621,91 +587,40 @@ def _fetch_boxscores_parallel(game_ids, timeout=8):
     return results
 
 
-def _norm_cdn_game(g):
-    """Normalise a CDN scoreboard game object to our flat schema."""
-    away   = g.get("awayTeam", {})
-    home   = g.get("homeTeam", {})
-    status = g.get("gameStatus", 1)
-    return {
-        "gameId":         g.get("gameId", ""),
-        "gameStatus":     status,           # 1=upcoming, 2=live, 3=final
-        "gameStatusText": g.get("gameStatusText", ""),
-        "period":         g.get("period", 0),
-        "gameClock":      g.get("gameClock", ""),
-        "gameTimeUTC":    g.get("gameTimeUTC", ""),
-        "away": {
-            "abbr":   away.get("teamTricode", ""),
-            "name":   away.get("teamName", ""),
-            "score":  int(away.get("score", 0) or 0),
-            "wins":   away.get("wins"),
-            "losses": away.get("losses"),
-        },
-        "home": {
-            "abbr":   home.get("teamTricode", ""),
-            "name":   home.get("teamName", ""),
-            "score":  int(home.get("score", 0) or 0),
-            "wins":   home.get("wins"),
-            "losses": home.get("losses"),
-        },
-    }
-
-
 # ── /api/scoreboard?date=YYYY-MM-DD ──────────────────────────────
 @app.route("/api/scoreboard")
 def get_scoreboard():
     """
-    No ?date  → today via NBA live CDN (falls back to ScoreboardV3 if CDN is behind).
-    ?date=YYYY-MM-DD → historical via nba_api ScoreboardV3.
-    "Today" switches at 6 AM ET: before 6 AM ET shows previous day's games.
-    Final games are upserted into the games table automatically.
+    No ?date  → today (with 6 AM ET cutoff) via ScoreboardV3.
+    ?date=YYYY-MM-DD → specific day via ScoreboardV3.
+    Results are cached: past dates forever, today for 30 s, future for 60 min.
     """
     date = request.args.get("date", "").strip()
-
-    # Compute game-day "today" with 6 AM ET cutoff (needed in both branches)
-    try:
-        from zoneinfo import ZoneInfo
-    except ImportError:
-        from backports.zoneinfo import ZoneInfo
-    from datetime import datetime as _dt_now
-    _et = ZoneInfo('America/New_York')
-    _now_et = _dt_now.now(_et)
-    if _now_et.hour < 6:
-        _game_today = (_now_et - timedelta(days=1)).strftime('%Y-%m-%d')
-    else:
-        _game_today = _now_et.strftime('%Y-%m-%d')
+    _game_today = _compute_game_today()
 
     if not date:
-        # ── Serve from background poller cache (always up-to-date) ──
-        with _today_sb_lock:
-            games    = list(_today_sb["games"])
-            sb_date  = _today_sb["date"]
-            raw      = list(_today_sb["raw"])
-
-        if sb_date == _game_today:
-            # Upsert any newly final games
-            final_games = [g for g in raw if g.get("gameStatus") == 3]
-            if final_games:
-                _upsert_scoreboard_games(final_games, sb_date)
-            return jsonify({"games": games, "date": sb_date})
-
-        # Poller hasn't populated yet or CDN is behind — fall through to ScoreboardV3
         date = _game_today
 
-    # ── Historical/today: ScoreboardV3 + CDN boxscores ───────────
-    is_past = date < _game_today
+    is_past   = date < _game_today
+    is_today  = date == _game_today
 
-    # Past dates are immutable — cache forever
+    # Past dates — cache forever
     if is_past and date in _past_sb_cache:
         return jsonify(_past_sb_cache[date])
 
-    # Future dates — cache for 60 minutes
-    if not is_past and date != _game_today and date in _future_sb_cache:
+    # Today — short-lived cache (30 s) so live-game frontend polls don't hammer the API
+    if is_today and _today_sb_cache.get("date") == _game_today:
+        if _time.time() - _today_sb_cache.get("ts", 0) < 30:
+            return jsonify(_today_sb_cache["payload"])
+
+    # Future dates — cache for 60 min
+    if not is_past and not is_today and date in _future_sb_cache:
         entry = _future_sb_cache[date]
         if _time.time() - entry["ts"] < 3600:
             return jsonify(entry["payload"])
 
-    # For past dates, try the DB first (avoids nba_api outbound call that
-    # gets rate-limited / blocked on cloud IPs in production).
+    # For past dates, try the DB first (avoids nba_api outbound calls that can
+    # be rate-limited / blocked on cloud IPs in production).
     if is_past:
         try:
             conn = get_conn()
@@ -740,7 +655,7 @@ def get_scoreboard():
                 _past_sb_cache[date] = payload
                 return jsonify(payload)
         except Exception:
-            pass  # Fall through to nba_api
+            pass  # Fall through to ScoreboardV3
 
     try:
         from nba_api.stats.endpoints import scoreboardv3
@@ -757,7 +672,9 @@ def get_scoreboard():
             payload = {"games": [], "date": date}
             if is_past:
                 _past_sb_cache[date] = payload
-            elif date != _game_today:
+            elif is_today:
+                _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
+            else:
                 _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
             return jsonify(payload)
 
@@ -765,7 +682,6 @@ def get_scoreboard():
                 for _, row in gh_df.iterrows()
                 if row.get("gameId") or row.get("GAME_ID")]
 
-        # Fetch all boxscores in parallel
         gids = [gid for gid, _ in rows]
         boxscores = _fetch_boxscores_parallel(gids) if gids else {}
 
@@ -821,7 +737,9 @@ def get_scoreboard():
         payload = {"games": games, "date": date}
         if is_past:
             _past_sb_cache[date] = payload
-        elif date != _game_today:
+        elif is_today:
+            _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
+        else:
             _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
         return jsonify(payload)
 
@@ -829,60 +747,6 @@ def get_scoreboard():
         return jsonify({"error": str(e), "games": [], "date": date}), 200
  
  
-def _upsert_scoreboard_games(raw_games: list, board_date: str):
-    """
-    Upsert a batch of final games from the CDN scoreboard payload.
-    Called in-process — fast because it's a single DB round-trip per game.
-    """
-    try:
-        from datetime import datetime as _dt3
-        game_date = _dt3.strptime(board_date, "%Y-%m-%d").date() if board_date else None
-    except Exception:
-        from datetime import date as _date3
-        game_date = _date3.today()
- 
-    try:
-        conn = get_conn()
-        cur  = conn.cursor()
-        for g in raw_games:
-            gid  = g.get("gameId", "")
-            away = g.get("awayTeam", {})
-            home = g.get("homeTeam", {})
-            if not gid:
-                continue
-            try:
-                cur.execute("""
-                    INSERT INTO games (
-                        game_id, season, season_type, game_date,
-                        home_team_abbr, away_team_abbr,
-                        home_score, away_score, status
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Final')
-                    ON CONFLICT (game_id) DO UPDATE SET
-                        home_score = EXCLUDED.home_score,
-                        away_score = EXCLUDED.away_score,
-                        status     = 'Final',
-                        updated_at = NOW()
-                    WHERE games.status != 'Final'
-                       OR games.home_score IS NULL
-                """, (
-                    gid,
-                    os.getenv("NBA_SEASON", "2025-26"),
-                    os.getenv("NBA_SEASON_TYPE", "Regular Season"),
-                    game_date,
-                    home.get("teamTricode", ""),
-                    away.get("teamTricode", ""),
-                    int(home.get("score", 0) or 0),
-                    int(away.get("score", 0) or 0),
-                ))
-            except Exception:
-                conn.rollback()
-                continue
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception:
-        pass  # Never break the main response
-
 # ── /api/top-performers?date=YYYY-MM-DD ──────────────────────────
 @app.route("/api/top-performers")
 def get_top_performers():

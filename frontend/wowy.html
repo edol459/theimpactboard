@@ -282,6 +282,59 @@ table.wt tbody td.td-lineup { text-align: left; }
 }
 
 .null-dash { color: var(--paper3); }
+
+/* ── Mode tabs ───────────────────────────────────────────────── */
+.mode-tabs {
+  display: flex; gap: 3px; padding: 10px 28px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper2); flex-shrink: 0;
+}
+.mode-tab {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  padding: 5px 13px; border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer; color: var(--ink3); background: none;
+  transition: all 0.13s; white-space: nowrap;
+}
+.mode-tab:hover { color: var(--ink); background: var(--paper3); }
+.mode-tab.active {
+  color: var(--ink); background: var(--paper);
+  border-color: var(--rule);
+}
+
+/* ── Shot profile heatmap ────────────────────────────────────── */
+.shot-heatmap-wrap {
+  display: flex; gap: 20px; padding: 16px 28px 8px;
+  justify-content: center; flex-wrap: wrap; flex-shrink: 0;
+}
+.shot-court-block {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.shot-court-label {
+  font-family: var(--ff-mono); font-size: 10px;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink2);
+}
+.shot-court-sublabel {
+  font-family: var(--ff-mono); font-size: 9px; color: var(--ink4);
+}
+.shot-legend {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 28px 10px; font-family: var(--ff-mono);
+  font-size: 9px; color: var(--ink4); flex-shrink: 0;
+}
+.shot-legend-gradient {
+  width: 72px; height: 7px; border-radius: 3px;
+  background: linear-gradient(to right, hsl(220,95%,50%), hsl(55,95%,50%), hsl(0,95%,50%));
+}
+
+/* ── Mode note ───────────────────────────────────────────────── */
+.adj-note {
+  font-family: var(--ff-mono); font-size: 10px;
+  color: var(--ink4); letter-spacing: 0.03em;
+  padding: 10px 28px 0; line-height: 1.6;
+}
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
@@ -400,6 +453,8 @@ table.wt tbody td.td-lineup { text-align: left; }
   /* Results */
   .main { min-width: 0; overflow: visible; }
   .results-head { padding: 12px 14px 10px; }
+  .mode-tabs { padding: 8px 14px; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .mode-tabs::-webkit-scrollbar { display: none; }
   .sel-strip { padding: 8px 14px; gap: 8px; }
   .sel-avatar img { width: 28px; height: 28px; }
   .sel-avatar-name { font-size: 9px; }
@@ -438,12 +493,7 @@ table.wt tbody td.td-lineup { text-align: left; }
 </nav>
 
 <div class="app">
-  <main class="main" id="main">
-    <div class="state-msg">
-      <div class="state-icon">👆</div>
-      <span>Load a team, then select 1–5 players<br>to see every WoWY combination</span>
-    </div>
-  </main>
+  <main class="main" id="main"></main>
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-head">
       <div class="sidebar-title">WoWY</div>
@@ -491,6 +541,12 @@ let allLineups   = [];
 let selected     = new Set();
 let lineupsReady = false;
 let lineupsError = false;
+let currentMode  = 'raw';   // 'raw' | 'shot' | 'stat'
+const MODES = [
+  { key: 'raw',  label: 'WoWY'         },
+  { key: 'shot', label: 'Shot Profile' },
+  { key: 'stat', label: 'Stat Line'    },
+];
 const teamSel       = document.getElementById('team-select');
 const seasonSel     = document.getElementById('season-select');
 const playersScroll = document.getElementById('players-scroll');
@@ -561,7 +617,7 @@ async function loadLineups() {
     maybeUpdateRoster(data.lineups);
     lineupsReady = true;
     if (selected.size) buildWOWY();
-    else setMain('icon', '👆', 'Select 1–5 players to see every WoWY combination');
+    else showReadyState();
   } catch(e) {
     lineupsError = true;
     setMain('icon', '⚠', e.message);
@@ -629,7 +685,13 @@ function togglePlayer(pid, card) {
     selected.delete(pid);
     card.classList.remove('selected');
   } else {
-    if (selected.size >= 5) return;
+    if (currentMode === 'stat' || currentMode === 'shot') {
+      // Single-anchor modes: swap to the newly clicked player
+      document.querySelectorAll('.player-card.selected').forEach(c => c.classList.remove('selected'));
+      selected.clear();
+    } else if (selected.size >= 5) {
+      return;
+    }
     selected.add(pid);
     card.classList.add('selected');
   }
@@ -641,13 +703,45 @@ btnClear.addEventListener('click', () => {
   selected.clear();
   document.querySelectorAll('.player-card.selected').forEach(c => c.classList.remove('selected'));
   selCount.textContent = '0 selected';
-  setMain('icon', '👆', 'Select 1–5 players to see every WoWY combination');
+  if (lineupsReady) showReadyState();
+  else setMain('icon', '👆', 'Select 1–5 players to see every WoWY combination');
 });
+
+// ── Ready state ────────────────────────────────────────────────
+function showReadyState() {
+  let prompt;
+  if (!teamSel.value) {
+    prompt = 'Select a team to get started';
+  } else if (currentMode === 'stat') {
+    prompt = 'Select 1 player as the anchor to see teammate stat shifts';
+  } else if (currentMode === 'shot') {
+    prompt = 'Select 1 player to see the shot profile comparison';
+  } else {
+    prompt = 'Select 1–5 players to see every WoWY combination';
+  }
+  main.innerHTML = `
+    <div class="results-head">
+      <div class="results-title">WoWY</div>
+    </div>
+    <div class="mode-tabs">
+      ${MODES.map(m => `<button class="mode-tab${currentMode===m.key?' active':''}" data-mode="${m.key}">${m.label}</button>`).join('')}
+    </div>
+    <div class="state-msg" style="flex:1;"><div class="state-icon">👆</div><span>${prompt}</span></div>
+  `;
+  document.querySelectorAll('.mode-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentMode = btn.dataset.mode;
+      if (selected.size) buildWOWY();
+      else showReadyState();
+    });
+  });
+}
 
 // ── WOWY computation ───────────────────────────────────────────
 function buildWOWY() {
   if (!selected.size) {
-    setMain('icon', '👆', 'Select 1–5 players to see every WoWY combination');
+    if (lineupsReady) showReadyState();
+    else setMain('icon', '👆', 'Select 1–5 players to see every WoWY combination');
     return;
   }
   if (!lineupsReady) {
@@ -726,11 +820,7 @@ function renderResults(rows) {
     </tr>`;
   }
 
-  main.innerHTML = `
-    <div class="results-head">
-      <div class="results-title">WoWY Combinations</div>
-      <div class="results-meta">Low-leverage removed · ${season} · Regular Season · ${rows.length} combination${rows.length!==1?'s':''}</div>
-    </div>
+  const selStripHtml = `
     <div class="sel-strip">
       <span class="sel-strip-label">Selected</span>
       ${selPlayers.map(p => `
@@ -739,7 +829,46 @@ function renderResults(rows) {
                alt="${lastName(p.player_name)}" onerror="this.style.display='none'">
           <span class="sel-avatar-name">${lastName(p.player_name)}</span>
         </div>`).join('')}
+    </div>`;
+
+  main.innerHTML = `
+    <div class="results-head">
+      <div class="results-title">WoWY Combinations</div>
+      <div class="results-meta">Low-leverage removed · ${season} · Regular Season · ${rows.length} combination${rows.length!==1?'s':''}</div>
     </div>
+    <div class="mode-tabs">
+      ${MODES.map(m => `<button class="mode-tab${currentMode===m.key?' active':''}" data-mode="${m.key}">${m.label}</button>`).join('')}
+    </div>
+    ${selStripHtml}
+    <div id="wowy-body"></div>
+  `;
+
+  document.querySelectorAll('.mode-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentMode = btn.dataset.mode;
+      document.querySelectorAll('.mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
+      // Single-anchor modes only allow 1 player — if >1 selected, keep only the first
+      if ((currentMode === 'stat' || currentMode === 'shot') && selected.size > 1) {
+        const first = [...selected][0];
+        selected.clear();
+        selected.add(first);
+        document.querySelectorAll('.player-card.selected').forEach(c => {
+          if (parseInt(c.dataset.pid) !== first) c.classList.remove('selected');
+        });
+        selCount.textContent = '1 selected';
+        buildWOWY();
+        return;
+      }
+      refreshBody(rows, rosterMap, selArr, selPlayers, season, fmt, nc, diffHtml);
+    });
+  });
+
+  refreshBody(rows, rosterMap, selArr, selPlayers, season, fmt, nc, diffHtml);
+}
+
+// ── Raw WoWY body ──────────────────────────────────────────────
+function renderRawBody(rows, rosterMap, selArr, fmt, nc, diffHtml) {
+  return `
     <div class="table-scroll">
       <table class="wt">
         <thead>
@@ -775,8 +904,358 @@ function renderResults(rows) {
           ${diffHtml}
         </tbody>
       </table>
+    </div>`;
+}
+
+// ── Switch between modes ───────────────────────────────────────
+function refreshBody(rows, rosterMap, selArr, selPlayers, season, fmt, nc, diffHtml) {
+  const body = document.getElementById('wowy-body');
+  if (currentMode === 'raw') {
+    body.innerHTML = renderRawBody(rows, rosterMap, selArr, fmt, nc, diffHtml);
+  } else if (currentMode === 'shot') {
+    renderShotProfileBody(rows, rosterMap, selArr, season);
+  } else if (currentMode === 'stat') {
+    renderStatLineBody(rows, rosterMap, selArr, season);
+  }
+}
+
+// ── Shot Profile body ──────────────────────────────────────────
+async function renderShotProfileBody(rows, rosterMap, selArr, season) {
+  const body = document.getElementById('wowy-body');
+
+  if (!selArr.length) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;">Select 1 player to see the shot profile comparison.</div>`;
+    return;
+  }
+
+  const anchorId   = selArr[0];
+  const anchorPlayer = rosterMap[anchorId];
+  const anchorName = anchorPlayer ? anchorPlayer.player_name : `Player ${anchorId}`;
+
+  body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;"><span class="spin"></span><span>Loading shot data…</span></div>`;
+
+  let locData, zoneData;
+  try {
+    const [locRes, zoneRes] = await Promise.all([
+      fetch(`/api/wowy/shot-locations?anchor=${anchorId}&season=${encodeURIComponent(season)}`),
+      fetch(`/api/wowy/shot-profile?players=${anchorId}&season=${encodeURIComponent(season)}`),
+    ]);
+    locData  = await locRes.json();
+    zoneData = await zoneRes.json();
+  } catch(e) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;color:var(--red)">⚠ ${e.message}</div>`;
+    return;
+  }
+  if (locData.error) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;color:var(--red)">⚠ ${locData.error}</div>`;
+    return;
+  }
+
+  const onShots  = locData.on_shots  || [];
+  const offShots = locData.off_shots || [];
+  const onPoss   = locData.on_poss   || 0;
+  const offPoss  = locData.off_poss  || 0;
+
+  const combos  = zoneData.combos || [];
+  const onZone  = combos.find(c => c.on_players.includes(anchorId)) || null;
+  const offZone = combos.find(c => !c.on_players.includes(anchorId)) || null;
+  const fmtPct  = v => v == null ? '—' : v.toFixed(1) + '%';
+
+  body.innerHTML = `
+    <div class="shot-heatmap-wrap">
+      <div class="shot-court-block">
+        <div class="shot-court-label">With ${lastName(anchorName)}</div>
+        <canvas id="court-on" width="260" height="246" style="border-radius:4px;display:block;"></canvas>
+        <div class="shot-court-sublabel">${onShots.length.toLocaleString()} FGA · ${onPoss.toLocaleString()} poss</div>
+      </div>
+      <div class="shot-court-block">
+        <div class="shot-court-label">Without ${lastName(anchorName)}</div>
+        <canvas id="court-off" width="260" height="246" style="border-radius:4px;display:block;"></canvas>
+        <div class="shot-court-sublabel">${offShots.length.toLocaleString()} FGA · ${offPoss.toLocaleString()} poss</div>
+      </div>
     </div>
-  `;
+    <div class="shot-legend">
+      <span>Low</span>
+      <div class="shot-legend-gradient"></div>
+      <span>High freq</span>
+    </div>
+    <div class="table-scroll" style="margin:0 28px 16px;">
+      <table class="wt">
+        <thead><tr>
+          <th></th>
+          <th title="Field goal attempts">FGA</th>
+          <th title="Restricted area (≤5 ft)">RA%</th>
+          <th title="Short mid / paint (6–14 ft)">Paint%</th>
+          <th title="Mid-range (≥15 ft, 2pt)">Mid%</th>
+          <th title="Corner 3">C3%</th>
+          <th title="Above-break 3">AB3%</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-size:10px;color:var(--ink2);white-space:nowrap;font-family:var(--ff-mono)">With ${lastName(anchorName)}</td>
+            <td>${onZone ? onZone.fga.toLocaleString() : '—'}</td>
+            <td>${fmtPct(onZone?.ra_pct)}</td>
+            <td>${fmtPct(onZone?.paint_pct)}</td>
+            <td>${fmtPct(onZone?.mid_pct)}</td>
+            <td>${fmtPct(onZone?.c3_pct)}</td>
+            <td>${fmtPct(onZone?.ab3_pct)}</td>
+          </tr>
+          <tr>
+            <td style="font-size:10px;color:var(--ink2);white-space:nowrap;font-family:var(--ff-mono)">Without ${lastName(anchorName)}</td>
+            <td>${offZone ? offZone.fga.toLocaleString() : '—'}</td>
+            <td>${fmtPct(offZone?.ra_pct)}</td>
+            <td>${fmtPct(offZone?.paint_pct)}</td>
+            <td>${fmtPct(offZone?.mid_pct)}</td>
+            <td>${fmtPct(offZone?.c3_pct)}</td>
+            <td>${fmtPct(offZone?.ab3_pct)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+
+  drawCourtHeatmap(document.getElementById('court-on'),  onShots,  onPoss);
+  drawCourtHeatmap(document.getElementById('court-off'), offShots, offPoss);
+}
+
+// ── Court heatmap renderer ─────────────────────────────────────
+function drawCourtHeatmap(canvas, shots, totalPoss) {
+  if (!canvas) return;
+  const W = canvas.width, H = canvas.height;
+  const ctx = canvas.getContext('2d');
+
+  // NBA shot chart coordinate system (tenths of a foot, basket at origin)
+  const X_MIN = -250, X_MAX = 250;
+  const Y_MIN = -52,  Y_MAX = 420;
+  const XR = X_MAX - X_MIN;  // 500
+  const YR = Y_MAX - Y_MIN;  // 472
+
+  const px = x => (x - X_MIN) / XR * W;
+  const py = y => H - (y - Y_MIN) / YR * H;
+
+  // Court background
+  ctx.fillStyle = '#f5f1ea';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Heatmap layer ───────────────────────────────────────────
+  if (shots.length > 0 && totalPoss > 0) {
+    const CELL = 18;
+    const COLS = Math.ceil(XR / CELL);
+    const ROWS = Math.ceil(YR / CELL);
+    const grid = new Float32Array(COLS * ROWS);
+
+    for (const s of shots) {
+      const c = Math.min(Math.floor((s.x - X_MIN) / CELL), COLS - 1);
+      const r = Math.min(ROWS - 1 - Math.floor((s.y - Y_MIN) / CELL), ROWS - 1);
+      if (c >= 0 && r >= 0) grid[r * COLS + c]++;
+    }
+
+    // Gaussian-weighted blur (radius 2 cells)
+    const smoothed = new Float32Array(COLS * ROWS);
+    const BLUR = 2;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        let wsum = 0, wtot = 0;
+        for (let dr = -BLUR; dr <= BLUR; dr++) {
+          for (let dc = -BLUR; dc <= BLUR; dc++) {
+            const nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+            const w = Math.exp(-(dr * dr + dc * dc) / (BLUR * BLUR));
+            wsum += grid[nr * COLS + nc] * w;
+            wtot += w;
+          }
+        }
+        smoothed[r * COLS + c] = wtot > 0 ? wsum / wtot : 0;
+      }
+    }
+
+    // Use 95th-percentile density as the "max" to avoid outlier washing
+    const nonzero = [...smoothed].filter(v => v > 0).sort((a, b) => a - b);
+    const p95 = nonzero.length ? nonzero[Math.floor(nonzero.length * 0.95)] : 1;
+
+    const cellW = W / COLS, cellH = H / ROWS;
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const v = smoothed[r * COLS + c];
+        if (v < 0.05) continue;
+        const norm = Math.min(v / p95, 1);
+        const alpha = 0.12 + norm * 0.72;
+        const hue   = (1 - norm) * 220;  // 220 (blue) → 0 (red)
+        ctx.fillStyle = `hsla(${hue},95%,50%,${alpha})`;
+        ctx.fillRect(c * cellW, r * cellH, cellW + 0.5, cellH + 0.5);
+      }
+    }
+  }
+
+  // ── Court lines ─────────────────────────────────────────────
+  const lw = Math.max(1, W / 280);
+  ctx.lineWidth   = lw;
+  ctx.strokeStyle = '#7a7060';
+
+  // Paint (key)
+  ctx.beginPath();
+  ctx.rect(px(-80), py(142), px(80) - px(-80), py(-52) - py(142));
+  ctx.stroke();
+
+  // Free throw circle — solid upper half, dashed lower half
+  const ftR = 60 / XR * W;
+  ctx.beginPath();
+  ctx.arc(px(0), py(142), ftR, Math.PI, 0, true);
+  ctx.stroke();
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.arc(px(0), py(142), ftR, 0, Math.PI, true);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Restricted area arc (above the basket)
+  ctx.beginPath();
+  ctx.arc(px(0), py(0), 40 / XR * W, Math.PI, 0, true);
+  ctx.stroke();
+
+  // Hoop
+  ctx.strokeStyle = '#c0392b';
+  ctx.lineWidth   = lw * 1.5;
+  ctx.beginPath();
+  ctx.arc(px(0), py(0), 7.5 / XR * W, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 3pt line
+  ctx.strokeStyle = '#7a7060';
+  ctx.lineWidth   = lw;
+  // Straight corner segments
+  ctx.beginPath(); ctx.moveTo(px(-220), py(-52)); ctx.lineTo(px(-220), py(92.5)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px( 220), py(-52)); ctx.lineTo(px( 220), py(92.5)); ctx.stroke();
+  // Arc — from left corner, over the top, to right corner
+  const arc3R = 237.5 / XR * W;
+  const ang1  = Math.atan2(py(92.5) - py(0), px(-220) - px(0));
+  const ang2  = Math.atan2(py(92.5) - py(0), px( 220) - px(0));
+  ctx.beginPath();
+  ctx.arc(px(0), py(0), arc3R, ang1, ang2, false);
+  ctx.stroke();
+
+  // Baseline
+  ctx.beginPath(); ctx.moveTo(px(-250), py(-52)); ctx.lineTo(px(250), py(-52)); ctx.stroke();
+}
+
+// ── Stat Line body ─────────────────────────────────────────────
+async function renderStatLineBody(rows, rosterMap, selArr, season) {
+  const body = document.getElementById('wowy-body');
+
+  if (!selArr.length) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;">Select at least one player to use as the anchor.</div>`;
+    return;
+  }
+
+  const anchorId = selArr[0];
+  const anchorPlayer = rosterMap[anchorId];
+  const anchorName = anchorPlayer ? anchorPlayer.player_name : `Player ${anchorId}`;
+
+  body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;"><span class="spin"></span><span>Loading stat line…</span></div>`;
+
+  let data;
+  try {
+    const res = await fetch(`/api/wowy/stat-line?anchor=${anchorId}&season=${encodeURIComponent(season)}`);
+    data = await res.json();
+  } catch(e) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;color:var(--red)">⚠ ${e.message}</div>`;
+    return;
+  }
+  if (data.error) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;color:var(--red)">⚠ ${data.error}</div>`;
+    return;
+  }
+
+  const teammates = data.teammates || [];
+  if (!teammates.length) {
+    body.innerHTML = `<div class="state-msg" style="flex:0;padding:48px 28px;">No teammate data found for ${anchorName}.</div>`;
+    return;
+  }
+
+  const fmt1 = v => v == null ? '<span class="null-dash">—</span>' : v.toFixed(1);
+  const fmt2 = v => v == null ? '<span class="null-dash">—</span>' : v.toFixed(1);
+  const fmtPct = v => v == null ? '<span class="null-dash">—</span>' : v.toFixed(1) + '%';
+
+  const diffCell = (v, isHigherBetter = true) => {
+    if (v == null) return '<span class="null-dash">—</span>';
+    const sign = v > 0 ? '+' : '';
+    const cls = v > 0.05 ? (isHigherBetter ? 'net-pos' : 'net-neg')
+              : v < -0.05 ? (isHigherBetter ? 'net-neg' : 'net-pos')
+              : 'net-neu';
+    return `<span class="${cls}">${sign}${v.toFixed(1)}</span>`;
+  };
+  const diffPct = (v, isHigherBetter = true) => {
+    if (v == null) return '<span class="null-dash">—</span>';
+    const sign = v > 0 ? '+' : '';
+    const cls = v > 0.05 ? (isHigherBetter ? 'net-pos' : 'net-neg')
+              : v < -0.05 ? (isHigherBetter ? 'net-neg' : 'net-pos')
+              : 'net-neu';
+    return `<span class="${cls}">${sign}${v.toFixed(1)}%</span>`;
+  };
+
+  const statGroup = (on, off, diff, fmt, isHigherBetter = true) =>
+    `<td class="stat-on">${fmt(on)}</td><td class="stat-off">${fmt(off)}</td><td class="stat-diff">${isHigherBetter ? diffCell(diff) : diffCell(diff, false)}</td>`;
+
+  const statGroupPct = (on, off, diff, isHigherBetter = true) =>
+    `<td class="stat-on">${fmtPct(on)}</td><td class="stat-off">${fmtPct(off)}</td><td class="stat-diff">${diffPct(diff, isHigherBetter)}</td>`;
+
+  body.innerHTML = `
+    <style>
+      .stat-anchor-note { padding: 10px 28px 6px; font-size: 11px; color: var(--ink3); font-family: var(--ff-mono); letter-spacing: 0.04em; flex-shrink: 0; }
+      .stat-anchor-note strong { color: var(--ink); }
+      .stat-group-header { text-align: center; border-bottom: 1px solid var(--rule); font-size: 9px; letter-spacing: 0.08em; color: var(--ink3); padding-bottom: 2px; }
+      .stat-on  { color: var(--ink2); }
+      .stat-off { color: var(--ink3); }
+      .stat-diff { font-weight: 600; }
+      .th-sub { font-size: 8.5px; color: var(--ink3); font-weight: 400; letter-spacing: 0.05em; display: block; margin-top: 1px; }
+      .td-teammate { white-space: nowrap; min-width: 120px; }
+      .teammate-chip { display: flex; align-items: center; gap: 6px; }
+      .teammate-chip img { width: 28px; height: 21px; object-fit: cover; border-radius: 3px; }
+    </style>
+    <div class="stat-anchor-note">Anchor: <strong>${anchorName}</strong> — each row shows a teammate's individual stats with/without the anchor on the floor.</div>
+    <div class="table-scroll">
+      <table class="wt">
+        <thead>
+          <tr>
+            <th rowspan="2" class="td-teammate">Teammate</th>
+            <th rowspan="2" title="Possessions with anchor on floor">ON<br><span class="th-sub">poss</span></th>
+            <th rowspan="2" title="Possessions without anchor on floor">OFF<br><span class="th-sub">poss</span></th>
+            <th colspan="3" class="stat-group-header">Pts/100</th>
+            <th colspan="3" class="stat-group-header">eFG%</th>
+            <th colspan="3" class="stat-group-header">AST/100</th>
+            <th colspan="3" class="stat-group-header">REB/100</th>
+            <th colspan="3" class="stat-group-header">TOV/100</th>
+            <th colspan="3" class="stat-group-header">3PA/100</th>
+            <th colspan="3" class="stat-group-header">3P%</th>
+          </tr>
+          <tr>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+            <th class="stat-on">ON</th><th class="stat-off">OFF</th><th class="stat-diff">Δ</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${teammates.map(t => {
+            const img = `<img src="https://cdn.nba.com/headshots/nba/latest/260x190/${t.player_id}.png" alt="" onerror="this.style.display='none'">`;
+            return `<tr>
+              <td class="td-teammate"><div class="teammate-chip">${img}<span>${lastName(t.player_name)}</span></div></td>
+              <td class="td-min">${(t.on_poss||0).toLocaleString()}</td>
+              <td class="td-min">${(t.off_poss||0).toLocaleString()}</td>
+              ${statGroup(t.pts_on, t.pts_off, t.pts_diff, fmt2)}
+              ${statGroupPct(t.efg_on, t.efg_off, t.efg_diff)}
+              ${statGroup(t.ast_on, t.ast_off, t.ast_diff, fmt2)}
+              ${statGroup(t.reb_on, t.reb_off, t.reb_diff, fmt2)}
+              ${statGroup(t.tov_on, t.tov_off, t.tov_diff, fmt2, false)}
+              ${statGroup(t.fg3a_on, t.fg3a_off, t.fg3a_diff, fmt2)}
+              ${statGroupPct(t.fg3p_on, t.fg3p_off, t.fg3p_diff)}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // ── Generate all 2^N subsets ───────────────────────────────────
@@ -809,6 +1288,11 @@ function lastName(full) {
 function initials(full) {
   return (full||'').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 }
+
+// Show mode tabs immediately on page load (before any team is selected)
+showReadyState();
+// Re-run when team dropdown changes so prompt text updates
+teamSel.addEventListener('change', () => { if (!teamSel.value) showReadyState(); });
 </script>
 <script>
 // ── Nav auth (shared across all pages) ───────────────────────

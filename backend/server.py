@@ -3116,5 +3116,461 @@ def pva_page():
     return app.send_static_file("pva.html")
 
 
+# ── Adjusted WoWY ─────────────────────────────────────────────────────────────
+
+@app.route("/api/adjusted-wowy/leaders")
+def adjusted_wowy_leaders():
+    season      = request.args.get("season", get_current_season())
+    season_type = request.args.get("season_type", "Regular Season")
+    min_poss    = int(request.args.get("min_poss", 500))
+    sort_col    = request.args.get("sort", "adj_wowy")
+    sort_dir    = request.args.get("dir", "desc")
+
+    allowed_sorts = {"adj_wowy", "on_net_adj", "off_net_adj", "raw_wowy",
+                     "on_net_raw", "off_net_raw", "on_poss"}
+    if sort_col not in allowed_sorts:
+        sort_col = "adj_wowy"
+    order = "DESC" if sort_dir != "asc" else "ASC"
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(f"""
+            SELECT w.player_id, w.player_name, w.team_abbr,
+                   w.on_poss, w.off_poss,
+                   w.on_net_adj, w.off_net_adj, w.adj_wowy,
+                   w.on_net_raw, w.off_net_raw, w.raw_wowy
+            FROM player_adjusted_wowy w
+            WHERE w.season      = %s
+              AND w.season_type = %s
+              AND w.on_poss    >= %s
+            ORDER BY {sort_col} {order}
+        """, (season, season_type, min_poss))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"season": season, "min_poss": min_poss, "players": rows})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/adjusted-wowy/seasons")
+def adjusted_wowy_seasons():
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT season, season_type, COUNT(DISTINCT player_id) AS player_count
+            FROM player_adjusted_wowy
+            GROUP BY season, season_type
+            ORDER BY season DESC
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"seasons": rows})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/adjusted-wowy/by-players")
+def adjusted_wowy_by_players():
+    """Return adjusted WoWY stats for specific player IDs (used by WoWY page toggle)."""
+    season      = request.args.get("season", get_current_season())
+    season_type = request.args.get("season_type", "Regular Season")
+    players_raw = request.args.get("players", "")
+
+    if not players_raw:
+        return jsonify({"error": "players param required"}), 400
+
+    try:
+        player_ids = [int(p) for p in players_raw.split(",") if p.strip()]
+    except ValueError:
+        return jsonify({"error": "players must be comma-separated integers"}), 400
+
+    if not player_ids:
+        return jsonify({"error": "no valid player IDs"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT w.player_id, w.player_name, w.team_abbr,
+                   w.on_poss, w.off_poss,
+                   w.on_net_adj, w.off_net_adj, w.adj_wowy,
+                   w.on_net_raw, w.off_net_raw, w.raw_wowy
+            FROM player_adjusted_wowy w
+            WHERE w.season      = %s
+              AND w.season_type = %s
+              AND w.player_id   = ANY(%s)
+            ORDER BY w.adj_wowy DESC
+        """, (season, season_type, player_ids))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return jsonify({"season": season, "season_type": season_type, "players": rows})
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/impact")
+@app.route("/impact.html")
+def impact_page():
+    return app.send_static_file("impact.html")
+
+
+# ── WoWY possession-data modes ─────────────────────────────────────────────────
+
+def _wowy_team_id(cur, player_ids: list, season: str):
+    """Return the offense_team_id most associated with these players this season."""
+    cur.execute("""
+        SELECT p.offense_team_id, COUNT(*) AS cnt
+        FROM possessions p
+        JOIN possession_lineups pl ON pl.possession_id = p.id
+        WHERE pl.player_id = ANY(%s) AND pl.side = 'offense' AND p.season = %s
+        GROUP BY p.offense_team_id
+        ORDER BY cnt DESC LIMIT 1
+    """, (player_ids, season))
+    row = cur.fetchone()
+    return row["offense_team_id"] if row else None
+
+
+@app.route("/api/wowy/shot-profile")
+def wowy_shot_profile():
+    """Shot zone distribution per lineup combination, derived from possession data."""
+    season     = request.args.get("season", get_current_season())
+    players_raw = request.args.get("players", "")
+    try:
+        player_ids = [int(x) for x in players_raw.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"error": "Invalid player IDs"}), 400
+    if not player_ids:
+        return jsonify({"error": "No players specified"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        team_id = _wowy_team_id(cur, player_ids, season)
+        if not team_id:
+            cur.close(); conn.close()
+            return jsonify({"error": "No possession data for these players this season"}), 404
+
+        # All team offensive possessions: lineup + shot zone
+        cur.execute("""
+            SELECT p.id AS pid, p.shot_zone,
+                   array_agg(pl.player_id) AS lineup
+            FROM possessions p
+            JOIN possession_lineups pl
+              ON pl.possession_id = p.id AND pl.side = 'offense'
+            WHERE p.offense_team_id = %s AND p.season = %s
+            GROUP BY p.id, p.shot_zone
+        """, (team_id, season))
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+
+        ZONES = {1: "ra", 2: "paint", 3: "mid", 4: "c3", 5: "ab3"}
+        player_set = set(player_ids)
+        combos = {}  # frozenset(on_selected) → {total, ra, paint, mid, c3, ab3}
+
+        for r in rows:
+            on_sel = frozenset(set(r["lineup"]) & player_set)
+            if on_sel not in combos:
+                combos[on_sel] = {"total": 0, "ra": 0, "paint": 0, "mid": 0, "c3": 0, "ab3": 0}
+            z = r["shot_zone"]
+            if z and z > 0:
+                combos[on_sel]["total"] += 1
+                if z in ZONES:
+                    combos[on_sel][ZONES[z]] += 1
+
+        results = []
+        for on_sel, s in combos.items():
+            total = s["total"]
+            pct = lambda k: round(s[k] / total * 100, 1) if total > 0 else None
+            results.append({
+                "on_players": sorted(on_sel),
+                "fga":        total,
+                "ra_pct":     pct("ra"),
+                "paint_pct":  pct("paint"),
+                "mid_pct":    pct("mid"),
+                "c3_pct":     pct("c3"),
+                "ab3_pct":    pct("ab3"),
+            })
+
+        return jsonify({"combos": results, "season": season})
+
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/wowy/shot-locations")
+def wowy_shot_locations():
+    """Raw FGA coordinates split by anchor player on/off court."""
+    season = request.args.get("season", get_current_season())
+    try:
+        anchor_id = int(request.args.get("anchor", ""))
+    except (ValueError, TypeError):
+        return jsonify({"error": "anchor param required (player_id)"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        team_id = _wowy_team_id(cur, [anchor_id], season)
+        if not team_id:
+            cur.close(); conn.close()
+            return jsonify({"error": "No possession data for this player this season"}), 404
+
+        cur.execute("""
+            WITH anchor_on_poss AS (
+                SELECT possession_id FROM possession_lineups
+                WHERE player_id = %(anchor)s AND side = 'offense'
+            )
+            SELECT
+                pe.x_legacy                         AS x,
+                pe.y_legacy                         AS y,
+                (pe.sub_type = 'made')              AS made,
+                pe.action_type                      AS shot_type,
+                (ao.possession_id IS NOT NULL)      AS anchor_on
+            FROM possessions p
+            JOIN possession_events pe ON pe.possession_id = p.id
+            LEFT JOIN anchor_on_poss ao ON ao.possession_id = p.id
+            WHERE p.offense_team_id = %(team_id)s
+              AND p.season          = %(season)s
+              AND pe.is_field_goal
+              AND pe.x_legacy IS NOT NULL
+              AND pe.y_legacy IS NOT NULL
+        """, {"anchor": anchor_id, "team_id": team_id, "season": season})
+        shot_rows = cur.fetchall()
+
+        cur.execute("""
+            WITH anchor_on_poss AS (
+                SELECT possession_id FROM possession_lineups
+                WHERE player_id = %(anchor)s AND side = 'offense'
+            )
+            SELECT
+                COUNT(*) FILTER (WHERE ao.possession_id IS NOT NULL) AS on_poss,
+                COUNT(*) FILTER (WHERE ao.possession_id IS NULL)     AS off_poss
+            FROM possessions p
+            LEFT JOIN anchor_on_poss ao ON ao.possession_id = p.id
+            WHERE p.offense_team_id = %(team_id)s
+              AND p.season          = %(season)s
+        """, {"anchor": anchor_id, "team_id": team_id, "season": season})
+        counts = cur.fetchone()
+        cur.close(); conn.close()
+
+        on_shots, off_shots = [], []
+        for r in shot_rows:
+            shot = {
+                "x":    float(r["x"]),
+                "y":    float(r["y"]),
+                "made": bool(r["made"]),
+                "is3":  r["shot_type"] == "3pt",
+            }
+            if r["anchor_on"]:
+                on_shots.append(shot)
+            else:
+                off_shots.append(shot)
+
+        return jsonify({
+            "on_shots":  on_shots,
+            "off_shots": off_shots,
+            "on_poss":   int(counts["on_poss"]  or 0),
+            "off_poss":  int(counts["off_poss"] or 0),
+            "season":    season,
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/wowy/stat-line")
+def wowy_stat_line():
+    """Per-teammate stat shifts for an anchor player.
+
+    For each teammate on the same team, returns their individual per-100
+    stats split by whether the anchor player is on the floor (ON) or off (OFF).
+    """
+    season     = request.args.get("season", get_current_season())
+    try:
+        anchor_id = int(request.args.get("anchor", ""))
+    except (ValueError, TypeError):
+        return jsonify({"error": "anchor param required (player_id)"}), 400
+
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        team_id = _wowy_team_id(cur, [anchor_id], season)
+        if not team_id:
+            cur.close(); conn.close()
+            return jsonify({"error": "No possession data for this player this season"}), 404
+
+        # ── Per-teammate stats split by anchor on/off ──────────────
+        # CTE 1: mark every team offensive possession as anchor_on or not.
+        # CTE 2: for each (teammate, possession), get their event stats.
+        # CTE 3: assists where the teammate is the assister (separate field).
+        # Separate CTEs avoid the N×M cross-product from joining lineups + events.
+        cur.execute("""
+            WITH anchor_on_poss AS (
+                SELECT possession_id
+                FROM possession_lineups
+                WHERE player_id = %(anchor)s AND side = 'offense'
+            ),
+            teammate_poss AS (
+                SELECT pl.player_id,
+                       pl.possession_id,
+                       (ao.possession_id IS NOT NULL) AS anchor_on
+                FROM possession_lineups pl
+                JOIN possessions p ON p.id = pl.possession_id
+                LEFT JOIN anchor_on_poss ao ON ao.possession_id = pl.possession_id
+                WHERE p.offense_team_id = %(team_id)s
+                  AND p.season          = %(season)s
+                  AND pl.side           = 'offense'
+                  AND pl.player_id     != %(anchor)s
+            ),
+            teammate_events AS (
+                SELECT tp.player_id, tp.anchor_on,
+                    SUM(CASE WHEN pe.is_field_goal THEN 1 ELSE 0 END)                                          AS fga,
+                    SUM(CASE WHEN pe.is_field_goal AND pe.action_type = '2pt'
+                                  AND pe.sub_type = 'made' THEN 2 ELSE 0 END)
+                  + SUM(CASE WHEN pe.is_field_goal AND pe.action_type = '3pt'
+                                  AND pe.sub_type = 'made' THEN 3 ELSE 0 END)                                  AS fg_pts,
+                    SUM(CASE WHEN pe.is_field_goal AND pe.sub_type = 'made' THEN 1 ELSE 0 END)                 AS fgm,
+                    SUM(CASE WHEN pe.is_field_goal AND pe.action_type = '3pt' THEN 1 ELSE 0 END)               AS fg3a,
+                    SUM(CASE WHEN pe.is_field_goal AND pe.action_type = '3pt'
+                                  AND pe.sub_type = 'made' THEN 1 ELSE 0 END)                                  AS fg3m,
+                    SUM(CASE WHEN pe.action_type = 'freethrow' AND pe.sub_type = 'made' THEN 1 ELSE 0 END)     AS ftm,
+                    SUM(CASE WHEN pe.action_type = 'rebound' THEN 1 ELSE 0 END)                                AS reb,
+                    SUM(CASE WHEN pe.action_type = 'turnover' THEN 1 ELSE 0 END)                               AS tov
+                FROM teammate_poss tp
+                JOIN possession_events pe
+                  ON pe.possession_id = tp.possession_id AND pe.player_id = tp.player_id
+                GROUP BY tp.player_id, tp.anchor_on
+            ),
+            teammate_ast AS (
+                SELECT tp.player_id, tp.anchor_on, COUNT(*) AS ast
+                FROM teammate_poss tp
+                JOIN possession_events pe ON pe.possession_id = tp.possession_id
+                WHERE pe.assist_player_id = tp.player_id
+                  AND pe.is_field_goal AND pe.sub_type = 'made'
+                GROUP BY tp.player_id, tp.anchor_on
+            ),
+            poss_counts AS (
+                SELECT player_id, anchor_on, COUNT(*) AS poss
+                FROM teammate_poss
+                GROUP BY player_id, anchor_on
+            )
+            SELECT pc.player_id, pc.anchor_on, pc.poss,
+                   COALESCE(te.fga,    0) AS fga,
+                   COALESCE(te.fg_pts, 0) AS fg_pts,
+                   COALESCE(te.fgm,    0) AS fgm,
+                   COALESCE(te.fg3a,   0) AS fg3a,
+                   COALESCE(te.fg3m,   0) AS fg3m,
+                   COALESCE(te.ftm,    0) AS ftm,
+                   COALESCE(te.reb,    0) AS reb,
+                   COALESCE(te.tov,    0) AS tov,
+                   COALESCE(ta.ast,    0) AS ast
+            FROM poss_counts pc
+            LEFT JOIN teammate_events te USING (player_id, anchor_on)
+            LEFT JOIN teammate_ast    ta USING (player_id, anchor_on)
+            ORDER BY pc.player_id, pc.anchor_on
+        """, {"anchor": anchor_id, "team_id": team_id, "season": season})
+        rows = cur.fetchall()
+
+        # Resolve player names
+        teammate_ids = list({r["player_id"] for r in rows})
+        cur.execute(
+            "SELECT player_id, player_name FROM players WHERE player_id = ANY(%s)",
+            (teammate_ids,)
+        )
+        name_map = {r["player_id"]: r["player_name"] for r in cur.fetchall()}
+
+        # Resolve anchor name
+        cur.execute("SELECT player_name FROM players WHERE player_id = %s", (anchor_id,))
+        anc = cur.fetchone()
+        anchor_name = anc["player_name"] if anc else str(anchor_id)
+
+        cur.close(); conn.close()
+
+        # Pivot ON / OFF rows per teammate
+        by_player = {}
+        for r in rows:
+            pid = r["player_id"]
+            if pid not in by_player:
+                by_player[pid] = {}
+            side = "on" if r["anchor_on"] else "off"
+            by_player[pid][side] = r
+
+        def p100(n, poss):
+            return round(n / poss * 100, 1) if poss > 0 else None
+
+        def efg(fgm, fg3m, fga):
+            return round((fgm + 0.5 * fg3m) / fga * 100, 1) if fga > 0 else None
+
+        def fg3pct(fg3m, fg3a):
+            return round(fg3m / fg3a * 100, 1) if fg3a > 0 else None
+
+        def diff(a, b):
+            return round(a - b, 1) if a is not None and b is not None else None
+
+        teammates = []
+        for pid, sides in by_player.items():
+            on  = sides.get("on",  {})
+            off = sides.get("off", {})
+
+            on_poss  = int(on.get("poss", 0)  or 0)
+            off_poss = int(off.get("poss", 0) or 0)
+            if on_poss + off_poss < 50:
+                continue  # skip players with almost no shared minutes
+
+            def stat(key, poss, row):
+                return p100(int(row.get(key, 0) or 0), poss)
+
+            pts_on   = p100(int(on.get("fg_pts",0) or 0) + int(on.get("ftm",0) or 0), on_poss)
+            pts_off  = p100(int(off.get("fg_pts",0) or 0) + int(off.get("ftm",0) or 0), off_poss)
+            efg_on   = efg(int(on.get("fgm",0) or 0),  int(on.get("fg3m",0) or 0),  int(on.get("fga",0) or 0))
+            efg_off  = efg(int(off.get("fgm",0) or 0), int(off.get("fg3m",0) or 0), int(off.get("fga",0) or 0))
+            ast_on   = stat("ast",  on_poss,  on)
+            ast_off  = stat("ast",  off_poss, off)
+            reb_on   = stat("reb",  on_poss,  on)
+            reb_off  = stat("reb",  off_poss, off)
+            tov_on   = stat("tov",  on_poss,  on)
+            tov_off  = stat("tov",  off_poss, off)
+            fg3a_on  = stat("fg3a", on_poss,  on)
+            fg3a_off = stat("fg3a", off_poss, off)
+            fg3p_on  = fg3pct(int(on.get("fg3m",0) or 0),  int(on.get("fg3a",0) or 0))
+            fg3p_off = fg3pct(int(off.get("fg3m",0) or 0), int(off.get("fg3a",0) or 0))
+
+            teammates.append({
+                "player_id":   pid,
+                "player_name": name_map.get(pid, str(pid)),
+                "on_poss":     on_poss,
+                "off_poss":    off_poss,
+                "pts_on":  pts_on,  "pts_off":  pts_off,  "pts_diff":  diff(pts_on,  pts_off),
+                "efg_on":  efg_on,  "efg_off":  efg_off,  "efg_diff":  diff(efg_on,  efg_off),
+                "ast_on":  ast_on,  "ast_off":  ast_off,  "ast_diff":  diff(ast_on,  ast_off),
+                "reb_on":  reb_on,  "reb_off":  reb_off,  "reb_diff":  diff(reb_on,  reb_off),
+                "tov_on":  tov_on,  "tov_off":  tov_off,  "tov_diff":  diff(tov_on,  tov_off),
+                "fg3a_on": fg3a_on, "fg3a_off": fg3a_off, "fg3a_diff": diff(fg3a_on, fg3a_off),
+                "fg3p_on": fg3p_on, "fg3p_off": fg3p_off, "fg3p_diff": diff(fg3p_on, fg3p_off),
+            })
+
+        # Sort by on_poss descending (most shared minutes first)
+        teammates.sort(key=lambda t: t["on_poss"], reverse=True)
+
+        return jsonify({
+            "anchor_id":   anchor_id,
+            "anchor_name": anchor_name,
+            "teammates":   teammates,
+            "season":      season,
+        })
+
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

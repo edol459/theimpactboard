@@ -157,6 +157,54 @@ def _get_sub_type(event) -> str:
     return ""
 
 
+def _get_shot_value(possession) -> int:
+    """Return 3, 2, 1, or 0 for the shot type of this possession.
+
+    3 = 3-point field goal attempt
+    2 = 2-point field goal attempt
+    1 = free-throw possession (fouled, no field goal)
+    0 = turnover / end-of-period (no shot)
+    """
+    for event in reversed(possession.events):
+        if isinstance(event, FieldGoal):
+            return event.shot_value  # 2 or 3
+    for event in possession.events:
+        if isinstance(event, FreeThrow):
+            return 1
+    return 0
+
+
+def _get_shot_zone(possession) -> int:
+    """Return shot zone for the possession's field goal attempt.
+
+    Zones (matching train_ev_model.py):
+    0 = no FG (turnover / free-throw / end-of-period)
+    1 = restricted area  (≤5 ft)
+    2 = short mid / paint (6–14 ft)
+    3 = mid-range        (≥15 ft, 2pt)
+    4 = corner 3         (3pt, |x_legacy| ≥ 220)
+    5 = above-break 3    (3pt, |x_legacy| < 220)
+    """
+    for event in reversed(possession.events):
+        if isinstance(event, FieldGoal):
+            x = getattr(event, "locX", None)
+            dist = getattr(event, "distance", None)
+            if event.shot_value == 3:
+                if x is not None and abs(x) >= 220:
+                    return 4  # corner 3
+                return 5      # above-break 3
+            # 2pt
+            if dist is not None:
+                if dist <= 5:
+                    return 1  # restricted area
+                if dist <= 14:
+                    return 2  # short mid / paint
+                return 3      # mid-range
+            # fallback: no distance — treat as short mid
+            return 2
+    return 0
+
+
 def _get_end_reason(possession) -> str:
     """Determine how a possession ended by inspecting events in reverse."""
     for event in reversed(possession.events):
@@ -219,9 +267,11 @@ def write_possession(cur, possession, season: str, possession_number: int) -> in
     players_map = possession.events[0].current_players
     defense_id  = next((t for t in players_map if t != offense_id), 0)
 
-    points    = _count_points(possession)
+    points     = _count_points(possession)
     end_reason = _get_end_reason(possession)
-    margin    = possession.start_score_margin
+    shot_value = _get_shot_value(possession)
+    shot_zone  = _get_shot_zone(possession)
+    margin     = possession.start_score_margin
 
     # 1. Insert possession row
     cur.execute("""
@@ -230,8 +280,8 @@ def write_possession(cur, possession, season: str, possession_number: int) -> in
             offense_team_id, defense_team_id,
             period, start_clock_seconds, end_clock_seconds,
             game_seconds_start, score_margin_offense,
-            points_scored, end_reason
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            points_scored, end_reason, shot_value, shot_zone
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT (game_id, possession_number) DO NOTHING
         RETURNING id
     """, (
@@ -239,7 +289,7 @@ def write_possession(cur, possession, season: str, possession_number: int) -> in
         offense_id, defense_id,
         period, start_clock, end_clock,
         game_secs, margin,
-        points, end_reason,
+        points, end_reason, shot_value, shot_zone,
     ))
     row = cur.fetchone()
     if row is None:

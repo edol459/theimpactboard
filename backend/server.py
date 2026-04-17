@@ -1067,6 +1067,21 @@ def get_live_boxscore(game_id):
         return jsonify({"error": str(e)}), 404
  
  
+def _season_type_from_game_id(game_id: str) -> str:
+    """
+    Derive season type from the NBA game ID prefix.
+    Format: 00XXYYYYYY where XX encodes season type:
+      01 = Pre-Season, 02 = Regular Season, 04 = Playoffs, 05 = Play-In
+    """
+    prefix = game_id[2:4] if len(game_id) >= 4 else ""
+    return {
+        "01": "Pre Season",
+        "02": "Regular Season",
+        "04": "Playoffs",
+        "05": "PlayIn",
+    }.get(prefix, os.getenv("NBA_SEASON_TYPE", "Regular Season"))
+
+
 def _upsert_game_from_boxscore(game_id: str, game: dict):
     """
     Upsert a completed game into the games table from CDN boxscore data.
@@ -1079,19 +1094,19 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
         home_abbr  = home.get("teamTricode", "")
         away_score = int(away.get("score", 0) or 0)
         home_score = int(home.get("score", 0) or 0)
- 
-        # Parse game date from gameTimeUTC or gameId
-        # gameId format: 0022501109 — first 8 chars after leading 00 = season/type,
-        # remainder doesn't encode date. Use gameTimeUTC instead.
+
+        # Derive season type from game ID prefix (002=Regular, 004=Playoffs, 005=PlayIn)
+        season_type = _season_type_from_game_id(game_id)
+
+        # Parse game date from gameTimeUTC
         game_time_utc = game.get("gameTimeUTC", "")
         if game_time_utc:
             from datetime import datetime as _dt2
             game_date = _dt2.fromisoformat(game_time_utc.replace("Z", "+00:00")).date()
         else:
-            # Fallback: today's date (close enough for recent games)
             from datetime import date as _date2
             game_date = _date2.today()
- 
+
         conn = get_conn()
         cur  = conn.cursor()
         cur.execute("""
@@ -1103,14 +1118,16 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
             ON CONFLICT (game_id) DO UPDATE SET
                 home_score     = EXCLUDED.home_score,
                 away_score     = EXCLUDED.away_score,
+                season_type    = EXCLUDED.season_type,
                 status         = 'Final',
                 updated_at     = NOW()
             WHERE games.status != 'Final'
                OR games.home_score IS NULL
+               OR games.season_type != EXCLUDED.season_type
         """, (
             game_id,
             os.getenv("NBA_SEASON", "2025-26"),
-            os.getenv("NBA_SEASON_TYPE", "Regular Season"),
+            season_type,
             game_date,
             home_abbr, away_abbr,
             home_score, away_score,

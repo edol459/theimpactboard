@@ -111,6 +111,8 @@ table.box-table tfoot td:first-child{text-align:left;}
 .pbp-desc .tov{color:var(--red);}
 .pbp-desc .period-marker{font-family:var(--ff-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink4);}
 .pbp-team-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.pbp-actor{width:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;align-self:center;}
+.pbp-headshot{width:20px;height:20px;border-radius:50%;object-fit:cover;object-position:top center;background:var(--paper3);}
 
 
 /* ── Reviews tab ─────────────────────────────────────────────── */
@@ -468,6 +470,7 @@ let ACTIVE_TAB = params.get('tab') || 'pbp';
 let BOX_TEAM = 'away';
 let BOX_SORT = {key:'pts',dir:-1};
 let GAME_DATA = null;
+let PBP_ACTIVE_Q = null; // null = follow latest; number = user-selected quarter
 
 // ── Boot ─────────────────────────────────────────────────────────
 if (!GAME_ID) { document.getElementById('game-scoreboard').innerHTML = '<div class="error-state">No game ID.</div>'; }
@@ -624,6 +627,7 @@ function renderPanels(box, pbp) {
   // PBP quarter tabs
   el.querySelectorAll('.pbp-q-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      PBP_ACTIVE_Q = parseInt(btn.dataset.q);
       el.querySelectorAll('.pbp-q-btn').forEach(b => b.classList.toggle('active', b===btn));
       el.querySelectorAll('.pbp-quarter-panel').forEach(p => p.classList.toggle('active', p.dataset.q===btn.dataset.q));
     });
@@ -733,7 +737,8 @@ function buildPbp(pbp, box) {
   // Deduplicate periods
   const uniqPeriods = [...new Set(periodOrder)];
   const maxPeriod = Math.max(...uniqPeriods);
-  const activePeriod = maxPeriod;
+  // If the user hasn't picked a quarter (or their pick no longer exists), follow the latest
+  const activePeriod = (PBP_ACTIVE_Q && uniqPeriods.includes(PBP_ACTIVE_Q)) ? PBP_ACTIVE_Q : maxPeriod;
 
   const tabHtml = `<div class="pbp-tabs">${uniqPeriods.map(p => {
     const label = p <= 4 ? `Q${p}` : `OT${p-4}`;
@@ -773,10 +778,15 @@ function buildPbpRow(a, awayAbbr, homeAbbr) {
   if (tc === awayAbbr) dotColor = 'var(--away-color)';
   else if (tc === homeAbbr) dotColor = 'var(--home-color)';
 
+  const dot = `<div class="pbp-team-dot" style="background:${dotColor}"></div>`;
+  const actor = a.personId
+    ? `<img class="pbp-headshot" src="https://cdn.nba.com/headshots/nba/latest/260x190/${a.personId}.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pbp-team-dot',style:'background:${dotColor}'}))">`
+    : dot;
+
   return `<div class="pbp-row">
     <div class="pbp-clock">${clock}</div>
     <div class="pbp-score-snap">${score}</div>
-    <div class="pbp-team-dot" style="background:${dotColor}"></div>
+    <div class="pbp-actor">${actor}</div>
     <div class="pbp-desc">${descHtml}</div>
   </div>`;
 }

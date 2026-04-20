@@ -109,6 +109,14 @@ def _ensure_tables():
             CREATE INDEX IF NOT EXISTS idx_review_replies_review_id
             ON review_replies(review_id)
         """)
+        # Fix playoff games that were incorrectly stored as 'Regular Season'
+        # due to the _season_type_from_game_id bug (was using game_id[2:4] instead of game_id[2])
+        cur.execute("""
+            UPDATE games
+            SET season_type = 'Playoffs'
+            WHERE LEFT(game_id, 3) = '004'
+              AND season_type != 'Playoffs'
+        """)
         conn.commit()
         cur.close(); conn.close()
     except Exception as e:
@@ -602,6 +610,113 @@ def _fetch_boxscores_parallel(game_ids, timeout=8):
     return results
 
 
+def _enrich_games_with_records(games):
+    """
+    Enrich scoreboard game dicts in-place with W-L / series records.
+    - Sets g['is_playoffs'] = True for playoff games (gameId starts with '004').
+    - Playoff games: adds g['away']['series_wins'] and g['home']['series_wins'].
+    - Regular season games: fills in wins/losses from DB if currently None.
+    Silently swallows errors so it never breaks the scoreboard response.
+    """
+    if not games:
+        return
+    try:
+        season = os.getenv("NBA_SEASON", "2025-26")
+        all_abbrs = set()
+        playoff_pairs = set()
+
+        for g in games:
+            away_abbr = g.get("away", {}).get("abbr", "")
+            home_abbr = g.get("home", {}).get("abbr", "")
+            if away_abbr:
+                all_abbrs.add(away_abbr)
+            if home_abbr:
+                all_abbrs.add(home_abbr)
+            game_id = str(g.get("gameId", ""))
+            is_po = game_id.startswith("004")
+            g["is_playoffs"] = is_po
+            if is_po and away_abbr and home_abbr:
+                playoff_pairs.add(tuple(sorted([away_abbr, home_abbr])))
+
+        conn = get_conn()
+        cur  = conn.cursor()
+
+        # ── Regular season W-L (fills in Nones from DB-first path) ──
+        reg_records = {}
+        if all_abbrs:
+            abbr_list = list(all_abbrs)
+            cur.execute("""
+                SELECT team_abbr,
+                       SUM(CASE WHEN won THEN 1 ELSE 0 END)::int AS wins,
+                       SUM(CASE WHEN NOT won THEN 1 ELSE 0 END)::int AS losses
+                FROM (
+                    SELECT home_team_abbr AS team_abbr,
+                           home_score > away_score AS won
+                    FROM games
+                    WHERE season = %s AND season_type = 'Regular Season'
+                      AND status = 'Final'
+                      AND home_team_abbr = ANY(%s)
+                    UNION ALL
+                    SELECT away_team_abbr AS team_abbr,
+                           away_score > home_score AS won
+                    FROM games
+                    WHERE season = %s AND season_type = 'Regular Season'
+                      AND status = 'Final'
+                      AND away_team_abbr = ANY(%s)
+                ) sub
+                GROUP BY team_abbr
+            """, (season, abbr_list, season, abbr_list))
+            for r in cur.fetchall():
+                reg_records[r["team_abbr"]] = (int(r["wins"]), int(r["losses"]))
+
+        # ── Playoff series records ──
+        series_records = {}
+        for pair in playoff_pairs:
+            t1, t2 = pair
+            cur.execute("""
+                SELECT home_team_abbr, away_team_abbr,
+                       home_score, away_score
+                FROM games
+                WHERE season = %s AND season_type = 'Playoffs'
+                  AND status = 'Final'
+                  AND ((home_team_abbr = %s AND away_team_abbr = %s)
+                    OR (home_team_abbr = %s AND away_team_abbr = %s))
+            """, (season, t1, t2, t2, t1))
+            wins = {t1: 0, t2: 0}
+            for sg in cur.fetchall():
+                h, a = sg["home_team_abbr"], sg["away_team_abbr"]
+                if int(sg["home_score"] or 0) > int(sg["away_score"] or 0):
+                    wins[h] = wins.get(h, 0) + 1
+                else:
+                    wins[a] = wins.get(a, 0) + 1
+            series_records[pair] = wins
+
+        cur.close()
+        conn.close()
+
+        # ── Apply to games ──
+        for g in games:
+            away = g.get("away", {})
+            home = g.get("home", {})
+            away_abbr = away.get("abbr", "")
+            home_abbr = home.get("abbr", "")
+            game_id   = str(g.get("gameId", ""))
+
+            if game_id.startswith("004") and away_abbr and home_abbr:
+                pair = tuple(sorted([away_abbr, home_abbr]))
+                sr   = series_records.get(pair, {})
+                away["series_wins"] = sr.get(away_abbr, 0)
+                home["series_wins"] = sr.get(home_abbr, 0)
+            else:
+                if away.get("wins") is None and away_abbr in reg_records:
+                    away["wins"], away["losses"] = reg_records[away_abbr]
+                if home.get("wins") is None and home_abbr in reg_records:
+                    home["wins"], home["losses"] = reg_records[home_abbr]
+
+    except Exception:
+        pass
+
+
 # ── /api/scoreboard?date=YYYY-MM-DD ──────────────────────────────
 @app.route("/api/scoreboard")
 def get_scoreboard():
@@ -658,6 +773,7 @@ def get_scoreboard():
                         "home": {"abbr": g["home_team_abbr"], "score": int(g["home_score"] or 0),
                                  "wins": None, "losses": None},
                     })
+                _enrich_games_with_records(games)
                 payload = {"games": games, "date": date}
                 _past_sb_cache[date] = {"payload": payload, "ts": _time.time()}
                 return jsonify(payload)
@@ -699,6 +815,7 @@ def get_scoreboard():
                     # Persist Final games to DB so they're available tomorrow via the DB-first path
                     if int(g.get("gameStatus", 1) or 1) == 3 and g.get("gameId"):
                         _upsert_game_from_boxscore(g["gameId"], g)
+                _enrich_games_with_records(games)
                 payload = {"games": games, "date": cdn_date}
                 _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
                 return jsonify(payload)
@@ -789,6 +906,7 @@ def get_scoreboard():
                          "wins": home_wins, "losses": home_losses},
             })
 
+        _enrich_games_with_records(games)
         payload = {"games": games, "date": date}
         if is_past:
             _past_sb_cache[date] = {"payload": payload, "ts": _time.time()}
@@ -828,20 +946,31 @@ def get_top_performers():
     else:
         actual_date = date
         raw_games = []
-        try:
-            from nba_api.stats.endpoints import scoreboardv3
-            dt = _dt.strptime(date, "%Y-%m-%d")
-            board = scoreboardv3.ScoreboardV3(
-                game_date=dt.strftime("%Y-%m-%d"),
-                league_id="00",
-                timeout=30,
-            )
-            gh_df = board.game_header.get_data_frame()
-            raw_games = [{"gameId": str(r.get("gameId", "") or r.get("GAME_ID", ""))}
-                         for _, r in gh_df.iterrows()
-                         if r.get("gameId") or r.get("GAME_ID")]
-        except Exception as e:
-            return jsonify({"error": str(e), "players": [], "date": date}), 200
+        # DB-first for past dates (ScoreboardV3 is rate-limited on cloud IPs)
+        _game_today = _compute_game_today()
+        if date < _game_today:
+            try:
+                conn = get_conn(); cur = conn.cursor()
+                cur.execute("SELECT game_id FROM games WHERE game_date = %s AND status = 'Final'", (date,))
+                raw_games = [{"gameId": r["game_id"]} for r in cur.fetchall()]
+                cur.close(); conn.close()
+            except Exception:
+                pass
+        if not raw_games:
+            try:
+                from nba_api.stats.endpoints import scoreboardv3
+                dt = _dt.strptime(date, "%Y-%m-%d")
+                board = scoreboardv3.ScoreboardV3(
+                    game_date=dt.strftime("%Y-%m-%d"),
+                    league_id="00",
+                    timeout=30,
+                )
+                gh_df = board.game_header.get_data_frame()
+                raw_games = [{"gameId": str(r.get("gameId", "") or r.get("GAME_ID", ""))}
+                             for _, r in gh_df.iterrows()
+                             if r.get("gameId") or r.get("GAME_ID")]
+            except Exception as e:
+                return jsonify({"error": str(e), "players": [], "date": date}), 200
 
     def get_gid(g):
         return g.get("gameId") or g.get("GAME_ID") or ""
@@ -1121,16 +1250,17 @@ def get_live_boxscore(game_id):
  
 def _season_type_from_game_id(game_id: str) -> str:
     """
-    Derive season type from the NBA game ID prefix.
-    Format: 00XXYYYYYY where XX encodes season type:
-      01 = Pre-Season, 02 = Regular Season, 04 = Playoffs, 05 = Play-In
+    Derive season type from the NBA game ID.
+    Format: 00TYYYYYY where T is a single digit at position [2]:
+      1 = Pre-Season, 2 = Regular Season, 4 = Playoffs, 5 = Play-In
+    e.g. 0022400001 → Regular Season, 0042400001 → Playoffs
     """
-    prefix = game_id[2:4] if len(game_id) >= 4 else ""
+    prefix = game_id[2] if len(game_id) >= 3 else ""
     return {
-        "01": "Pre Season",
-        "02": "Regular Season",
-        "04": "Playoffs",
-        "05": "PlayIn",
+        "1": "Pre Season",
+        "2": "Regular Season",
+        "4": "Playoffs",
+        "5": "PlayIn",
     }.get(prefix, os.getenv("NBA_SEASON_TYPE", "Regular Season"))
 
 

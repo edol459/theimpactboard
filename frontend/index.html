@@ -280,16 +280,28 @@ nav {
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
+.card-team-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
 .card-abbr {
   font-family: var(--ff-mono);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  flex: 1;
   color: var(--ink3);
 }
 .card-abbr.winner { color: var(--ink); }
 .card-abbr.loser  { color: var(--ink4); }
+.card-rec {
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  color: var(--ink4);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
 .card-score {
   font-family: var(--ff-mono);
   font-size: 15px;
@@ -1088,7 +1100,7 @@ function buildCard(g) {
     statusHtml = `<div class="card-status upcoming">${tip || g.gameStatusText || 'Upcoming'}</div>`;
   }
 
-  function teamRow(abbr, score, won, lost) {
+  function teamRow(abbr, score, won, lost, rec) {
     const logoUrl = teamLogoUrl(abbr);
     const logoHtml = logoUrl
       ? `<img class="card-logo" src="${logoUrl}" alt="${abbr}" onerror="this.outerHTML='<div class=\\'card-logo-fallback\\'>🏀</div>'">`
@@ -1097,13 +1109,25 @@ function buildCard(g) {
     const scoreClass = showScore ? (won ? 'winner' : lost ? 'loser' : '') : '';
     return `<div class="card-team">
       ${logoHtml}
-      <span class="card-abbr ${abbrClass}">${abbr || '???'}</span>
+      <div class="card-team-info">
+        <span class="card-abbr ${abbrClass}">${abbr || '???'}</span>
+        ${rec ? `<span class="card-rec">${rec}</span>` : ''}
+      </div>
       ${showScore ? `<span class="card-score ${scoreClass}">${score}</span>` : ''}
     </div>`;
   }
 
-  const awayRec = away.wins != null ? `${away.wins}-${away.losses}` : '';
-  const homeRec = home.wins != null ? `${home.wins}-${home.losses}` : '';
+  let awayRec = '';
+  let homeRec = '';
+  if (g.is_playoffs) {
+    if (away.series_wins != null) {
+      awayRec = `${away.series_wins}-${home.series_wins}`;
+      homeRec = `${home.series_wins}-${away.series_wins}`;
+    }
+  } else {
+    if (away.wins != null) awayRec = `${away.wins}-${away.losses}`;
+    if (home.wins != null) homeRec = `${home.wins}-${home.losses}`;
+  }
   const tipText = isUpcoming ? fmtTipoff(g.gameTimeUTC || '') : '';
 
   // Review row — always shown; disabled/greyed for non-final games
@@ -1124,9 +1148,9 @@ function buildCard(g) {
     data-away-rec="${awayRec}"
     data-home-rec="${homeRec}">
     ${statusHtml}
-    ${teamRow(away.abbr, awayScore, awayWon, homeWon)}
+    ${teamRow(away.abbr, awayScore, awayWon, homeWon, awayRec)}
     <div class="card-divider"></div>
-    ${teamRow(home.abbr, homeScore, homeWon, awayWon)}
+    ${teamRow(home.abbr, homeScore, homeWon, awayWon, homeRec)}
     ${reviewRow}
   </div>`;
 }

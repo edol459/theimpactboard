@@ -915,22 +915,22 @@
   <main>
     <!-- Tab bar -->
     <div class="tab-bar">
-      <button class="tab active" data-tab="liked">Most Liked</button>
-      <button class="tab" data-tab="recent">Recent Activity</button>
+      <button class="tab active" data-tab="recent">Recent Activity</button>
+      <button class="tab" data-tab="liked">Most Liked</button>
       <button class="tab" data-tab="top">Top Rated</button>
       <button class="tab" data-tab="browse">Browse Games</button>
     </div>
 
-    <!-- Most Liked -->
-    <div id="paneLiked">
-      <div id="likedFeed" class="state-loading">Loading…</div>
-      <button class="btn-more" id="btnMoreLiked" style="display:none">Load more</button>
-    </div>
-
     <!-- Recent Activity -->
-    <div id="paneRecent" style="display:none">
+    <div id="paneRecent">
       <div id="recentFeed" class="state-loading">Loading…</div>
       <button class="btn-more" id="btnMoreRecent" style="display:none">Load more</button>
+    </div>
+
+    <!-- Most Liked -->
+    <div id="paneLiked" style="display:none">
+      <div id="likedFeed" class="state-loading">Loading…</div>
+      <button class="btn-more" id="btnMoreLiked" style="display:none">Load more</button>
     </div>
 
     <!-- Top Rated -->
@@ -1232,8 +1232,8 @@ document.querySelectorAll('.tab').forEach(btn => {
     btn.classList.add('active');
     const tab = btn.dataset.tab;
     Object.entries(TABS).forEach(([k, el]) => el.style.display = k === tab ? '' : 'none');
-    if (tab === 'recent' && !document.getElementById('recentFeed').dataset.loaded) loadRecent();
-    if (tab === 'top'    && !document.getElementById('topFeed').dataset.loaded) loadTopRated();
+    if (tab === 'liked'  && !document.getElementById('likedFeed').dataset.loaded)  loadMostLiked();
+    if (tab === 'top'    && !document.getElementById('topFeed').dataset.loaded)    loadTopRated();
     if (tab === 'browse' && !document.getElementById('browseFeed').dataset.loaded) loadBrowse();
   });
 });
@@ -1297,6 +1297,7 @@ async function loadMostLiked(append = false) {
 
   const data = await api(`/api/reviews/most-liked?limit=15&offset=${likedState.offset}`);
   const feed = document.getElementById('likedFeed');
+  feed.dataset.loaded = '1';
   const reviews = data.reviews || [];
 
   if (!append) feed.innerHTML = '';
@@ -1647,6 +1648,7 @@ async function submitCardReply(reviewId, inputEl) {
     });
     if (!res.ok) { inputEl.disabled = false; return; }
     const reply = await res.json();
+    if (!reply.avatar_url && currentUser) reply.avatar_url = currentUser.avatar_url;
     const section = document.getElementById(`reply-section-card-${reviewId}`);
     const thread  = section.querySelector(`#reply-thread-card-${reviewId}`);
     const item = _cardReplyItemHTML(reply, reviewId);
@@ -1680,7 +1682,7 @@ async function deleteCardReply(reviewId, replyId, itemEl) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 (async () => {
   await loadAuth();
-  loadMostLiked();
+  loadRecent();
   loadSidebarTop();
 })();
 </script>

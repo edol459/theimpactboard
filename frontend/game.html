@@ -1374,6 +1374,7 @@ async function submitReply(reviewId, inputEl) {
     });
     if (!res.ok) { inputEl.disabled = false; return; }
     const reply = await res.json();
+    if (!reply.avatar_url && _reviewUser) reply.avatar_url = _reviewUser.avatar_url;
     const section = document.getElementById(`reply-section-${reviewId}`);
     const thread  = section.querySelector(`#reply-thread-${reviewId}`);
     const uid = _reviewUser ? _reviewUser.id : null;

@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /trends
+Disallow: /trends.html

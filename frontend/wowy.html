@@ -283,12 +283,8 @@ table.wt tbody td.td-lineup { text-align: left; }
 
 .null-dash { color: var(--paper3); }
 
-/* ── Mode tabs ───────────────────────────────────────────────── */
-.mode-tabs {
-  display: flex; gap: 3px; padding: 10px 28px;
-  border-bottom: 1px solid var(--rule);
-  background: var(--paper2); flex-shrink: 0;
-}
+/* ── Mode tabs (hidden — only Traditional mode active) ───────── */
+.mode-tabs { display: none; }
 .mode-tab {
   font-family: var(--ff-mono); font-size: 10px;
   letter-spacing: 0.07em; text-transform: uppercase;
@@ -559,9 +555,7 @@ let lineupsReady = false;
 let lineupsError = false;
 let currentMode  = 'raw';   // 'raw' | 'shot' | 'stat'
 const MODES = [
-  { key: 'raw',  label: 'Traditional'   },
-  { key: 'shot', label: 'Shot Profile' },
-  { key: 'stat', label: 'Stat Line'    },
+  { key: 'raw',  label: 'Traditional' },
 ];
 const teamSel       = document.getElementById('team-select');
 const seasonSel     = document.getElementById('season-select');

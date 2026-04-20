@@ -816,21 +816,20 @@ function renderFindFriends() {
   container.dataset.loaded = '1';
   container.innerHTML = `
     <div class="search-row" style="margin-top:4px">
-      <input class="search-input" id="friend-search" type="text" placeholder="Search by display name…" maxlength="40">
+      <input class="search-input" id="friend-search" type="text" placeholder="Enter exact username…" maxlength="40">
+      <button class="btn btn-primary" id="friend-search-btn">Search</button>
     </div>
     <div class="search-results" id="search-results"></div>
   `;
-  let timer;
-  document.getElementById('friend-search').addEventListener('input', e => {
-    clearTimeout(timer);
-    timer = setTimeout(() => searchUsers(e.target.value), 280);
-  });
+  const input = document.getElementById('friend-search');
+  document.getElementById('friend-search-btn').addEventListener('click', () => searchUsers(input.value));
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') searchUsers(input.value); });
 }
 
 async function searchUsers(q) {
   const results = document.getElementById('search-results');
   if (!results) return;
-  if (q.length < 2) { results.innerHTML = ''; return; }
+  if (!q.trim()) { results.innerHTML = ''; return; }
   results.innerHTML = '<div class="loading-state">Searching…</div>';
   try {
     const res  = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
@@ -1292,6 +1291,7 @@ async function submitProfileReply(reviewId, inputEl) {
     });
     if (!res.ok) { inputEl.disabled = false; return; }
     const reply = await res.json();
+    if (!reply.avatar_url && ME) reply.avatar_url = ME.avatar_url;
     const section = document.getElementById(`ri-reply-section-${reviewId}`);
     const thread  = section.querySelector(`#ri-reply-thread-${reviewId}`);
     thread.insertAdjacentHTML('beforeend', _riReplyItemHTML(reply, reviewId));

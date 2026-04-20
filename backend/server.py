@@ -2670,7 +2670,7 @@ def search_users():
     limit = min(int(request.args.get("limit", 10)), 20)
     me    = current_user()
 
-    if len(q) < 2:
+    if not q:
         return jsonify({"users": []})
 
     try:
@@ -2682,7 +2682,7 @@ def search_users():
             WHERE display_name ILIKE %s AND id != %s
             ORDER BY display_name
             LIMIT %s
-        """, (f"%{q}%", me["id"], limit))
+        """, (q, me["id"], limit))
         users = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify({"users": users})
@@ -3227,7 +3227,7 @@ def get_trends_gamelog():
 @app.route("/trends")
 @app.route("/trends.html")
 def trends_page():
-    return app.send_static_file("trends.html")
+    return "", 404
 
 
 # ══════════════════════════════════════════════════════════════════════════════

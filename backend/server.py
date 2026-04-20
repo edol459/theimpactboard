@@ -613,6 +613,45 @@ def get_scoreboard():
     if is_past and date in _past_sb_cache:
         return jsonify(_past_sb_cache[date]["payload"])
 
+    # Past dates — DB-first path (games table is populated by fetch_games.py and
+    # _upsert_game_from_boxscore).  ScoreboardV3 is rate-limited on cloud IPs, so
+    # the DB is the only reliable source for historical dates on production.
+    if is_past:
+        try:
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute("""
+                SELECT game_id, home_team_abbr, away_team_abbr,
+                       home_score, away_score, status
+                FROM games
+                WHERE game_date = %s
+                ORDER BY game_id
+            """, (date,))
+            db_rows = cur.fetchall()
+            cur.close(); conn.close()
+
+            if db_rows:
+                games = []
+                for g in db_rows:
+                    games.append({
+                        "gameId":         g["game_id"],
+                        "gameStatus":     3,
+                        "gameStatusText": "Final",
+                        "period":         0,
+                        "gameClock":      "",
+                        "gameTimeUTC":    "",
+                        "away": {"abbr": g["away_team_abbr"], "score": int(g["away_score"] or 0),
+                                 "wins": None, "losses": None},
+                        "home": {"abbr": g["home_team_abbr"], "score": int(g["home_score"] or 0),
+                                 "wins": None, "losses": None},
+                    })
+                payload = {"games": games, "date": date}
+                _past_sb_cache[date] = {"payload": payload, "ts": _time.time()}
+                return jsonify(payload)
+            # DB has nothing for this date — fall through to ScoreboardV3
+        except Exception:
+            pass  # DB error — fall through to ScoreboardV3
+
     # Today — short-lived cache (30 s) so live-game frontend polls don't hammer the API
     if is_today and _today_sb_cache.get("date") == _game_today:
         if _time.time() - _today_sb_cache.get("ts", 0) < 30:
@@ -644,6 +683,9 @@ def get_scoreboard():
                         "home": {"abbr": home.get("teamTricode",""), "score": int(home.get("score",0) or 0),
                                  "wins": home.get("wins"), "losses": home.get("losses")},
                     })
+                    # Persist Final games to DB so they're available tomorrow via the DB-first path
+                    if int(g.get("gameStatus", 1) or 1) == 3 and g.get("gameId"):
+                        _upsert_game_from_boxscore(g["gameId"], g)
                 payload = {"games": games, "date": cdn_date}
                 _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
                 return jsonify(payload)
@@ -1528,7 +1570,7 @@ def _format_game(g: dict) -> dict:
 @app.route("/api/games")
 def get_games():
     season      = request.args.get("season",      get_current_season())
-    season_type = request.args.get("season_type", get_current_season_type())
+    season_type = request.args.get("season_type", "").strip()
     team        = request.args.get("team",        "").upper().strip()
     sort        = request.args.get("sort",        "date")
     direction   = "ASC" if request.args.get("dir", "desc").lower() == "asc" else "DESC"
@@ -1543,8 +1585,11 @@ def get_games():
     }
     order_col = SORT_MAP.get(sort, "g.game_date")
 
-    filters = ["g.season = %s", "g.season_type = %s", "g.status = 'Final'"]
-    params  = [season, season_type]
+    filters = ["g.season = %s", "g.status = 'Final'"]
+    params  = [season]
+    if season_type:
+        filters.append("g.season_type = %s")
+        params.append(season_type)
 
     if team:
         filters.append("(g.home_team_abbr = %s OR g.away_team_abbr = %s)")
@@ -1894,23 +1939,25 @@ def admin_list_reviews():
 @app.route("/api/reviews/top-games")
 def get_top_rated_games():
     season      = request.args.get("season",      get_current_season())
-    season_type = request.args.get("season_type", get_current_season_type())
+    season_type = request.args.get("season_type", "").strip()
     min_reviews = int(request.args.get("min_reviews", 1))
     limit       = min(int(request.args.get("limit", 25)), 100)
 
     try:
         conn = get_conn()
         cur  = conn.cursor()
-        cur.execute("""
+        st_filter = "AND season_type = %s" if season_type else ""
+        st_params = [season_type] if season_type else []
+        cur.execute(f"""
             SELECT *
             FROM games
             WHERE season = %s
-              AND season_type = %s
+              {st_filter}
               AND status = 'Final'
               AND review_count >= %s
             ORDER BY (rating_sum::float / NULLIF(review_count, 0)) DESC NULLS LAST
             LIMIT %s
-        """, (season, season_type, min_reviews, limit))
+        """, [season] + st_params + [min_reviews, limit])
         games = [_format_game(dict(r)) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify({"games": games})

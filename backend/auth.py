@@ -45,18 +45,23 @@ def get_conn():
                             cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def upsert_user(google_id: str, email: str, display_name: str) -> dict:
+def upsert_user(google_id: str, email: str, display_name: str, picture_url: str = "") -> dict:
     """Insert or update a user row, return the full user dict."""
     conn = get_conn()
     cur  = conn.cursor()
     cur.execute("""
         INSERT INTO users (google_id, email, display_name, avatar_url)
-        VALUES (%s, %s, %s, '')
+        VALUES (%s, %s, %s, %s)
         ON CONFLICT (google_id) DO UPDATE SET
             email      = EXCLUDED.email,
-            updated_at = NOW()
+            updated_at = NOW(),
+            avatar_url = CASE
+                WHEN users.avatar_url = '' OR users.avatar_url IS NULL
+                THEN EXCLUDED.avatar_url
+                ELSE users.avatar_url
+            END
         RETURNING id, google_id, email, display_name, avatar_url, favorite_team, created_at
-    """, (google_id, email, display_name))
+    """, (google_id, email, display_name, picture_url))
     user = dict(cur.fetchone())
     conn.commit()
     cur.close(); conn.close()
@@ -87,10 +92,13 @@ def google_login():
     # Store a 'next' URL so we can redirect back after login
     next_url = request.args.get("next", "/")
     session["oauth_next"] = next_url
-    # Force http in development to prevent scheme mismatch with Google's
-    # registered redirect URI. In production on Railway (https), remove this.
-    redirect_uri = url_for("auth.google_callback", _external=True,
-                           _scheme="http" if os.getenv("FLASK_ENV") != "production" else "https")
+    # Use OAUTH_REDIRECT_URI env var if set (recommended for production).
+    # Falls back to building the URI from the request, preferring https in
+    # production (FLASK_ENV=production) and http locally.
+    redirect_uri = os.getenv("OAUTH_REDIRECT_URI") or url_for(
+        "auth.google_callback", _external=True,
+        _scheme="https" if os.getenv("FLASK_ENV") == "production" else "http",
+    )
     return oauth.google.authorize_redirect(redirect_uri, prompt="select_account")
 
 
@@ -106,7 +114,8 @@ def google_callback():
     google_id    = userinfo.get("sub")
     email        = userinfo.get("email", "")
     display_name = userinfo.get("name", email.split("@")[0])
-    user = upsert_user(google_id, email, display_name)
+    picture_url  = userinfo.get("picture", "")
+    user = upsert_user(google_id, email, display_name, picture_url)
 
     # Store only small fields in the session cookie — avatar_url can be a
     # base64 data URL (~200 KB) which silently overflows the 4 KB cookie limit.

@@ -565,6 +565,26 @@ _past_sb_cache: dict = {}   # date -> {"payload": dict, "ts": float}
 # ── Future-date cache (schedule can change — TTL 60 min) ──────────
 _future_sb_cache: dict = {}  # date -> {"payload": dict, "ts": float}
 
+# ── Full season schedule from CDN (cached 2 h — used for future dates) ──
+_schedule_cache: dict = {"data": None, "ts": 0.0}
+
+
+def _fetch_nba_schedule() -> dict | None:
+    """Fetch the NBA season schedule from the CDN (not rate-limited on cloud IPs).
+    Cached in memory for 2 hours.  Returns the raw JSON dict or None on failure."""
+    if _schedule_cache["data"] and _time.time() - _schedule_cache["ts"] < 7200:
+        return _schedule_cache["data"]
+    try:
+        url  = "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json"
+        resp = _requests.get(url, headers=_CDN_HEADERS, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        _schedule_cache["data"] = data
+        _schedule_cache["ts"]   = _time.time()
+        return data
+    except Exception:
+        return None
+
 # ── Today's scoreboard — short-lived cache so live-game polls don't hammer ScoreboardV3 ──
 _today_sb_cache: dict = {}   # {"payload": dict, "ts": float}
 
@@ -828,6 +848,40 @@ def get_scoreboard():
         entry = _future_sb_cache[date]
         if _time.time() - entry["ts"] < 3600:
             return jsonify(entry["payload"])
+
+    # Future dates — CDN season schedule (not rate-limited on cloud IPs)
+    if not is_past and not is_today:
+        try:
+            sched = _fetch_nba_schedule()
+            if sched:
+                dt = _dt.strptime(date, "%Y-%m-%d")
+                # Schedule uses zero-padded "MM/DD/YYYY 00:00:00"
+                sched_key  = f"{dt.month:02d}/{dt.day:02d}/{dt.year} 00:00:00"
+                game_dates = sched.get("leagueSchedule", {}).get("gameDates", [])
+                target     = next((gd for gd in game_dates if gd.get("gameDate") == sched_key), None)
+                if target is not None:
+                    games = []
+                    for g in target.get("games", []):
+                        away = g.get("awayTeam", {})
+                        home = g.get("homeTeam", {})
+                        games.append({
+                            "gameId":         g.get("gameId", ""),
+                            "gameStatus":     1,
+                            "gameStatusText": g.get("gameStatusText", ""),
+                            "period":         0,
+                            "gameClock":      "",
+                            "gameTimeUTC":    g.get("gameTimeUTC", ""),
+                            "away": {"abbr": away.get("teamTricode", ""), "score": 0,
+                                     "wins": None, "losses": None},
+                            "home": {"abbr": home.get("teamTricode", ""), "score": 0,
+                                     "wins": None, "losses": None},
+                        })
+                    _enrich_games_with_records(games)
+                    payload = {"games": games, "date": date}
+                    _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
+                    return jsonify(payload)
+        except Exception:
+            pass  # Fall through to ScoreboardV3
 
     try:
         from nba_api.stats.endpoints import scoreboardv3

@@ -18,13 +18,16 @@ Steps:
   7.  fetch_lineups.py         — 5-man lineup data for WoWY tool
   8.  compute_pctiles.py       — recompute percentiles for Builder
 
+Season type is auto-detected from today's date (Playoffs from ~Apr 20–Jun,
+Regular Season otherwise) — no manual change needed when playoffs start.
+
 Scheduled via: run_daily_local.bat (Windows Task Scheduler)
 """
 
 import os
 import sys
 import subprocess
-from datetime import datetime
+from datetime import datetime, date
 from dotenv import load_dotenv
 import psycopg2
 
@@ -33,23 +36,36 @@ load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 
+def get_current_season_type() -> str:
+    """Returns 'Playoffs' from ~Apr 20 through June, else 'Regular Season'.
+    Mirrors the same logic used in server.py."""
+    today = date.today()
+    m, d  = today.month, today.day
+    if (m == 4 and d >= 20) or m in (5, 6):
+        return 'Playoffs'
+    return 'Regular Season'
+
+
 def get_current_season():
-    """Detect active season from DB."""
+    """Season year from DB (always from Regular Season rows); type from today's date."""
+    season_type = get_current_season_type()
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur  = conn.cursor()
+        # Always anchor year to Regular Season rows — they're always present
         cur.execute("""
-            SELECT season, season_type FROM player_seasons
-            ORDER BY season DESC, season_type LIMIT 1
+            SELECT season FROM player_seasons
+            WHERE season_type = 'Regular Season'
+            ORDER BY season DESC LIMIT 1
         """)
         row = cur.fetchone()
         cur.close()
         conn.close()
         if row:
-            return row[0], row[1]
+            return row[0], season_type
     except Exception as e:
         print(f"⚠️  Could not detect season from DB: {e}")
-    return os.getenv('NBA_SEASON', '2025-26'), os.getenv('NBA_SEASON_TYPE', 'Regular Season')
+    return os.getenv('NBA_SEASON', '2025-26'), season_type
 
 
 def run(script, label, extra_args=None):

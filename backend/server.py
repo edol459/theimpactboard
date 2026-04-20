@@ -920,6 +920,7 @@ def preview_records(away, home):
                 FROM games
                 WHERE season_type = 'Regular Season'
                   AND status = 'Final'
+                  AND season = %s
                   AND home_team_abbr = ANY(%s)
                 UNION ALL
                 SELECT
@@ -928,10 +929,11 @@ def preview_records(away, home):
                 FROM games
                 WHERE season_type = 'Regular Season'
                   AND status = 'Final'
+                  AND season = %s
                   AND away_team_abbr = ANY(%s)
             ) t
             GROUP BY team_abbr
-        """, ([away, home], [away, home]))
+        """, (get_current_season(), [away, home], get_current_season(), [away, home]))
         rows = {r["team_abbr"]: r for r in cur.fetchall()}
         conn.close()
 

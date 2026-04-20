@@ -155,9 +155,13 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 /* ── Review list ── */
 .review-item {
   display: grid; grid-template-columns: auto 1fr auto;
-  align-items: center; gap: 14px;
+  align-items: start; gap: 14px;
   padding: 14px 0; border-bottom: 1px solid var(--paper3);
   cursor: pointer; transition: opacity 0.1s;
+}
+.review-item-reply-row {
+  grid-column: 1 / -1; /* spans all 3 columns */
+  cursor: default;
 }
 .review-item:hover { opacity: 0.75; }
 .review-item:last-child { border-bottom: none; }
@@ -179,6 +183,64 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 .ri-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); white-space: nowrap; }
 .btn-load-more { display: block; width: 100%; margin-top: 16px; padding: 10px; font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); background: none; border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .btn-load-more:hover { border-color: var(--orange); color: var(--orange); }
+
+/* Reply section on profile */
+.ri-reply-btn {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
+  font-family: var(--ff-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink4); background: none; border: none; cursor: pointer;
+  padding: 2px 4px; border-radius: 3px; transition: color 0.12s, background 0.12s;
+}
+.ri-reply-btn:hover { color: var(--ink3); background: var(--paper2); }
+.ri-reply-btn svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ri-reply-section { display: none; padding-top: 4px; }
+.ri-reply-section.open { display: block; }
+.ri-reply-item {
+  display: grid; grid-template-columns: 22px 1fr;
+  gap: 7px; padding: 5px 0; border-top: 1px solid var(--paper3);
+}
+.ri-reply-avatar {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--paper3); display: flex; align-items: center;
+  justify-content: center; font-size: 10px; color: var(--ink4);
+  flex-shrink: 0; overflow: hidden;
+}
+.ri-reply-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.ri-reply-body { min-width: 0; }
+.ri-reply-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-bottom: 2px; }
+.ri-reply-name { font-size: 11px; font-weight: 600; color: var(--ink); text-decoration: none; }
+.ri-reply-name:hover { text-decoration: underline; }
+.ri-reply-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); }
+.ri-reply-text { font-size: 12px; line-height: 1.45; color: var(--ink3); margin: 0; }
+.ri-reply-del {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink4); font-size: 12px; padding: 0 2px;
+  margin-left: auto; transition: color 0.12s;
+}
+.ri-reply-del:hover { color: var(--orange); }
+.ri-reply-show-more {
+  font-family: var(--ff-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ink4); background: none; border: none; cursor: pointer; padding: 5px 0;
+  display: block; transition: color 0.12s;
+}
+.ri-reply-show-more:hover { color: var(--orange); }
+.ri-reply-form {
+  display: flex; gap: 6px; margin-top: 6px;
+  border-top: 1px solid var(--paper3); padding-top: 7px;
+}
+.ri-reply-input {
+  flex: 1; font-size: 12px; padding: 5px 9px;
+  border: 1px solid var(--rule); border-radius: 5px;
+  background: var(--paper); color: var(--ink); outline: none;
+}
+.ri-reply-input:focus { border-color: var(--orange); }
+.ri-reply-send {
+  font-family: var(--ff-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 5px 10px; background: var(--orange); color: #fff;
+  border: none; border-radius: 5px; cursor: pointer; transition: opacity 0.12s;
+}
+.ri-reply-send:hover { opacity: 0.85; }
+.ri-reply-signin { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); padding: 6px 0 2px; border-top: 1px solid var(--paper3); margin-top: 4px; }
 
 /* ── Friends list ── */
 .friend-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--paper3); }
@@ -650,12 +712,23 @@ async function loadReviews(reset = false) {
         <div class="ri-matchup">${r.away_team_abbr} @ ${r.home_team_abbr}</div>
         <div class="ri-meta"><b>${winner}</b>–${loser} · ${fmtDate(r.game_date)}</div>
         ${r.review_text ? `<div class="ri-text">${r.review_text}</div>` : ''}
+        <button class="ri-reply-btn" data-review-id="${r.id}">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2 4h16v10H6l-4 4V4z"/></svg>
+          Reply
+        </button>
       </div>
       <div class="ri-right">
         <div class="ri-stars">${starsText(r.rating)}</div>
         <div class="ri-date">${fmtShortDate(r.created_at)}</div>
       </div>
+      <div class="review-item-reply-row">
+        <div class="ri-reply-section" id="ri-reply-section-${r.id}" data-review-id="${r.id}"></div>
+      </div>
     `;
+    div.querySelector('.ri-reply-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleProfileReplies(r.id);
+    });
     container.appendChild(div);
   });
 
@@ -1117,6 +1190,132 @@ async function removeFavGame(event, gameId) {
 // ── Helpers ───────────────────────────────────────────────────
 function goProfile(userId) {
   window.location.href = `/profile/${userId}`;
+}
+
+// ── Reply helpers (profile page) ─────────────────────────────
+function _riReplyAvatarEl(name, url) {
+  const initials = name ? name[0].toUpperCase() : '?';
+  const img = url ? `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">` : '';
+  return `<div class="ri-reply-avatar">${img || initials}</div>`;
+}
+
+function _riReplyItemHTML(reply, reviewId) {
+  const isOwn = ME && reply.user_id === ME.id;
+  const del = isOwn ? `<button class="ri-reply-del" data-review-id="${reviewId}" data-reply-id="${reply.id}" title="Delete">×</button>` : '';
+  return `<div class="ri-reply-item" data-reply-id="${reply.id}">
+    ${_riReplyAvatarEl(reply.display_name, reply.avatar_url)}
+    <div class="ri-reply-body">
+      <div class="ri-reply-meta">
+        <a href="/profile/${reply.user_id}" class="ri-reply-name" onclick="event.stopPropagation()">${reply.display_name}</a>
+        <span class="ri-reply-date">${fmtShortDate(reply.created_at)}</span>
+        ${del}
+      </div>
+      <p class="ri-reply-text">${reply.reply_text}</p>
+    </div>
+  </div>`;
+}
+
+function _renderProfileReplySection(section, replies, total) {
+  const reviewId  = parseInt(section.dataset.reviewId);
+  const offset    = parseInt(section.dataset.offset || 0);
+  const remaining = total - offset;
+  const threadHtml = replies.map(r => _riReplyItemHTML(r, reviewId)).join('');
+  const showMore = remaining > 0
+    ? `<button class="ri-reply-show-more" data-review-id="${reviewId}">Show ${remaining} more repl${remaining === 1 ? 'y' : 'ies'}</button>`
+    : '';
+  const form = ME
+    ? `<div class="ri-reply-form">
+         <input class="ri-reply-input" type="text" placeholder="Write a reply…" maxlength="1000">
+         <button class="ri-reply-send" data-review-id="${reviewId}">Post</button>
+       </div>`
+    : `<div class="ri-reply-signin"><a href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}" style="color:var(--orange)">Sign in</a> to reply</div>`;
+  section.innerHTML = `<div class="ri-reply-thread" id="ri-reply-thread-${reviewId}">${threadHtml}</div>${showMore}${form}`;
+
+  const input = section.querySelector('.ri-reply-input');
+  const sendBtn = section.querySelector('.ri-reply-send');
+  if (sendBtn && input) sendBtn.addEventListener('click', e => { e.stopPropagation(); submitProfileReply(reviewId, input); });
+  if (input) {
+    input.addEventListener('click', e => e.stopPropagation());
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); submitProfileReply(reviewId, input); } });
+  }
+  section.querySelectorAll('.ri-reply-del').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); deleteProfileReply(parseInt(btn.dataset.reviewId), parseInt(btn.dataset.replyId), btn.closest('.ri-reply-item')); });
+  });
+  const smBtn = section.querySelector('.ri-reply-show-more');
+  if (smBtn) smBtn.addEventListener('click', e => { e.stopPropagation(); loadMoreProfileReplies(reviewId); });
+}
+
+async function toggleProfileReplies(reviewId) {
+  const section = document.getElementById(`ri-reply-section-${reviewId}`);
+  if (!section) return;
+  if (section.classList.contains('open')) { section.classList.remove('open'); return; }
+  section.classList.add('open');
+  if (section.dataset.loaded === '1') return;
+  section.innerHTML = '<div style="font-family:var(--ff-mono);font-size:10px;color:var(--ink4);padding:6px 0">Loading…</div>';
+  try {
+    const res  = await fetch(`/api/reviews/${reviewId}/replies?limit=3&offset=0`);
+    const data = await res.json();
+    const replies = data.replies || [];
+    section.dataset.loaded = '1';
+    section.dataset.total  = data.total || 0;
+    section.dataset.offset = replies.length;
+    _renderProfileReplySection(section, replies, data.total || 0);
+  } catch { section.innerHTML = '<div style="font-family:var(--ff-mono);font-size:10px;color:var(--ink4);padding:6px 0">Could not load replies.</div>'; }
+}
+
+async function loadMoreProfileReplies(reviewId) {
+  const section = document.getElementById(`ri-reply-section-${reviewId}`);
+  if (!section) return;
+  const offset = parseInt(section.dataset.offset || 0);
+  const res  = await fetch(`/api/reviews/${reviewId}/replies?limit=10&offset=${offset}`);
+  const data = await res.json();
+  const replies = data.replies || [];
+  const newOffset = offset + replies.length;
+  section.dataset.offset = newOffset;
+  section.dataset.total  = data.total || 0;
+  const thread = section.querySelector(`#ri-reply-thread-${reviewId}`);
+  replies.forEach(r => thread.insertAdjacentHTML('beforeend', _riReplyItemHTML(r, reviewId)));
+  const btn = section.querySelector('.ri-reply-show-more');
+  const remaining = (data.total || 0) - newOffset;
+  if (remaining > 0) { if (btn) btn.textContent = `Show ${remaining} more repl${remaining === 1 ? 'y' : 'ies'}`; }
+  else { if (btn) btn.remove(); }
+}
+
+async function submitProfileReply(reviewId, inputEl) {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.disabled = true;
+  try {
+    const res = await fetch(`/api/reviews/${reviewId}/replies`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply_text: text }),
+    });
+    if (!res.ok) { inputEl.disabled = false; return; }
+    const reply = await res.json();
+    const section = document.getElementById(`ri-reply-section-${reviewId}`);
+    const thread  = section.querySelector(`#ri-reply-thread-${reviewId}`);
+    thread.insertAdjacentHTML('beforeend', _riReplyItemHTML(reply, reviewId));
+    const newItem = thread.lastElementChild;
+    const delBtn  = newItem?.querySelector('.ri-reply-del');
+    if (delBtn) delBtn.addEventListener('click', e => { e.stopPropagation(); deleteProfileReply(reviewId, reply.id, newItem); });
+    section.dataset.offset = parseInt(section.dataset.offset || 0) + 1;
+    section.dataset.total  = parseInt(section.dataset.total  || 0) + 1;
+    inputEl.value = '';
+    inputEl.disabled = false;
+    inputEl.focus();
+  } catch { inputEl.disabled = false; }
+}
+
+async function deleteProfileReply(reviewId, replyId, itemEl) {
+  if (!itemEl) return;
+  const res = await fetch(`/api/reviews/${reviewId}/replies/${replyId}`, { method: 'DELETE' });
+  if (!res.ok) return;
+  itemEl.remove();
+  const section = document.getElementById(`ri-reply-section-${reviewId}`);
+  if (section) {
+    section.dataset.offset = Math.max(0, parseInt(section.dataset.offset || 0) - 1);
+    section.dataset.total  = Math.max(0, parseInt(section.dataset.total  || 0) - 1);
+  }
 }
 
 const _RI_TEAM_IDS = {

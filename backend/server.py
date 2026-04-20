@@ -96,6 +96,19 @@ def _ensure_tables():
                 UNIQUE (user_id, position)
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS review_replies (
+                id          SERIAL  PRIMARY KEY,
+                review_id   INTEGER REFERENCES game_reviews(id) ON DELETE CASCADE,
+                user_id     INTEGER REFERENCES users(id)        ON DELETE CASCADE,
+                reply_text  TEXT    NOT NULL,
+                created_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_review_replies_review_id
+            ON review_replies(review_id)
+        """)
         conn.commit()
         cur.close(); conn.close()
     except Exception as e:
@@ -957,7 +970,7 @@ def preview_team_stats(abbr):
               AND ps.season = %s
               AND ps.season_type = %s
               AND ps.gp >= 5
-        """, (abbr, get_current_season(), get_current_season_type()))
+        """, (abbr, get_current_season(), "Regular Season"))
         row = cur.fetchone()
         cur.close()
         conn.close()   # ← also close the connection
@@ -1835,6 +1848,103 @@ def toggle_review_like(review_id):
         conn.commit()
         cur.close(); conn.close()
         return jsonify({"liked": liked, "like_count": int(like_count)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/reviews/<review_id>/replies
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/<int:review_id>/replies")
+def get_review_replies(review_id):
+    limit  = min(int(request.args.get("limit", 3)), 100)
+    offset = int(request.args.get("offset", 0))
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT rr.id, rr.reply_text, rr.created_at,
+                   u.id AS user_id, u.display_name, u.avatar_url, u.favorite_team
+            FROM review_replies rr
+            JOIN users u ON rr.user_id = u.id
+            WHERE rr.review_id = %s
+            ORDER BY rr.created_at ASC
+            LIMIT %s OFFSET %s
+        """, (review_id, limit, offset))
+        replies = [dict(r) for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) FROM review_replies WHERE review_id = %s", (review_id,))
+        total = cur.fetchone()["count"]
+        cur.close(); conn.close()
+        for r in replies:
+            r["created_at"] = str(r["created_at"])
+        return jsonify({"replies": replies, "total": int(total)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# POST /api/reviews/<review_id>/replies
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/<int:review_id>/replies", methods=["POST"])
+@login_required
+def post_review_reply(review_id):
+    user = current_user()
+    body = request.get_json(silent=True) or {}
+    text = (body.get("reply_text") or "").strip()
+    if not text:
+        return jsonify({"error": "reply_text is required"}), 400
+    if len(text) > 1000:
+        return jsonify({"error": "Reply must be 1000 characters or fewer"}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        # Verify review exists
+        cur.execute("SELECT id FROM game_reviews WHERE id = %s", (review_id,))
+        if not cur.fetchone():
+            cur.close(); conn.close()
+            return jsonify({"error": "Review not found"}), 404
+        cur.execute("""
+            INSERT INTO review_replies (review_id, user_id, reply_text)
+            VALUES (%s, %s, %s)
+            RETURNING id, created_at
+        """, (review_id, user["id"], text))
+        row = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({
+            "id":           row["id"],
+            "review_id":    review_id,
+            "user_id":      user["id"],
+            "display_name": user["display_name"],
+            "avatar_url":   user.get("avatar_url"),
+            "favorite_team": user.get("favorite_team"),
+            "reply_text":   text,
+            "created_at":   str(row["created_at"]),
+        }), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DELETE /api/reviews/<review_id>/replies/<reply_id>
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/reviews/<int:review_id>/replies/<int:reply_id>", methods=["DELETE"])
+@login_required
+def delete_review_reply(review_id, reply_id):
+    user = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "DELETE FROM review_replies WHERE id = %s AND review_id = %s AND user_id = %s RETURNING id",
+            (reply_id, review_id, user["id"])
+        )
+        deleted = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+        if not deleted:
+            return jsonify({"error": "Reply not found or not yours"}), 404
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

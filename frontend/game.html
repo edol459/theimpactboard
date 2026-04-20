@@ -254,6 +254,66 @@ table.box-table tfoot td:first-child{text-align:left;}
 .btn-load-more:hover { border-color: var(--orange); color: var(--orange); }
 .reviews-loading { padding: 32px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
 
+/* Reply section */
+.btn-reply {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--ff-mono); font-size: 11px;
+  color: var(--ink4); background: none; border: none;
+  cursor: pointer; padding: 2px 0 2px 12px; transition: color 0.12s;
+}
+.btn-reply:hover { color: var(--ink3); }
+.btn-reply svg { width: 13px; height: 13px; flex-shrink: 0; }
+.reply-section { display: none; padding-left: 48px; }
+.reply-section.open { display: block; }
+.reply-item {
+  display: grid; grid-template-columns: 26px 1fr;
+  gap: 8px; padding: 7px 0;
+  border-top: 1px solid var(--paper3);
+}
+.reply-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--paper3); display: flex; align-items: center;
+  justify-content: center; font-size: 11px; color: var(--ink3);
+  flex-shrink: 0; overflow: hidden;
+}
+.reply-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.reply-body { min-width: 0; }
+.reply-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; flex-wrap: wrap; }
+.reply-name { font-size: 12px; font-weight: 600; color: var(--ink); text-decoration: none; }
+.reply-name:hover { text-decoration: underline; }
+.reply-date { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); }
+.reply-text { font-size: 12px; line-height: 1.5; color: var(--ink2); margin: 0; }
+.btn-delete-reply {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink4); font-size: 13px; padding: 0 2px;
+  margin-left: auto; line-height: 1; transition: color 0.12s;
+}
+.btn-delete-reply:hover { color: var(--red); }
+.btn-show-more-replies {
+  font-family: var(--ff-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--ink3); background: none; border: none;
+  cursor: pointer; padding: 6px 0; display: block; transition: color 0.12s;
+}
+.btn-show-more-replies:hover { color: var(--orange); }
+.reply-form {
+  display: flex; gap: 6px; margin-top: 8px;
+  border-top: 1px solid var(--paper3); padding-top: 8px;
+}
+.reply-input {
+  flex: 1; font-family: var(--ff-sans); font-size: 12px;
+  padding: 6px 10px; border: 1px solid var(--rule); border-radius: 6px;
+  background: var(--paper); color: var(--ink); outline: none;
+}
+.reply-input:focus { border-color: var(--orange); }
+.btn-send-reply {
+  font-family: var(--ff-mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.04em; padding: 6px 12px; background: var(--orange);
+  color: #fff; border: none; border-radius: 6px; cursor: pointer; transition: opacity 0.12s;
+}
+.btn-send-reply:hover { opacity: 0.85; }
+.reply-sign-in { font-family: var(--ff-mono); font-size: 11px; color: var(--ink4); padding: 8px 0 4px; border-top: 1px solid var(--paper3); margin-top: 4px; }
+.reply-loading { font-family: var(--ff-mono); font-size: 11px; color: var(--ink4); padding: 8px 0; }
+
 /* ── Stat tags ────────────────────────────────────────────────── */
 .review-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .review-tag {
@@ -1004,9 +1064,16 @@ function reviewItemHTML(r) {
         <button class="btn-like${r.liked_by_me ? ' liked' : ''}" data-review-id="${r.id}" title="Like this review">
           ${heartIcon}<span class="like-count">${likeLabel}</span>
         </button>
+        <button class="btn-reply" data-review-id="${r.id}" title="Reply">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+            <path d="M2 4h16v10H6l-4 4V4z"/>
+          </svg>
+          Reply
+        </button>
       </div>
     </div>
-  </div>`;
+  </div>
+  <div class="reply-section" id="reply-section-${r.id}" data-review-id="${r.id}"></div>`;
 }
 
 function wireWriteSection() {
@@ -1025,25 +1092,62 @@ function wireWriteSection() {
     });
   });
 
-  // Like buttons — wire once, use event delegation so re-renders stay covered
+  // Like + reply buttons — wire once, use event delegation so re-renders stay covered
   if (!_likesWired) {
     _likesWired = true;
     panel.addEventListener('click', async e => {
-      const btn = e.target.closest('.btn-like');
-      if (!btn) return;
-      if (!_reviewUser) {
-        window.location.href = `/auth/google/login?next=${encodeURIComponent(window.location.pathname + '?tab=reviews')}`;
+      // Like
+      const likeBtn = e.target.closest('.btn-like');
+      if (likeBtn) {
+        if (!_reviewUser) {
+          window.location.href = `/auth/google/login?next=${encodeURIComponent(window.location.pathname + '?tab=reviews')}`;
+          return;
+        }
+        const reviewId = likeBtn.dataset.reviewId;
+        const res = await fetch(`/api/reviews/${reviewId}/like`, { method: 'POST' });
+        if (!res.ok) return;
+        const data = await res.json();
+        likeBtn.classList.toggle('liked', data.liked);
+        const svg = likeBtn.querySelector('svg');
+        if (svg) svg.setAttribute('fill', data.liked ? 'currentColor' : 'none');
+        const countEl = likeBtn.querySelector('.like-count');
+        if (countEl) countEl.textContent = data.like_count > 0 ? data.like_count : '';
         return;
       }
-      const reviewId = btn.dataset.reviewId;
-      const res = await fetch(`/api/reviews/${reviewId}/like`, { method: 'POST' });
-      if (!res.ok) return;
-      const data = await res.json();
-      btn.classList.toggle('liked', data.liked);
-      const svg = btn.querySelector('svg');
-      if (svg) svg.setAttribute('fill', data.liked ? 'currentColor' : 'none');
-      const countEl = btn.querySelector('.like-count');
-      if (countEl) countEl.textContent = data.like_count > 0 ? data.like_count : '';
+      // Toggle reply section
+      const replyBtn = e.target.closest('.btn-reply');
+      if (replyBtn) {
+        toggleReplies(parseInt(replyBtn.dataset.reviewId));
+        return;
+      }
+      // Show more replies
+      const showMoreBtn = e.target.closest('.btn-show-more-replies');
+      if (showMoreBtn) {
+        loadMoreReplies(parseInt(showMoreBtn.dataset.reviewId));
+        return;
+      }
+      // Delete reply
+      const delBtn = e.target.closest('.btn-delete-reply');
+      if (delBtn) {
+        deleteReply(parseInt(delBtn.dataset.reviewId), parseInt(delBtn.dataset.replyId), delBtn.closest('.reply-item'));
+        return;
+      }
+      // Send reply (Enter key is handled separately)
+      const sendBtn = e.target.closest('.btn-send-reply');
+      if (sendBtn) {
+        const section = sendBtn.closest('.reply-section');
+        submitReply(parseInt(section.dataset.reviewId), section.querySelector('.reply-input'));
+        return;
+      }
+    });
+    // Submit reply on Enter
+    panel.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const input = e.target.closest('.reply-input');
+      if (!input) return;
+      e.preventDefault();
+      const section = input.closest('.reply-section');
+      submitReply(parseInt(section.dataset.reviewId), input);
     });
   }
 
@@ -1166,6 +1270,131 @@ async function submitReview() {
   } catch(e) {
     showReviewToast('Error: ' + e.message);
     btn.disabled = false; btn.textContent = 'Submit';
+  }
+}
+
+// ── Reply helpers ──────────────────────────────────────────
+function _replyAvatarEl(name, avatarUrl) {
+  const initials = name ? name[0].toUpperCase() : '?';
+  const img = avatarUrl
+    ? `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`
+    : '';
+  return `<div class="reply-avatar">${img || initials}</div>`;
+}
+
+function _replyItemHTML(reply, reviewId, currentUserId) {
+  const isOwn = currentUserId && reply.user_id === currentUserId;
+  const delBtn = isOwn
+    ? `<button class="btn-delete-reply" data-review-id="${reviewId}" data-reply-id="${reply.id}" title="Delete">×</button>`
+    : '';
+  return `<div class="reply-item" data-reply-id="${reply.id}">
+    ${_replyAvatarEl(reply.display_name, reply.avatar_url)}
+    <div class="reply-body">
+      <div class="reply-meta">
+        <a href="/profile/${reply.user_id}" class="reply-name" onclick="event.stopPropagation()">${reply.display_name}</a>
+        <span class="reply-date">${fmtShortDate(reply.created_at)}</span>
+        ${delBtn}
+      </div>
+      <p class="reply-text">${reply.reply_text}</p>
+    </div>
+  </div>`;
+}
+
+function _renderReplySection(section, replies, total) {
+  const reviewId = parseInt(section.dataset.reviewId);
+  const offset   = parseInt(section.dataset.offset || 0);
+  const remaining = total - offset;
+  const uid = _reviewUser ? _reviewUser.id : null;
+
+  const threadHtml = replies.map(r => _replyItemHTML(r, reviewId, uid)).join('');
+  const showMore = remaining > 0
+    ? `<button class="btn-show-more-replies" data-review-id="${reviewId}">Show ${remaining} more repl${remaining === 1 ? 'y' : 'ies'}</button>`
+    : '';
+  const form = _reviewUser
+    ? `<div class="reply-form">
+         <input class="reply-input" type="text" placeholder="Write a reply…" maxlength="1000">
+         <button class="btn-send-reply">Post</button>
+       </div>`
+    : `<div class="reply-sign-in"><a href="/auth/google/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}" style="color:var(--orange)">Sign in</a> to reply</div>`;
+
+  section.innerHTML = `<div class="reply-thread" id="reply-thread-${reviewId}">${threadHtml}</div>${showMore}${form}`;
+}
+
+async function toggleReplies(reviewId) {
+  const section = document.getElementById(`reply-section-${reviewId}`);
+  if (!section) return;
+  if (section.classList.contains('open')) {
+    section.classList.remove('open');
+    return;
+  }
+  section.classList.add('open');
+  if (section.dataset.loaded === '1') return;
+  section.innerHTML = '<div class="reply-loading">Loading…</div>';
+  try {
+    const data = await fetch(`${API}/api/reviews/${reviewId}/replies?limit=3&offset=0`).then(r => r.json());
+    const replies = data.replies || [];
+    section.dataset.loaded  = '1';
+    section.dataset.total   = data.total || 0;
+    section.dataset.offset  = replies.length;
+    _renderReplySection(section, replies, data.total || 0);
+  } catch { section.innerHTML = '<div class="reply-loading">Could not load replies.</div>'; }
+}
+
+async function loadMoreReplies(reviewId) {
+  const section = document.getElementById(`reply-section-${reviewId}`);
+  if (!section) return;
+  const offset = parseInt(section.dataset.offset || 0);
+  const data = await fetch(`${API}/api/reviews/${reviewId}/replies?limit=10&offset=${offset}`).then(r => r.json());
+  const replies = data.replies || [];
+  const newOffset = offset + replies.length;
+  section.dataset.offset = newOffset;
+  section.dataset.total  = data.total || 0;
+  const thread = section.querySelector(`#reply-thread-${reviewId}`);
+  const uid = _reviewUser ? _reviewUser.id : null;
+  replies.forEach(r => thread.insertAdjacentHTML('beforeend', _replyItemHTML(r, reviewId, uid)));
+  const btn = section.querySelector('.btn-show-more-replies');
+  const remaining = (data.total || 0) - newOffset;
+  if (remaining > 0) {
+    if (btn) btn.textContent = `Show ${remaining} more repl${remaining === 1 ? 'y' : 'ies'}`;
+  } else {
+    if (btn) btn.remove();
+  }
+}
+
+async function submitReply(reviewId, inputEl) {
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.disabled = true;
+  try {
+    const res = await fetch(`${API}/api/reviews/${reviewId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply_text: text }),
+    });
+    if (!res.ok) { inputEl.disabled = false; return; }
+    const reply = await res.json();
+    const section = document.getElementById(`reply-section-${reviewId}`);
+    const thread  = section.querySelector(`#reply-thread-${reviewId}`);
+    const uid = _reviewUser ? _reviewUser.id : null;
+    thread.insertAdjacentHTML('beforeend', _replyItemHTML(reply, reviewId, uid));
+    section.dataset.offset = parseInt(section.dataset.offset || 0) + 1;
+    section.dataset.total  = parseInt(section.dataset.total  || 0) + 1;
+    inputEl.value = '';
+    inputEl.disabled = false;
+    inputEl.focus();
+  } catch { inputEl.disabled = false; }
+}
+
+async function deleteReply(reviewId, replyId, itemEl) {
+  if (!itemEl) return;
+  const res = await fetch(`${API}/api/reviews/${reviewId}/replies/${replyId}`, { method: 'DELETE' });
+  if (!res.ok) return;
+  itemEl.remove();
+  const section = document.getElementById(`reply-section-${reviewId}`);
+  if (section) {
+    section.dataset.offset = Math.max(0, parseInt(section.dataset.offset || 0) - 1);
+    section.dataset.total  = Math.max(0, parseInt(section.dataset.total  || 0) - 1);
   }
 }
 

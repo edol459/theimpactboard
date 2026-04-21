@@ -146,7 +146,7 @@ def me():
         conn = get_conn()
         cur  = conn.cursor()
         cur.execute(
-            "SELECT avatar_url, favorite_team FROM users WHERE id = %s",
+            "SELECT avatar_url, favorite_team, night_mode FROM users WHERE id = %s",
             (user["id"],)
         )
         row = cur.fetchone()
@@ -155,6 +155,7 @@ def me():
             user = dict(user)
             user["avatar_url"]    = row["avatar_url"] or ""
             user["favorite_team"] = row["favorite_team"] or ""
+            user["night_mode"]    = bool(row["night_mode"])
     except Exception:
         pass  # fall back to session values if DB is unavailable
 

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>if(localStorage.getItem('ydkball_night')==='1')document.documentElement.classList.add('night-mode');</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profile — ydkball</title>
 <meta name="description" content="NBA game reviews and favorites.">
@@ -19,6 +20,7 @@
 <link rel="apple-touch-icon" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/night-mode.css">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -132,6 +134,21 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 .btn-primary:hover { opacity: 0.85; color: #fff; }
 .btn-friends { background: var(--paper2); }
 .btn-unfriend:hover { border-color: var(--red); color: var(--red); }
+.night-toggle-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.night-toggle-label { font-size: 13px; color: var(--ink3); font-family: var(--ff-sans); }
+.night-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.night-toggle input { opacity: 0; width: 0; height: 0; }
+.night-toggle-track {
+  position: absolute; inset: 0; border-radius: 11px;
+  background: var(--rule); cursor: pointer; transition: background 0.2s;
+}
+.night-toggle input:checked + .night-toggle-track { background: var(--orange); }
+.night-toggle-track::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform 0.2s;
+}
+.night-toggle input:checked + .night-toggle-track::after { transform: translateX(18px); }
 
 /* ── Stats row ── */
 .stats-row { display: flex; gap: 0; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin-bottom: 32px; }
@@ -517,6 +534,11 @@ async function loadAuth() {
     const res  = await fetch('/auth/me');
     const data = await res.json();
     ME = data.user || null;
+    if (ME && typeof ME.night_mode !== 'undefined') {
+      const enabled = !!ME.night_mode;
+      localStorage.setItem('ydkball_night', enabled ? '1' : '0');
+      document.documentElement.classList.toggle('night-mode', enabled);
+    }
   } catch { ME = null; }
 
   if (ME) {
@@ -575,9 +597,17 @@ function renderProfile() {
   // Action buttons
   let actionsHtml = '';
   if (isOwn) {
+    const nightChecked = ME && ME.night_mode ? 'checked' : '';
     actionsHtml = `
       <button class="btn" onclick="openNameModal(false)">Edit display name</button>
       <button class="btn" onclick="openTeamModal()">Favorite team${u.favorite_team ? ` · ${u.favorite_team}` : ''}</button>
+      <div class="night-toggle-row">
+        <label class="night-toggle">
+          <input type="checkbox" id="night-mode-toggle" ${nightChecked} onchange="setNightMode(this.checked)">
+          <span class="night-toggle-track"></span>
+        </label>
+        <span class="night-toggle-label">Night mode</span>
+      </div>
     `;
   } else if (ME) {
     const fs = PROFILE.friend_status;
@@ -923,6 +953,18 @@ function updateProfileActions() {
 }
 
 // ── Display name modal ────────────────────────────────────────
+async function setNightMode(enabled) {
+  document.documentElement.classList.toggle('night-mode', enabled);
+  localStorage.setItem('ydkball_night', enabled ? '1' : '0');
+  try {
+    await fetch('/api/me/night-mode', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+  } catch {}
+}
+
 function openNameModal(isFirstLogin) {
   const modal  = document.getElementById('name-modal');
   const title  = document.getElementById('modal-title');

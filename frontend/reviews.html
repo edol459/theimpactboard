@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>if(localStorage.getItem('ydkball_night')==='1')document.documentElement.classList.add('night-mode');</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Game Reviews — ydkball</title>
 <meta name="description" content="Rate and review NBA games.">
@@ -19,6 +20,7 @@
 <link rel="apple-touch-icon" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/night-mode.css">
 <style>
   :root {
     --bg:        #F5F0E8;
@@ -1151,6 +1153,11 @@ async function loadAuth() {
   try {
     const data = await api('/auth/me');
     currentUser = data.user || null;
+    if (currentUser && typeof currentUser.night_mode !== 'undefined') {
+      const enabled = !!currentUser.night_mode;
+      localStorage.setItem('ydkball_night', enabled ? '1' : '0');
+      document.documentElement.classList.toggle('night-mode', enabled);
+    }
   } catch { currentUser = null; }
   // Render nav auth slot
   const slot = document.getElementById('nav-auth-slot');

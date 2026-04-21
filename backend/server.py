@@ -117,6 +117,10 @@ def _ensure_tables():
             WHERE LEFT(game_id, 3) = '004'
               AND season_type != 'Playoffs'
         """)
+        # Add night_mode preference column if it doesn't exist yet
+        cur.execute("""
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS night_mode BOOLEAN DEFAULT FALSE
+        """)
         conn.commit()
         cur.close(); conn.close()
     except Exception as e:
@@ -2468,6 +2472,26 @@ def update_display_name():
             session.modified = True
 
         return jsonify({"ok": True, "display_name": row["display_name"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PATCH /api/me/night-mode  — toggle dark mode preference
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@app.route("/api/me/night-mode", methods=["PATCH"])
+@login_required
+def set_night_mode():
+    user    = current_user()
+    body    = request.get_json(silent=True) or {}
+    enabled = bool(body.get("enabled", False))
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("UPDATE users SET night_mode = %s WHERE id = %s", (enabled, user["id"]))
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"ok": True, "night_mode": enabled})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

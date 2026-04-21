@@ -1,0 +1,57 @@
+/*
+ * Night mode — applied via html.night-mode class.
+ * Overrides CSS custom properties used across all pages.
+ * Two naming conventions are covered:
+ *   --paper / --ink  (index, profile, game, stats, wowy, compare, preview, builder)
+ *   --bg / --ink-2   (reviews)
+ */
+
+html.night-mode {
+  /* ── Backgrounds ─────────────────────────── */
+  --paper:     #18181b;
+  --paper2:    #222228;
+  --paper3:    #2c2c34;
+  --bg:        #18181b;
+  --bg-card:   #222228;
+
+  /* ── Borders ────────────────────────────── */
+  --rule:      #3a3a46;
+
+  /* ── Text ───────────────────────────────── */
+  --ink:       #ededf0;
+  --ink2:      #c0c0cc;
+  --ink3:      #8080a0;
+  --ink4:      #4a4a68;
+  --ink-2:     #c0c0cc;
+  --ink-3:     #8080a0;
+
+  /* ── Accent tints ───────────────────────── */
+  --orange-lt: #2a1508;
+
+  /* ── Status colors stay readable on dark ── */
+  --green:     #22c55e;
+  --red:       #f87171;
+}
+
+/* Inputs / selects that use hardcoded white backgrounds */
+html.night-mode input,
+html.night-mode textarea,
+html.night-mode select {
+  background-color: #222228;
+  color: #ededf0;
+  border-color: #3a3a46;
+  color-scheme: dark;
+}
+
+/* Cards and modals with hardcoded white/light backgrounds */
+html.night-mode .modal-box,
+html.night-mode .modal-inner,
+html.night-mode [class*="modal"] > div {
+  background: #222228;
+  color: #ededf0;
+}
+
+/* Scrollbar tint */
+html.night-mode {
+  color-scheme: dark;
+}

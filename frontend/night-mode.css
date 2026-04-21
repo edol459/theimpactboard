@@ -31,27 +31,53 @@ html.night-mode {
   /* ── Status colors stay readable on dark ── */
   --green:     #22c55e;
   --red:       #f87171;
-}
 
-/* Inputs / selects that use hardcoded white backgrounds */
-html.night-mode input,
-html.night-mode textarea,
-html.night-mode select {
-  background-color: #222228;
-  color: #ededf0;
-  border-color: #3a3a46;
   color-scheme: dark;
 }
 
-/* Cards and modals with hardcoded white/light backgrounds */
-html.night-mode .modal-box,
-html.night-mode .modal-inner,
-html.night-mode [class*="modal"] > div {
+/* ── Scoreboard game cards (index.html) ─────────────────────── */
+html.night-mode .game-card {
+  background: #222228;
+}
+
+/* ── Stats page: filter inputs, mode buttons, table ─────────── */
+html.night-mode .stat-filter-field input,
+html.night-mode .stat-filter-field select,
+html.night-mode .search-input,
+html.night-mode .filter-select {
   background: #222228;
   color: #ededf0;
+  border-color: #3a3a46;
+}
+html.night-mode .stat-mode-btn.active {
+  background: #ededf0;
+  color: #18181b;
+}
+html.night-mode .stat-mode-btn:hover:not(.active) {
+  background: #2c2c34;
+  color: #ededf0;
+}
+html.night-mode .filters-toggle:hover {
+  background: #2c2c34;
 }
 
-/* Scrollbar tint */
-html.night-mode {
-  color-scheme: dark;
+/* ── Profile page: modals, search input, toggle knob ────────── */
+html.night-mode .modal input,
+html.night-mode .modal-box,
+html.night-mode .modal-inner {
+  background: #222228;
+  color: #ededf0;
+  border-color: #3a3a46;
+}
+html.night-mode .night-toggle-track::after {
+  background: #ededf0;
+}
+
+/* ── General: all inputs / selects / textareas ──────────────── */
+html.night-mode input:not([type="range"]):not([type="checkbox"]),
+html.night-mode textarea,
+html.night-mode select {
+  background: #222228;
+  color: #ededf0;
+  border-color: #3a3a46;
 }

@@ -268,11 +268,28 @@ nav {
   }
   .nav-tabs::-webkit-scrollbar { display: none; }
   .nav-tab { white-space: nowrap; padding: 5px 12px; }
-  .tool-card { grid-template-columns: 1fr; min-height: unset; gap: 14px; padding: 18px 18px 16px; }
-  .tool-name { font-size: 22px; }
-  .tool-cta { padding-top: 10px; }
-  .hub-wrap { padding: 0 16px 48px; }
-  .hub-hero { padding: 40px 0 28px; }
+  .hub-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 18px; }
+  .tool-card {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; padding: 20px 12px;
+    min-height: unset; aspect-ratio: 1 / 1;
+  }
+  .tool-card-left { display: contents; }
+  .tool-card-header {
+    margin-bottom: 0;
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--orange-lt);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tool-icon { width: 26px; height: 26px; color: var(--orange); }
+  .tool-name { font-size: 16px; margin-bottom: 0; text-align: center; }
+  .tool-blurb, .tool-cta, .tool-badge { display: none; }
+  .tool-preview { display: none; }
+  .coming-soon { min-height: unset; padding: 20px 12px; gap: 6px; aspect-ratio: 1 / 1; justify-content: center; }
+  .hub-wrap { padding: 0 12px 40px; }
+  .hub-hero { padding: 28px 0 20px; }
+  .hub-dek { font-size: 13.5px; }
 }
 </style>
 </head>

@@ -76,6 +76,18 @@ nav {
   transition: color .15s, background .15s;
 }
 .nav-signin-btn:hover { color: var(--ink); background: var(--paper2); }
+.nav-auth-avatar {
+  width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+  border: 1.5px solid var(--rule); display: block;
+}
+.nav-signout-btn {
+  font-family: var(--ff-mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink4); background: none; border: none;
+  padding: 6px 10px; border-radius: 4px; cursor: pointer;
+  transition: color .15s, background .15s;
+}
+.nav-signout-btn:hover { color: var(--ink); background: var(--paper2); }
 
 /* ── Page ────────────────────────────────────────────── */
 .page { padding-top: var(--nav-h); }
@@ -405,30 +417,32 @@ nav {
 </div>
 
 <script>
-function initNavAuth() {
+async function initNavAuth() {
   const slot = document.getElementById('nav-auth-slot');
   if (!slot) return;
-  const token = localStorage.getItem('ydkball_token');
-  if (!token) {
-    slot.innerHTML = '<a class="nav-signin-btn" href="/profile">Sign in</a>';
-    return;
-  }
-  fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
-    .then(r => r.ok ? r.json() : null)
-    .then(user => {
-      if (!user) { slot.innerHTML = '<a class="nav-signin-btn" href="/profile">Sign in</a>'; return; }
-      const serverNight = user.night_mode === true;
-      const localNight = localStorage.getItem('ydkball_night') === '1';
-      if (serverNight !== localNight) {
-        if (serverNight) { document.documentElement.classList.add('night-mode'); localStorage.setItem('ydkball_night', '1'); }
-        else { document.documentElement.classList.remove('night-mode'); localStorage.removeItem('ydkball_night'); }
+  try {
+    const res = await fetch('/auth/me');
+    const data = await res.json();
+    const user = data.user;
+    if (user) {
+      slot.innerHTML = `
+        <a href="/profile" style="text-decoration:none;cursor:pointer">${user.avatar_url ? `<img class="nav-auth-avatar" src="${user.avatar_url}" alt="">` : ''}</a>
+        <button class="nav-signout-btn" onclick="navSignOut()">Sign out</button>
+      `;
+      if (typeof user.night_mode !== 'undefined') {
+        const enabled = !!user.night_mode;
+        localStorage.setItem('ydkball_night', enabled ? '1' : '0');
+        document.documentElement.classList.toggle('night-mode', enabled);
       }
-      const av = user.avatar_url
-        ? `<img src="${user.avatar_url}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">`
-        : `<span style="width:28px;height:28px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--ff-mono);font-size:12px;font-weight:600;">${(user.username||'?')[0].toUpperCase()}</span>`;
-      slot.innerHTML = `<a href="/profile" style="display:flex;align-items:center;gap:8px;text-decoration:none;">${av}</a>`;
-    })
-    .catch(() => { slot.innerHTML = '<a class="nav-signin-btn" href="/profile">Sign in</a>'; });
+    } else {
+      slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login?next=${encodeURIComponent(window.location.pathname)}">Sign in</a>`;
+    }
+  } catch {
+    slot.innerHTML = `<a class="nav-signin-btn" href="/auth/google/login">Sign in</a>`;
+  }
+}
+function navSignOut() {
+  window.location.href = '/auth/logout?next=' + encodeURIComponent(window.location.pathname);
 }
 initNavAuth();
 </script>

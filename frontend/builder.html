@@ -441,12 +441,63 @@ table.rtable tbody tr.row-hl { background: var(--orange-lt); }
   .match-panel { width: 196px; }
 }
 
+/* ── Mobile stat drawer button ──────────────────────────────── */
+.mobile-stat-btn {
+  display: none;
+  align-items: center; gap: 8px;
+  margin: 10px 14px 0;
+  padding: 9px 14px;
+  background: var(--paper2); border: 1px solid var(--rule); border-radius: 7px;
+  font-family: var(--ff-sans); font-size: 13px; color: var(--ink2);
+  cursor: pointer; transition: background 0.12s; text-align: left; width: calc(100% - 28px);
+}
+.mobile-stat-btn:hover { background: var(--paper3); }
+.mobile-stat-btn-icon { font-size: 15px; flex-shrink: 0; }
+.mobile-stat-btn-lbl { flex: 1; }
+.mobile-stat-btn-cnt {
+  font-family: var(--ff-mono); font-size: 11px;
+  color: var(--orange); font-weight: 500;
+}
+
+/* ── Mobile drawer backdrop ─────────────────────────────────── */
+.mobile-backdrop {
+  display: none; position: fixed; inset: 0; z-index: 149;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(1px);
+}
+.mobile-backdrop.vis { display: block; }
+
+/* ── Mobile close button (inside sidebar) ───────────────────── */
+.sidebar-mobile-close {
+  display: none; margin-left: auto;
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; color: var(--ink3); padding: 2px 4px; line-height: 1;
+}
+
 /* ── Mobile layout ──────────────────────────────────────────── */
 @media (max-width: 768px) {
   .builder-layout { grid-template-columns: 1fr; align-items: stretch; }
-  .builder-sidebar { display: none; }
+
+  /* Sidebar becomes a slide-in drawer */
+  .builder-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(82vw, 300px);
+    height: 100vh;
+    z-index: 150;
+    transform: translateX(-105%);
+    transition: transform 0.26s ease;
+    box-shadow: none;
+  }
+  .builder-sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,.18);
+  }
+
+  .mobile-stat-btn      { display: flex; }
+  .sidebar-mobile-close { display: block; }
+
   .chart-row { flex-direction: column; max-height: none; min-height: auto; }
-  .chart-wrap { min-height: 320px; }
+  .chart-wrap { min-height: 300px; }
   .match-panel { width: 100%; border-left: none; border-top: 1px solid var(--rule); flex-direction: row; overflow-x: auto; overflow-y: visible; padding: 10px 12px; }
   .match-panel-head { display: none; }
   .match-panel-empty { min-width: 100%; }
@@ -482,6 +533,7 @@ html.night-mode .chart-spinner-wrap { background: color-mix(in srgb, #18181b 78%
         <div class="sidebar-title-row">
           <div class="sidebar-title">Builder</div>
           <div class="sidebar-count"><span class="cnt" id="sel-count">0</span>/20</div>
+          <button class="sidebar-mobile-close" id="sidebar-close" aria-label="Close">✕</button>
         </div>
         <select class="season-select" id="season-select"></select>
       </div>
@@ -540,6 +592,13 @@ html.night-mode .chart-spinner-wrap { background: color-mix(in srgb, #18181b 78%
     <!-- ── Main content ──────────────────────────────────────── -->
     <div class="builder-content">
 
+      <!-- Mobile: open stat drawer button -->
+      <button class="mobile-stat-btn" id="mobile-stat-btn">
+        <span class="mobile-stat-btn-icon">📊</span>
+        <span class="mobile-stat-btn-lbl">Select stats</span>
+        <span class="mobile-stat-btn-cnt" id="mobile-sel-cnt"></span>
+      </button>
+
       <!-- Spider chart + match cards -->
       <div class="chart-row">
 
@@ -592,6 +651,7 @@ html.night-mode .chart-spinner-wrap { background: color-mix(in srgb, #18181b 78%
   </div><!-- .builder-layout -->
 </div><!-- .app -->
 
+<div class="mobile-backdrop" id="mobile-backdrop"></div>
 <div class="stat-tooltip" id="stat-tooltip">
   <div class="stat-tt-name" id="tt-name"></div>
   <div class="stat-tt-stat" id="tt-stat"></div>
@@ -840,6 +900,7 @@ function toggleStat(key) {
   }
   renderStatList(document.getElementById('stat-search').value.trim().toLowerCase());
   renderPresets();
+  updateMobileBtn();
   scheduleFetch();
 }
 
@@ -865,6 +926,7 @@ function applyPreset(presetKey) {
   renderStatList(document.getElementById('stat-search').value.trim().toLowerCase());
   renderPosChips();
   renderPresets();
+  updateMobileBtn();
   scheduleFetch();
 }
 
@@ -1319,10 +1381,36 @@ document.querySelectorAll('#pos-chips .pos-chip').forEach(chip => {
   chip.addEventListener('click', () => togglePos(chip.dataset.pos));
 });
 
+// ── Mobile drawer ─────────────────────────────────────────────
+function openMobileDrawer() {
+  document.querySelector('.builder-sidebar').classList.add('mobile-open');
+  document.getElementById('mobile-backdrop').classList.add('vis');
+  document.body.style.overflow = 'hidden';
+}
+function closeMobileDrawer() {
+  document.querySelector('.builder-sidebar').classList.remove('mobile-open');
+  document.getElementById('mobile-backdrop').classList.remove('vis');
+  document.body.style.overflow = '';
+}
+function updateMobileBtn() {
+  const cnt = document.getElementById('mobile-sel-cnt');
+  if (!cnt) return;
+  cnt.textContent = ST.selected.length
+    ? `${ST.selected.length} selected`
+    : '';
+  const lbl = document.querySelector('.mobile-stat-btn-lbl');
+  if (lbl) lbl.textContent = ST.selected.length ? 'Stats selected' : 'Select stats';
+}
+
+document.getElementById('mobile-stat-btn')?.addEventListener('click', openMobileDrawer);
+document.getElementById('sidebar-close')?.addEventListener('click', closeMobileDrawer);
+document.getElementById('mobile-backdrop')?.addEventListener('click', closeMobileDrawer);
+
 // ── Init ──────────────────────────────────────────────────────
 renderStatList();
 renderPresets();
 renderPosChips();
+updateMobileBtn();
 loadAvailableKeys();
 </script>
 

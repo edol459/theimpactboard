@@ -77,13 +77,7 @@
   }
   .nav-logo { height: 26px; width: auto; margin-right: 8px; }
   .nav-wordmark span { color: var(--orange); }
-  .nav-tabs {
-    display: flex;
-    gap: 2px;
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
-  }
+  .nav-tabs { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 2px; }
   .nav-tab {
     font-family: var(--mono);
     font-size: 11px;
@@ -875,7 +869,7 @@
     .nav-auth { padding: 13px 0; }
     .nav-auth-name { display: none; }
     .nav-tabs {
-      order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
+      position: static; transform: none; top: auto; left: auto; order: 10; flex: 0 0 100%; overflow-x: auto; scrollbar-width: none;
       flex-wrap: nowrap; border-top: 1px solid var(--rule);
       padding: 7px 0 9px; gap: 0;
     }

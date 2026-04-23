@@ -868,6 +868,99 @@
   .reply-sign-in-card { font-family: var(--mono); font-size: 11px; color: var(--ink-3); padding: 7px 0 3px; border-top: 1px solid var(--rule); margin-top: 4px; }
   .reply-loading-card { font-family: var(--mono); font-size: 11px; color: var(--ink-3); padding: 7px 0; }
 
+  /* ── Friend search ── */
+  .friend-search-wrap {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .friend-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: border-color 0.15s;
+  }
+  .friend-search-row:focus-within { border-color: var(--orange); }
+  .friend-search-icon {
+    flex-shrink: 0;
+    color: var(--ink-3);
+    display: flex;
+    align-items: center;
+  }
+  .friend-search-icon svg { width: 15px; height: 15px; }
+  .friend-search-input {
+    flex: 1;
+    border: none;
+    background: none;
+    outline: none;
+    font-family: var(--sans);
+    font-size: 0.83rem;
+    color: var(--ink);
+  }
+  .friend-search-input::placeholder { color: var(--ink-3); }
+  .friend-search-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ink-3);
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 2px;
+    display: none;
+    transition: color 0.12s;
+  }
+  .friend-search-clear:hover { color: var(--ink); }
+  .friend-search-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+    z-index: 80;
+    overflow: hidden;
+    display: none;
+  }
+  .friend-search-dropdown.open { display: block; }
+  .friend-search-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--ink);
+    transition: background 0.12s;
+    border-bottom: 1px solid var(--rule);
+  }
+  .friend-search-result:last-child { border-bottom: none; }
+  .friend-search-result:hover { background: var(--bg); }
+  .fs-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--rule);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-size: 0.9rem;
+    color: var(--ink-3);
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .fs-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .fs-name { font-size: 0.85rem; font-weight: 600; color: var(--ink); }
+  .fs-handle { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+  .friend-search-state {
+    padding: 14px 16px;
+    font-size: 0.8rem;
+    color: var(--ink-3);
+    font-family: var(--mono);
+  }
+
   @media (max-width: 768px) {
     .page { grid-template-columns: 1fr; gap: 32px; }
     .sidebar { position: static; }
@@ -919,6 +1012,21 @@
 
   <!-- Main column -->
   <main>
+    <!-- Friend search -->
+    <div class="friend-search-wrap" id="friendSearchWrap">
+      <div class="friend-search-row">
+        <span class="friend-search-icon">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6.5" cy="6.5" r="4"/>
+            <line x1="10" y1="10" x2="14" y2="14"/>
+          </svg>
+        </span>
+        <input class="friend-search-input" id="friendSearchInput" type="text" placeholder="Search users…" autocomplete="off" spellcheck="false">
+        <button class="friend-search-clear" id="friendSearchClear" aria-label="Clear search">×</button>
+      </div>
+      <div class="friend-search-dropdown" id="friendSearchDropdown"></div>
+    </div>
+
     <!-- Tab bar -->
     <div class="tab-bar">
       <button class="tab active" data-tab="recent">Recent Activity</button>
@@ -994,6 +1102,90 @@
 <!-- Reviews open in game.html?tab=reviews -->
 
 <script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// FRIEND SEARCH
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+(function() {
+  const input    = document.getElementById('friendSearchInput');
+  const dropdown = document.getElementById('friendSearchDropdown');
+  const clearBtn = document.getElementById('friendSearchClear');
+  let timer = null;
+
+  function initial(name) {
+    return name ? name.trim()[0].toUpperCase() : '?';
+  }
+
+  function renderResults(users) {
+    if (!users.length) {
+      dropdown.innerHTML = '<div class="friend-search-state">No users found.</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+    dropdown.innerHTML = users.map(u => {
+      const name = u.display_name || 'User';
+      const avatarHtml = u.avatar_url
+        ? `<img src="${u.avatar_url}" alt="">`
+        : initial(name);
+      return `<a class="friend-search-result" href="/profile/${u.id}">
+        <div class="fs-avatar">${avatarHtml}</div>
+        <div class="fs-name">${escHtml(name)}</div>
+      </a>`;
+    }).join('');
+    dropdown.classList.add('open');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function closeDropdown() {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+  }
+
+  async function doSearch(q) {
+    if (!q) { closeDropdown(); return; }
+    dropdown.innerHTML = '<div class="friend-search-state">Searching…</div>';
+    dropdown.classList.add('open');
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+      if (res.status === 401) {
+        dropdown.innerHTML = '<div class="friend-search-state"><a href="/login" style="color:var(--orange);text-decoration:none;font-weight:600">Sign in</a> to search users.</div>';
+        return;
+      }
+      if (!res.ok) throw new Error('search failed');
+      const data = await res.json();
+      renderResults(data.users || data);
+    } catch(e) {
+      dropdown.innerHTML = '<div class="friend-search-state">Something went wrong.</div>';
+    }
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearBtn.style.display = q ? 'block' : 'none';
+    clearTimeout(timer);
+    timer = setTimeout(() => doSearch(q), 280);
+  });
+
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    clearBtn.style.display = 'none';
+    closeDropdown();
+    input.focus();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById('friendSearchWrap').contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeDropdown(); input.blur(); }
+  });
+})();
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // STATE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

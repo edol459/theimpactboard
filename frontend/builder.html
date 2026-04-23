@@ -475,7 +475,6 @@ table.rtable tbody tr.row-hl { background: var(--orange-lt); }
 
 /* ── Mobile layout ──────────────────────────────────────────── */
 @media (max-width: 768px) {
-  /* Allow child scroll containers to work — clip breaks overflow-x: scroll on children */
   html, body { overflow-x: hidden; }
 
   .builder-layout { grid-template-columns: 1fr; align-items: stretch; }
@@ -499,25 +498,28 @@ table.rtable tbody tr.row-hl { background: var(--orange-lt); }
   .mobile-stat-btn      { display: flex; }
   .sidebar-mobile-close { display: block; }
 
-  /* Chart area — no height cap, horizontal scroll enabled */
-  .chart-row {
-    flex-direction: column;
-    min-height: 0; max-height: none;
-    overflow: visible;
-  }
-  .chart-wrap {
-    overflow-x: scroll;
-    overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
-    min-height: 300px;
-    max-height: none;
-    padding: 12px 8px;
-    justify-content: flex-start;
-    align-items: flex-start;
-    width: 100%;
-  }
+  .chart-row { flex-direction: column; min-height: 0; max-height: none; }
 
-  .match-panel { width: 100%; border-left: none; border-top: 1px solid var(--rule); flex-direction: row; overflow-x: scroll; overflow-y: visible; -webkit-overflow-scrolling: touch; padding: 10px 12px; }
+  /* Explicit 100vw width is what makes overflow-x: scroll actually work on iOS —
+     without a hard width the flex item expands to fit content instead of scrolling */
+  .chart-wrap {
+    width: 100vw; max-width: 100vw; box-sizing: border-box;
+    overflow-x: scroll; overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    min-height: 300px; max-height: none;
+    padding: 12px 8px;
+    justify-content: flex-start; align-items: flex-start;
+  }
+  .match-panel {
+    width: 100vw; max-width: 100vw; box-sizing: border-box;
+    border-left: none; border-top: 1px solid var(--rule);
+    flex-direction: row;
+    overflow-x: scroll; overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    padding: 10px 12px;
+  }
   .match-panel-head { display: none; }
   .match-panel-empty { min-width: 100%; }
   .match-card { min-width: 175px; flex-shrink: 0; }

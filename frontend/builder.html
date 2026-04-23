@@ -475,6 +475,9 @@ table.rtable tbody tr.row-hl { background: var(--orange-lt); }
 
 /* ── Mobile layout ──────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Allow child scroll containers to work — clip breaks overflow-x: scroll on children */
+  html, body { overflow-x: hidden; }
+
   .builder-layout { grid-template-columns: 1fr; align-items: stretch; }
 
   /* Sidebar becomes a slide-in drawer */
@@ -496,8 +499,24 @@ table.rtable tbody tr.row-hl { background: var(--orange-lt); }
   .mobile-stat-btn      { display: flex; }
   .sidebar-mobile-close { display: block; }
 
-  .chart-row { flex-direction: column; max-height: none; min-height: auto; }
-  .chart-wrap { min-height: 300px; }
+  /* Chart area — no height cap, horizontal scroll enabled */
+  .chart-row {
+    flex-direction: column;
+    min-height: 0; max-height: none;
+    overflow: visible;
+  }
+  .chart-wrap {
+    overflow-x: scroll;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    min-height: 300px;
+    max-height: none;
+    padding: 12px 8px;
+    justify-content: flex-start;
+    align-items: flex-start;
+    width: 100%;
+  }
+
   .match-panel { width: 100%; border-left: none; border-top: 1px solid var(--rule); flex-direction: row; overflow-x: auto; overflow-y: visible; padding: 10px 12px; }
   .match-panel-head { display: none; }
   .match-panel-empty { min-width: 100%; }
@@ -1097,11 +1116,12 @@ function drawChart() {
     return el;
   }
 
-  // ── Layout ──
+  // ── Layout — compact on narrow screens ──
   const P          = players.length;
-  const barW       = 13;
-  const barGap     = 2;
-  const grpGap     = 26;
+  const mobile     = (document.querySelector('.chart-wrap')?.clientWidth || 480) < 420;
+  const barW       = mobile ? 9  : 13;
+  const barGap     = mobile ? 2  : 2;
+  const grpGap     = mobile ? 14 : 26;
   const innerGrpW  = P * barW + (P - 1) * barGap;
   const grpW       = innerGrpW + grpGap;
   const ML         = 36;   // Y axis labels

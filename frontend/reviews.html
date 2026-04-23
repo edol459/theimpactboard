@@ -1049,6 +1049,16 @@
 
     <!-- Top Rated -->
     <div id="paneTop" style="display:none">
+      <div class="filters-row">
+        <span class="filter-label">Season</span>
+        <select class="filter-select" id="topFilterSeason"></select>
+        <select class="filter-select" id="topFilterSeasonType">
+          <option value="">All</option>
+          <option value="Regular Season">Regular Season</option>
+          <option value="Playoffs">Playoffs</option>
+          <option value="PlayIn">Play-In</option>
+        </select>
+      </div>
       <div id="topFeed" class="state-loading">Loading…</div>
     </div>
 
@@ -1571,7 +1581,13 @@ async function loadTopRated() {
   feed.innerHTML = '<div class="state-loading">Loading…</div>';
   feed.dataset.loaded = '1';
 
-  const data = await api('/api/reviews/top-games?limit=25');
+  const season     = document.getElementById('topFilterSeason').value;
+  const seasonType = document.getElementById('topFilterSeasonType').value;
+  const params = new URLSearchParams({ limit: 25 });
+  if (season) params.set('season', season);
+  if (seasonType) params.set('season_type', seasonType);
+
+  const data = await api(`/api/reviews/top-games?${params}`);
   const games = data.games || [];
 
   if (games.length === 0) {
@@ -1626,14 +1642,34 @@ document.getElementById('filterSort').addEventListener('change', resetBrowse);
 document.getElementById('filterSeason').addEventListener('change', resetBrowse);
 document.getElementById('filterSeasonType').addEventListener('change', resetBrowse);
 
-// Populate season dropdown and set default season type to match
+// Populate season dropdowns
 populateSeasonDropdown(
   document.getElementById('filterSeason'),
   computeCurrentSeason(),
   'games'
 ).then(() => {
-  // Default to showing all season types
   document.getElementById('filterSeasonType').value = '';
+});
+
+// Top Rated season dropdown — prepend "All Time" after seasons are loaded
+populateSeasonDropdown(
+  document.getElementById('topFilterSeason'),
+  computeCurrentSeason(),
+  'games'
+).then(() => {
+  const sel = document.getElementById('topFilterSeason');
+  const allOpt = document.createElement('option');
+  allOpt.value = 'all';
+  allOpt.textContent = 'All Time';
+  sel.insertBefore(allOpt, sel.firstChild);
+});
+document.getElementById('topFilterSeason').addEventListener('change', () => {
+  document.getElementById('topFeed').dataset.loaded = '';
+  loadTopRated();
+});
+document.getElementById('topFilterSeasonType').addEventListener('change', () => {
+  document.getElementById('topFeed').dataset.loaded = '';
+  loadTopRated();
 });
 
 function resetBrowse() {

@@ -64,6 +64,32 @@ DEFAULT_SEASON_TYPE = os.getenv("NBA_SEASON_TYPE", get_current_season_type())
 def get_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
+def _fmt_game_time(val) -> str:
+    """Return gameTimeUTC as a proper ISO 8601 UTC string (e.g. '2026-04-25T01:30:00Z').
+    PostgreSQL returns naive datetimes via psycopg2 as Python datetime objects; str() gives
+    '2026-04-25 01:30:00' which JS parses as local time instead of UTC."""
+    if not val:
+        return ""
+    from datetime import datetime, timezone
+    if isinstance(val, datetime):
+        # If naive, assume it was stored as UTC
+        if val.tzinfo is None:
+            val = val.replace(tzinfo=timezone.utc)
+        return val.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    s = str(val).strip()
+    # Already has Z or offset — normalize to Z form
+    if s.endswith("Z"):
+        return s.replace(" ", "T")
+    if "+" in s[10:] or (s[10:].count("-") > 0):
+        # Has offset, parse and re-emit as Z
+        try:
+            dt = datetime.fromisoformat(s)
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            pass
+    # Naive string — assume UTC
+    return s.replace(" ", "T") + "Z"
+
 
 
 from auth import auth_bp, init_oauth, login_required, current_user
@@ -1101,7 +1127,7 @@ def get_scoreboard():
                 "gameStatusText": game_status_text,
                 "period":         box.get("period", 0) if box else 0,
                 "gameClock":      box.get("gameClock", "") if box else "",
-                "gameTimeUTC":    str(row.get("gameTimeUTC", row.get("GAME_TIME_UTC", "")) or ""),
+                "gameTimeUTC":    _fmt_game_time(row.get("gameTimeUTC", row.get("GAME_TIME_UTC", ""))),
                 "away": {"abbr": away_abbr, "score": away_score,
                          "wins": away_wins, "losses": away_losses},
                 "home": {"abbr": home_abbr, "score": home_score,

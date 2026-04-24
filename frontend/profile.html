@@ -201,6 +201,37 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 .btn-load-more { display: block; width: 100%; margin-top: 16px; padding: 10px; font-family: var(--ff-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink3); background: none; border: 1px solid var(--rule); border-radius: 4px; cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .btn-load-more:hover { border-color: var(--orange); color: var(--orange); }
 
+/* ── Game log filters ── */
+.game-log-filters {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px; margin-bottom: 16px; padding-bottom: 14px;
+  border-bottom: 1px solid var(--paper3);
+}
+.gl-select {
+  font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink3);
+  background: var(--paper2); border: 1px solid var(--rule);
+  border-radius: 4px; padding: 5px 8px; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236b6b78'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 7px center;
+  padding-right: 22px; transition: border-color 0.15s, color 0.15s;
+}
+.gl-select:focus { outline: none; border-color: var(--orange); color: var(--ink); }
+.gl-select:hover { border-color: var(--ink3); }
+.gl-attended-label {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--ff-mono); font-size: 10px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink3); cursor: pointer;
+  padding: 5px 8px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--paper2); transition: border-color 0.15s, color 0.15s; user-select: none;
+}
+.gl-attended-label:hover { border-color: var(--ink3); }
+.gl-attended-label input { width: 12px; height: 12px; accent-color: var(--orange); cursor: pointer; }
+.gl-attended-label.active { border-color: var(--orange); color: var(--orange); }
+.gl-filters-count { font-family: var(--ff-mono); font-size: 10px; color: var(--ink4); margin-left: auto; letter-spacing: 0.03em; }
+.ri-attended { color: var(--orange); font-style: normal; }
+
 /* Reply section on profile */
 .ri-reply-btn {
   display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
@@ -483,6 +514,13 @@ let reviewOffset = 0;
 let pendingRequestCount = 0;  // incoming friend requests awaiting response
 let reviewTotal  = 0;
 
+// ── Game log filter state ─────────────────────────────────────
+let glSort        = 'date_desc';
+let glTeam        = '';
+let glSeason      = '';
+let glSeasonType  = '';
+let glAttended    = false;
+
 // ── Init ──────────────────────────────────────────────────────
 (async () => {
   // Parse user_id from URL: /profile or /profile/123
@@ -671,12 +709,48 @@ function renderProfile() {
     </div>
 
     <div class="profile-tabs">
-      <button class="profile-tab active" data-tab="reviews">Reviews</button>
+      <button class="profile-tab active" data-tab="reviews">Game Log</button>
       <button class="profile-tab" data-tab="friends">Friends${PROFILE.friend_count > 0 ? ` (${PROFILE.friend_count})` : ''}</button>
       ${isOwn ? '<button class="profile-tab" data-tab="find">Find Friends</button>' : ''}
     </div>
 
-    <div id="tab-reviews"><div class="loading-state">Loading reviews…</div></div>
+    <div id="tab-reviews">
+      <div class="game-log-filters" id="game-log-filters">
+        <select class="gl-select" id="gl-sort" onchange="applyGlFilters()">
+          <option value="date_desc">Date (newest)</option>
+          <option value="date_asc">Date (oldest)</option>
+          <option value="rating_desc">Rating (high→low)</option>
+          <option value="rating_asc">Rating (low→high)</option>
+        </select>
+        <select class="gl-select" id="gl-team" onchange="applyGlFilters()">
+          <option value="">All teams</option>
+          <option value="ATL">ATL</option><option value="BOS">BOS</option><option value="BKN">BKN</option>
+          <option value="CHA">CHA</option><option value="CHI">CHI</option><option value="CLE">CLE</option>
+          <option value="DAL">DAL</option><option value="DEN">DEN</option><option value="DET">DET</option>
+          <option value="GSW">GSW</option><option value="HOU">HOU</option><option value="IND">IND</option>
+          <option value="LAC">LAC</option><option value="LAL">LAL</option><option value="MEM">MEM</option>
+          <option value="MIA">MIA</option><option value="MIL">MIL</option><option value="MIN">MIN</option>
+          <option value="NOP">NOP</option><option value="NYK">NYK</option><option value="OKC">OKC</option>
+          <option value="ORL">ORL</option><option value="PHI">PHI</option><option value="PHX">PHX</option>
+          <option value="POR">POR</option><option value="SAC">SAC</option><option value="SAS">SAS</option>
+          <option value="TOR">TOR</option><option value="UTA">UTA</option><option value="WAS">WAS</option>
+        </select>
+        <select class="gl-select" id="gl-season" onchange="applyGlFilters()">
+          <option value="">All seasons</option>
+        </select>
+        <select class="gl-select" id="gl-season-type" onchange="applyGlFilters()">
+          <option value="">All types</option>
+          <option value="Regular Season">Regular</option>
+          <option value="Playoffs">Playoffs</option>
+          <option value="PlayIn">Play-In</option>
+        </select>
+        <label class="gl-attended-label" id="gl-attended-label">
+          <input type="checkbox" id="gl-attended" onchange="applyGlFilters()"> In-person
+        </label>
+        <span class="gl-filters-count" id="gl-filters-count"></span>
+      </div>
+      <div id="reviews-list"><div class="loading-state">Loading…</div></div>
+    </div>
     <div id="tab-friends" style="display:none"></div>
     ${isOwn ? '<div id="tab-find" style="display:none"></div>' : ''}
   `;
@@ -700,18 +774,58 @@ function renderProfile() {
     });
   });
 
-  // Load reviews immediately
+  // Load reviews and seasons immediately
   loadReviews(true);
+  loadGlSeasons();
+}
+
+// ── Game log filters ──────────────────────────────────────────
+function applyGlFilters() {
+  glSort       = document.getElementById('gl-sort').value;
+  glTeam       = document.getElementById('gl-team').value;
+  glSeason     = document.getElementById('gl-season').value;
+  glSeasonType = document.getElementById('gl-season-type').value;
+  glAttended   = document.getElementById('gl-attended').checked;
+
+  const label = document.getElementById('gl-attended-label');
+  if (label) label.classList.toggle('active', glAttended);
+
+  loadReviews(true);
+}
+
+async function loadGlSeasons() {
+  try {
+    const res  = await fetch('/api/seasons');
+    const data = await res.json();
+    const sel  = document.getElementById('gl-season');
+    if (!sel) return;
+    const seen = new Set();
+    (data.seasons || []).forEach(row => {
+      if (!seen.has(row.season)) {
+        seen.add(row.season);
+        const opt = document.createElement('option');
+        opt.value = row.season;
+        opt.textContent = row.season;
+        sel.appendChild(opt);
+      }
+    });
+  } catch {}
 }
 
 // ── Reviews tab ───────────────────────────────────────────────
 async function loadReviews(reset = false) {
   if (reset) reviewOffset = 0;
-  const container = document.getElementById('tab-reviews');
+  const container = document.getElementById('reviews-list');
   if (!container) return;
   if (reset) container.innerHTML = '<div class="loading-state">Loading…</div>';
 
-  const res  = await fetch(`/api/users/${PROFILE_ID}/reviews?limit=15&offset=${reviewOffset}`);
+  const params = new URLSearchParams({ limit: 15, offset: reviewOffset, sort: glSort });
+  if (glTeam)       params.set('team', glTeam);
+  if (glSeason)     params.set('season', glSeason);
+  if (glSeasonType) params.set('season_type', glSeasonType);
+  if (glAttended)   params.set('attended', 'true');
+
+  const res  = await fetch(`/api/users/${PROFILE_ID}/reviews?${params}`);
   const data = await res.json();
   const reviews = data.reviews || [];
   reviewTotal = data.total || 0;
@@ -719,8 +833,11 @@ async function loadReviews(reset = false) {
 
   if (reset) container.innerHTML = '';
 
+  const countEl = document.getElementById('gl-filters-count');
+  if (countEl) countEl.textContent = reviewTotal === 1 ? '1 game' : `${reviewTotal} games`;
+
   if (reviews.length === 0 && reset) {
-    container.innerHTML = '<div class="empty-state">No reviews yet.</div>';
+    container.innerHTML = '<div class="empty-state">No reviews match these filters.</div>';
     return;
   }
 
@@ -739,7 +856,7 @@ async function loadReviews(reset = false) {
       </div>
       <div class="ri-body">
         <div class="ri-matchup">${r.away_team_abbr} @ ${r.home_team_abbr}</div>
-        <div class="ri-meta"><b>${winner}</b>–${loser} · ${fmtDate(r.game_date)}</div>
+        <div class="ri-meta"><b>${winner}</b>–${loser} · ${fmtDate(r.game_date)} · ${r.season}${r.attended ? ' · <span class="ri-attended">In person</span>' : ''}</div>
         ${r.review_text ? `<div class="ri-text">${r.review_text}</div>` : ''}
         <button class="ri-reply-btn" data-review-id="${r.id}">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2 4h16v10H6l-4 4V4z"/></svg>

@@ -2606,26 +2606,61 @@ def get_recent_reviews():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.route("/api/users/<int:user_id>/reviews")
 def get_user_reviews(user_id):
-    limit  = min(int(request.args.get("limit", 20)), 100)
-    offset = int(request.args.get("offset", 0))
+    limit       = min(int(request.args.get("limit", 20)), 100)
+    offset      = int(request.args.get("offset", 0))
+    sort        = request.args.get("sort", "date_desc")
+    team        = request.args.get("team", "").strip()
+    attended    = request.args.get("attended", "")
+    season      = request.args.get("season", "").strip()
+    season_type = request.args.get("season_type", "").strip()
+
+    conditions = ["gr.user_id = %s"]
+    params: list = [user_id]
+
+    if team:
+        conditions.append("(g.home_team_abbr = %s OR g.away_team_abbr = %s)")
+        params += [team, team]
+    if attended == "true":
+        conditions.append("gr.attended = TRUE")
+    if season:
+        conditions.append("g.season = %s")
+        params.append(season)
+    if season_type:
+        conditions.append("g.season_type = %s")
+        params.append(season_type)
+
+    where = " AND ".join(conditions)
+
+    order_map = {
+        "date_desc":   "g.game_date DESC",
+        "date_asc":    "g.game_date ASC",
+        "rating_desc": "gr.rating DESC, g.game_date DESC",
+        "rating_asc":  "gr.rating ASC, g.game_date DESC",
+    }
+    order = order_map.get(sort, "g.game_date DESC")
+
     try:
         conn = get_conn()
         cur  = conn.cursor()
-        cur.execute("""
+        cur.execute(f"""
             SELECT
                 gr.*, u.display_name, u.avatar_url, u.favorite_team,
                 g.game_date, g.home_team_abbr, g.away_team_abbr,
-                g.home_score, g.away_score,
+                g.home_score, g.away_score, g.season, g.season_type,
                 (SELECT COUNT(*) FROM review_replies rr WHERE rr.review_id = gr.id) AS reply_count
             FROM game_reviews gr
             JOIN users u ON gr.user_id = u.id
             JOIN games g ON gr.game_id = g.game_id
-            WHERE gr.user_id = %s
-            ORDER BY g.game_date DESC
+            WHERE {where}
+            ORDER BY {order}
             LIMIT %s OFFSET %s
-        """, (user_id, limit, offset))
+        """, params + [limit, offset])
         rows = cur.fetchall()
-        cur.execute("SELECT COUNT(*) FROM game_reviews WHERE user_id = %s", (user_id,))
+        cur.execute(f"""
+            SELECT COUNT(*) FROM game_reviews gr
+            JOIN games g ON gr.game_id = g.game_id
+            WHERE {where}
+        """, params)
         total = cur.fetchone()["count"]
         cur.close(); conn.close()
         result = []
@@ -2638,6 +2673,8 @@ def get_user_reviews(user_id):
                 "away_team_abbr": d["away_team_abbr"],
                 "home_score":     d["home_score"],
                 "away_score":     d["away_score"],
+                "season":         d["season"],
+                "season_type":    d["season_type"],
             })
         return jsonify({"reviews": result, "total": total})
     except Exception as e:

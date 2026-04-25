@@ -728,6 +728,8 @@ if __name__ == "__main__":` block.
 """
 
 import requests as _requests
+import time as _time
+import threading as _threading
 from datetime import datetime as _dt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -759,8 +761,138 @@ def _fetch_nba_schedule() -> dict | None:
     except Exception:
         return None
 
-# ── Today's scoreboard — short-lived cache so live-game polls don't hammer ScoreboardV3 ──
-_today_sb_cache: dict = {}   # {"payload": dict, "ts": float}
+# ── Today's scoreboard — kept fresh by the background poller ─────────────────
+_today_sb_cache: dict = {}   # {"payload": dict, "ts": float, "date": str}
+
+# ── Background scoreboard poller ──────────────────────────────────────────────
+# Polls the NBA CDN every 30 s when games are live, 5 min when idle.
+# Writes directly into _today_sb_cache so the endpoint never blocks on a live
+# CDN call.  Falls back to the season schedule when CDN is unreachable, so the
+# correct games still show (without scores) instead of "No games today."
+
+_sb_poller_stop   = _threading.Event()
+_sb_poller_thread = None
+_POLL_LIVE_S      = 30
+_POLL_IDLE_S      = 300
+
+
+def _parse_cdn_scoreboard(cdn_data: dict, game_today: str) -> dict | None:
+    """Parse CDN scoreboard JSON into payload format.
+    Returns None if the CDN gameDate doesn't match game_today (CDN still on prior date)."""
+    cdn_games = cdn_data.get("scoreboard", {}).get("games", [])
+    cdn_date  = cdn_data.get("scoreboard", {}).get("gameDate", "")
+    if cdn_date != game_today:
+        return None
+    games = []
+    for g in cdn_games:
+        away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
+        games.append({
+            "gameId":         g.get("gameId", ""),
+            "gameStatus":     g.get("gameStatus", 1),
+            "gameStatusText": g.get("gameStatusText", ""),
+            "period":         g.get("period", 0),
+            "gameClock":      g.get("gameClock", ""),
+            "gameTimeUTC":    g.get("gameTimeUTC", ""),
+            "away": {"abbr": away.get("teamTricode", ""), "score": int(away.get("score", 0) or 0),
+                     "wins": away.get("wins"), "losses": away.get("losses")},
+            "home": {"abbr": home.get("teamTricode", ""), "score": int(home.get("score", 0) or 0),
+                     "wins": home.get("wins"), "losses": home.get("losses")},
+        })
+        if int(g.get("gameStatus", 1) or 1) == 3 and g.get("gameId"):
+            _upsert_game_from_boxscore(g["gameId"], g)
+    _enrich_games_with_records(games)
+    return {"games": games, "date": cdn_date}
+
+
+def _sb_poller_tick() -> tuple[bool, bool]:
+    """One poll iteration. Returns (has_live_game, cdn_succeeded)."""
+    game_today = _compute_game_today()
+
+    # ── Primary: NBA live CDN ─────────────────────────────────────────────────
+    try:
+        r = _requests.get(
+            "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json",
+            headers=_CDN_HEADERS, timeout=8,
+        )
+        r.raise_for_status()
+        payload = _parse_cdn_scoreboard(r.json(), game_today)
+        if payload:
+            _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": game_today})
+            return any(g["gameStatus"] == 2 for g in payload["games"]), True
+        # CDN returned a past date — fall through to schedule
+    except Exception:
+        pass
+
+    # ── Fallback: season schedule (games shown without scores) ───────────────
+    # Only seeds the cache if we don't already have live/final data for today,
+    # so we never overwrite real scores with schedule stubs.
+    try:
+        sched = _fetch_nba_schedule()
+        if sched:
+            dt_obj    = _dt.strptime(game_today, "%Y-%m-%d")
+            sched_key = f"{dt_obj.month:02d}/{dt_obj.day:02d}/{dt_obj.year} 00:00:00"
+            target    = next(
+                (gd for gd in sched.get("leagueSchedule", {}).get("gameDates", [])
+                 if gd.get("gameDate") == sched_key),
+                None,
+            )
+            if target:
+                games = []
+                for g in target.get("games", []):
+                    away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
+                    games.append({
+                        "gameId": g.get("gameId", ""), "gameStatus": 1,
+                        "gameStatusText": g.get("gameStatusText", ""),
+                        "period": 0, "gameClock": "",
+                        "gameTimeUTC": g.get("gameTimeUTC", ""),
+                        "away": {"abbr": away.get("teamTricode", ""), "score": 0,
+                                 "wins": None, "losses": None},
+                        "home": {"abbr": home.get("teamTricode", ""), "score": 0,
+                                 "wins": None, "losses": None},
+                    })
+                if games:
+                    _enrich_games_with_records(games)
+                    cached = _today_sb_cache.get("payload", {})
+                    has_real_data = (
+                        _today_sb_cache.get("date") == game_today
+                        and any(g["gameStatus"] in (2, 3) for g in cached.get("games", []))
+                    )
+                    if not has_real_data:
+                        _today_sb_cache.update({
+                            "payload": {"games": games, "date": game_today},
+                            "ts": _time.time(), "date": game_today,
+                        })
+    except Exception:
+        pass
+
+    return False, False
+
+
+def _sb_poller_loop():
+    import logging
+    log = logging.getLogger("sb_poller")
+    log.info("[POLLER] Scoreboard background poller started")
+    while not _sb_poller_stop.is_set():
+        try:
+            has_live, cdn_ok = _sb_poller_tick()
+        except Exception:
+            has_live, cdn_ok = False, False
+        # 30 s when live, 5 min when idle, 60 s when CDN is failing (retry sooner)
+        interval = _POLL_LIVE_S if has_live else (_POLL_IDLE_S if cdn_ok else 60)
+        _sb_poller_stop.wait(interval)
+    log.info("[POLLER] Scoreboard background poller stopped")
+
+
+def start_sb_poller():
+    global _sb_poller_thread
+    if _sb_poller_thread and _sb_poller_thread.is_alive():
+        return
+    _sb_poller_stop.clear()
+    _sb_poller_thread = _threading.Thread(
+        target=_sb_poller_loop, daemon=True, name="ScoreboardPoller",
+    )
+    _sb_poller_thread.start()
+
 
 def _compute_game_today():
     try:
@@ -975,9 +1107,11 @@ def get_scoreboard():
         except Exception:
             pass  # DB error — fall through to ScoreboardV3
 
-    # Today — short-lived cache (30 s) so live-game frontend polls don't hammer the API
+    # Today — serve from poller-maintained cache (refreshed every 30 s when live,
+    # 5 min when idle). Falls back to on-demand CDN fetch if cache is cold or
+    # the poller has been silent for more than 5 minutes.
     if is_today and _today_sb_cache.get("date") == _game_today:
-        if _time.time() - _today_sb_cache.get("ts", 0) < 30:
+        if _time.time() - _today_sb_cache.get("ts", 0) < 300:
             return jsonify(_today_sb_cache["payload"])
 
     # Today — try the NBA live CDN first (not rate-limited on cloud IPs)
@@ -4302,6 +4436,8 @@ def wowy_stat_line():
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
+
+start_sb_poller()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

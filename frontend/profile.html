@@ -1721,6 +1721,16 @@ async function uploadAvatar(dataUrl) {
   }
 }
 
+// ── Share helpers ─────────────────────────────────────────────
+async function preloadImages(el) {
+  await Promise.all([...el.querySelectorAll('img')].map(async img => {
+    try {
+      const r = await fetch(img.src, { mode: 'cors', cache: 'no-store' });
+      if (r.ok) img.src = URL.createObjectURL(await r.blob());
+    } catch {}
+  }));
+}
+
 // ── Share (screenshot to clipboard) ──────────────────────────
 async function shareProfileReview(item, btn, r) {
   const isDark = document.documentElement.classList.contains('night-mode');
@@ -1759,6 +1769,7 @@ async function shareProfileReview(item, btn, r) {
   btn.disabled = true;
 
   try {
+    await preloadImages(wrapper);
     const canvas = await html2canvas(wrapper, {
       useCORS: true,
       scale: 2,

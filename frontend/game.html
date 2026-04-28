@@ -257,14 +257,15 @@ table.box-table tfoot td:first-child{text-align:left;}
 .reviews-loading { padding: 32px 0; text-align: center; font-family: var(--ff-mono); font-size: 12px; color: var(--ink4); }
 
 /* Reply section */
-.btn-reply {
+.btn-reply, .btn-share {
   display: flex; align-items: center; gap: 5px;
   font-family: var(--ff-mono); font-size: 11px;
   color: var(--ink4); background: none; border: none;
   cursor: pointer; padding: 2px 0 2px 12px; transition: color 0.12s;
 }
-.btn-reply:hover { color: var(--ink3); }
-.btn-reply svg { width: 13px; height: 13px; flex-shrink: 0; }
+.btn-reply:hover, .btn-share:hover { color: var(--ink3); }
+.btn-reply svg, .btn-share svg { width: 13px; height: 13px; flex-shrink: 0; }
+.btn-share.copied { color: var(--orange); }
 .reply-section { display: none; padding-left: 48px; }
 .reply-section.open { display: block; }
 .reply-item {
@@ -1069,7 +1070,10 @@ function reviewItemHTML(r) {
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
             <path d="M2 4h16v10H6l-4 4V4z"/>
           </svg>
-          ${r.reply_count > 0 ? `${r.reply_count} repl${r.reply_count === 1 ? 'y' : 'ies'}` : 'Reply'}
+          ${r.reply_count > 0 ? `<span>${r.reply_count}</span>` : ''}
+        </button>
+        <button class="btn-share" data-review-id="${r.id}" title="Copy screenshot">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="14" height="9" rx="1.5"/><path d="M10 1v10M7 4l3-3 3 3"/></svg>
         </button>
       </div>
     </div>
@@ -1119,6 +1123,13 @@ function wireWriteSection() {
       const replyBtn = e.target.closest('.btn-reply');
       if (replyBtn) {
         toggleReplies(parseInt(replyBtn.dataset.reviewId));
+        return;
+      }
+      // Share screenshot
+      const shareBtn = e.target.closest('.btn-share');
+      if (shareBtn) {
+        const item = shareBtn.closest('.review-item');
+        if (item) shareReviewItem(item, shareBtn);
         return;
       }
       // Show more replies
@@ -1642,6 +1653,69 @@ function navSignOut() {
   window.location.href = '/auth/logout?next=' + encodeURIComponent(window.location.pathname);
 }
 initNavAuth();
+
+// ── Share (screenshot to clipboard) ──────────────────────────
+async function shareReviewItem(item, btn) {
+  const isDark = document.documentElement.classList.contains('night-mode');
+  const bgColor = isDark ? '#222228' : '#F5F0E8';
+
+  const wrapper = document.createElement('div');
+  Object.assign(wrapper.style, {
+    position: 'fixed', top: '-9999px', left: '-9999px',
+    width: item.offsetWidth + 'px',
+    background: bgColor,
+    padding: '20px',
+    borderRadius: '12px',
+    boxSizing: 'border-box',
+    fontFamily: 'Instrument Sans, sans-serif',
+  });
+
+  const clone = item.cloneNode(true);
+  clone.style.cssText = '';
+  const footer = clone.querySelector('.review-footer');
+  if (footer) footer.remove();
+  wrapper.appendChild(clone);
+
+  const brand = document.createElement('div');
+  Object.assign(brand.style, {
+    marginTop: '14px', fontSize: '11px', color: isDark ? '#888' : '#aaa',
+    textAlign: 'right', fontFamily: 'DM Mono, monospace',
+  });
+  brand.textContent = 'ydkball.net';
+  wrapper.appendChild(brand);
+
+  document.body.appendChild(wrapper);
+
+  const origHTML = btn.innerHTML;
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const canvas = await html2canvas(wrapper, {
+      useCORS: true,
+      scale: 2,
+      backgroundColor: bgColor,
+    });
+    document.body.removeChild(wrapper);
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10l4 4 8-8"/></svg> Copied!`;
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = origHTML; btn.disabled = false; }, 2000);
+      } catch {
+        window.open(canvas.toDataURL(), '_blank');
+        btn.innerHTML = origHTML;
+        btn.disabled = false;
+      }
+    });
+  } catch {
+    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    btn.innerHTML = origHTML;
+    btn.disabled = false;
+  }
+}
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 </body>
 </html>

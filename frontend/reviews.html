@@ -810,14 +810,15 @@
 
   /* Reply section */
   .review-card-footer { display: flex; align-items: center; gap: 2px; margin-top: 8px; }
-  .btn-reply-card {
+  .btn-reply-card, .btn-share-card {
     display: flex; align-items: center; gap: 4px;
     font-family: var(--mono); font-size: 11px;
     color: var(--ink-3); background: none; border: none;
     cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: color 0.12s, background 0.12s;
   }
-  .btn-reply-card:hover { color: var(--ink); background: rgba(0,0,0,0.04); }
-  .btn-reply-card svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .btn-reply-card:hover, .btn-share-card:hover { color: var(--ink); background: rgba(0,0,0,0.04); }
+  .btn-reply-card svg, .btn-share-card svg { width: 12px; height: 12px; flex-shrink: 0; }
+  .btn-share-card.copied { color: var(--orange); }
   .reply-section-card { display: none; padding-left: 44px; margin-top: 4px; grid-column: 1 / -1; }
   .reply-section-card.open { display: block; }
   .reply-item-card {
@@ -1484,9 +1485,12 @@ function buildReviewCard(r, i) {
         <button class="btn-like${r.liked_by_me ? ' liked' : ''}" data-review-id="${r.id}" title="Like this review">
           ${heartIcon}<span class="like-count">${likeLabel}</span>
         </button>
-        <button class="btn-reply-card" data-review-id="${r.id}">
+        <button class="btn-reply-card" data-review-id="${r.id}" title="Reply">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2 4h16v10H6l-4 4V4z"/></svg>
-          ${r.reply_count > 0 ? `${r.reply_count} repl${r.reply_count === 1 ? 'y' : 'ies'}` : 'Reply'}
+          ${r.reply_count > 0 ? `<span>${r.reply_count}</span>` : ''}
+        </button>
+        <button class="btn-share-card" title="Copy screenshot">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="14" height="9" rx="1.5"/><path d="M10 1v10M7 4l3-3 3 3"/></svg>
         </button>
       </div>
     </div>
@@ -1512,6 +1516,11 @@ function buildReviewCard(r, i) {
   div.querySelector('.btn-reply-card').addEventListener('click', e => {
     e.stopPropagation();
     toggleRepliesCard(r.id);
+  });
+
+  div.querySelector('.btn-share-card').addEventListener('click', e => {
+    e.stopPropagation();
+    shareReviewCard(div, e.currentTarget);
   });
 
   return div;
@@ -1932,6 +1941,76 @@ async function deleteCardReply(reviewId, replyId, itemEl) {
   }
 }
 
+// ── Share (screenshot to clipboard) ──────────────────────────
+async function shareReviewCard(card, btn) {
+  const isDark = document.documentElement.classList.contains('night-mode');
+  const bgColor = isDark ? '#222228' : '#FDFAF4';
+  const inkColor = isDark ? '#E8E2D9' : '#1A1612';
+
+  const wrapper = document.createElement('div');
+  Object.assign(wrapper.style, {
+    position: 'fixed', top: '-9999px', left: '-9999px',
+    width: card.offsetWidth + 'px',
+    background: bgColor,
+    padding: '20px',
+    borderRadius: '12px',
+    boxSizing: 'border-box',
+    fontFamily: 'Instrument Sans, sans-serif',
+  });
+
+  const clone = card.cloneNode(true);
+  clone.style.cssText = '';
+  clone.style.cursor = 'default';
+  clone.style.opacity = '1';
+  clone.style.animation = 'none';
+  clone.style.paddingTop = '0';
+  clone.style.borderBottom = 'none';
+  const footer = clone.querySelector('.review-card-footer');
+  if (footer) footer.remove();
+  const replySection = clone.querySelector('.reply-section-card');
+  if (replySection) replySection.remove();
+  wrapper.appendChild(clone);
+
+  const brand = document.createElement('div');
+  Object.assign(brand.style, {
+    marginTop: '14px', fontSize: '11px', color: isDark ? '#888' : '#aaa',
+    textAlign: 'right', fontFamily: 'DM Mono, monospace',
+  });
+  brand.textContent = 'ydkball.net';
+  wrapper.appendChild(brand);
+
+  document.body.appendChild(wrapper);
+
+  const origText = btn.innerHTML;
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const canvas = await html2canvas(wrapper, {
+      useCORS: true,
+      scale: 2,
+      backgroundColor: bgColor,
+    });
+    document.body.removeChild(wrapper);
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10l4 4 8-8"/></svg> Copied!`;
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = origText; btn.disabled = false; }, 2000);
+      } catch {
+        window.open(canvas.toDataURL(), '_blank');
+        btn.innerHTML = origText;
+        btn.disabled = false;
+      }
+    });
+  } catch (err) {
+    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    btn.innerHTML = origText;
+    btn.disabled = false;
+  }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // INIT
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1941,5 +2020,6 @@ async function deleteCardReply(reviewId, replyId, itemEl) {
   loadSidebarTop();
 })();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 </body>
 </html>

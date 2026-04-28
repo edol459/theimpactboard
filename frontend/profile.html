@@ -234,14 +234,15 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 .ri-attended { color: var(--orange); font-style: normal; }
 
 /* Reply section on profile */
-.ri-reply-btn {
+.ri-reply-btn, .ri-share-btn {
   display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
   font-family: var(--ff-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--ink4); background: none; border: none; cursor: pointer;
   padding: 2px 4px; border-radius: 3px; transition: color 0.12s, background 0.12s;
 }
-.ri-reply-btn:hover { color: var(--ink3); background: var(--paper2); }
-.ri-reply-btn svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ri-reply-btn:hover, .ri-share-btn:hover { color: var(--ink3); background: var(--paper2); }
+.ri-reply-btn svg, .ri-share-btn svg { width: 11px; height: 11px; flex-shrink: 0; }
+.ri-share-btn.copied { color: var(--orange); }
 .ri-reply-section { display: none; padding-top: 4px; }
 .ri-reply-section.open { display: block; }
 .ri-reply-item {
@@ -893,9 +894,12 @@ async function loadReviews(reset = false) {
         <div class="ri-matchup">${r.away_team_abbr} @ ${r.home_team_abbr}</div>
         <div class="ri-meta"><b>${winner}</b>–${loser} · ${fmtDate(r.game_date)} · ${r.season}${r.attended ? ' · <span class="ri-attended">In person</span>' : ''}</div>
         ${r.review_text ? `<div class="ri-text">${r.review_text}</div>` : ''}
-        <button class="ri-reply-btn" data-review-id="${r.id}">
+        <button class="ri-reply-btn" data-review-id="${r.id}" title="Reply">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M2 4h16v10H6l-4 4V4z"/></svg>
-          ${r.reply_count > 0 ? `${r.reply_count} repl${r.reply_count === 1 ? 'y' : 'ies'}` : 'Reply'}
+          ${r.reply_count > 0 ? `<span>${r.reply_count}</span>` : ''}
+        </button>
+        <button class="ri-share-btn" title="Copy screenshot">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="14" height="9" rx="1.5"/><path d="M10 1v10M7 4l3-3 3 3"/></svg>
         </button>
       </div>
       <div class="ri-right">
@@ -909,6 +913,10 @@ async function loadReviews(reset = false) {
     div.querySelector('.ri-reply-btn').addEventListener('click', e => {
       e.stopPropagation();
       toggleProfileReplies(r.id);
+    });
+    div.querySelector('.ri-share-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      shareProfileReview(div, e.currentTarget, r);
     });
     container.appendChild(div);
   });
@@ -1712,6 +1720,70 @@ async function uploadAvatar(dataUrl) {
     toast('Upload failed');
   }
 }
+
+// ── Share (screenshot to clipboard) ──────────────────────────
+async function shareProfileReview(item, btn, r) {
+  const isDark = document.documentElement.classList.contains('night-mode');
+  const bgColor = isDark ? '#222228' : '#F5F0E8';
+
+  const wrapper = document.createElement('div');
+  Object.assign(wrapper.style, {
+    position: 'fixed', top: '-9999px', left: '-9999px',
+    width: item.offsetWidth + 'px',
+    background: bgColor,
+    padding: '20px',
+    borderRadius: '12px',
+    boxSizing: 'border-box',
+    fontFamily: 'Instrument Sans, sans-serif',
+  });
+
+  const clone = item.cloneNode(true);
+  clone.style.cssText = 'cursor:default;border-bottom:none;';
+  // Remove reply section row and any buttons from clone
+  clone.querySelector('.review-item-reply-row')?.remove();
+  clone.querySelectorAll('button').forEach(b => b.remove());
+  wrapper.appendChild(clone);
+
+  const brand = document.createElement('div');
+  Object.assign(brand.style, {
+    marginTop: '14px', fontSize: '11px', color: isDark ? '#888' : '#aaa',
+    textAlign: 'right', fontFamily: 'DM Mono, monospace',
+  });
+  brand.textContent = 'ydkball.net';
+  wrapper.appendChild(brand);
+
+  document.body.appendChild(wrapper);
+
+  const origHTML = btn.innerHTML;
+  btn.textContent = '…';
+  btn.disabled = true;
+
+  try {
+    const canvas = await html2canvas(wrapper, {
+      useCORS: true,
+      scale: 2,
+      backgroundColor: bgColor,
+    });
+    document.body.removeChild(wrapper);
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 10l4 4 8-8"/></svg> Copied!`;
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = origHTML; btn.disabled = false; }, 2000);
+      } catch {
+        window.open(canvas.toDataURL(), '_blank');
+        btn.innerHTML = origHTML;
+        btn.disabled = false;
+      }
+    });
+  } catch {
+    if (document.body.contains(wrapper)) document.body.removeChild(wrapper);
+    btn.innerHTML = origHTML;
+    btn.disabled = false;
+  }
+}
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 </body>
 </html>

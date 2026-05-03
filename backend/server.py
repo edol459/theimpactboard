@@ -2578,6 +2578,15 @@ def submit_review(game_id):
             WHERE game_id = %s
         """, (game_id, game_id, game_id))
 
+        # Invalidate scoreboard caches so home page reflects the new review
+        cur.execute("SELECT game_date FROM games WHERE game_id = %s", (game_id,))
+        date_row = cur.fetchone()
+        if date_row:
+            date_str = str(date_row["game_date"])
+            _past_sb_cache.pop(date_str, None)
+            if _today_sb_cache.get("date") == date_str:
+                _today_sb_cache.clear()
+
         conn.commit()
         cur.close(); conn.close()
         return jsonify({"review": _format_review(review)}), 201
@@ -2608,6 +2617,13 @@ def delete_review(game_id):
                     rating_sum   = (SELECT COALESCE(SUM(rating), 0) FROM game_reviews WHERE game_id = %s)
                 WHERE game_id = %s
             """, (game_id, game_id, game_id))
+            cur.execute("SELECT game_date FROM games WHERE game_id = %s", (game_id,))
+            date_row = cur.fetchone()
+            if date_row:
+                date_str = str(date_row["game_date"])
+                _past_sb_cache.pop(date_str, None)
+                if _today_sb_cache.get("date") == date_str:
+                    _today_sb_cache.clear()
         conn.commit()
         cur.close(); conn.close()
         if not deleted:

@@ -152,6 +152,22 @@ def _ensure_tables():
         cur.execute("""
             ALTER TABLE users ADD COLUMN IF NOT EXISTS night_mode BOOLEAN DEFAULT FALSE
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS content_reports (
+                id          SERIAL PRIMARY KEY,
+                reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                review_id   INTEGER REFERENCES game_reviews(id) ON DELETE CASCADE,
+                created_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_blocks (
+                blocker_id  INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                blocked_id  INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                created_at  TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (blocker_id, blocked_id)
+            )
+        """)
         # Backfill review_count / rating_sum from game_reviews (in case they drifted out of sync)
         cur.execute("""
             UPDATE games g
@@ -3016,6 +3032,13 @@ def get_recent_reviews():
         """
         friends_params = [user_id, user_id]
 
+    # WHERE clause that excludes blocked users
+    block_where  = ""
+    block_params = []
+    if user_id:
+        block_where  = "AND gr.user_id NOT IN (SELECT blocked_id FROM user_blocks WHERE blocker_id = %s)"
+        block_params = [user_id]
+
     try:
         conn = get_conn()
         cur  = conn.cursor()
@@ -3039,10 +3062,11 @@ def get_recent_reviews():
                 LEFT JOIN review_likes rl_me ON rl_me.review_id = gr.id
                                             AND rl_me.user_id   = %s
                 {friends_join}
+                WHERE 1=1 {block_where}
                 GROUP BY gr.id, u.id, g.game_id
                 ORDER BY gr.created_at DESC
                 LIMIT %s OFFSET %s
-            """, friends_params + [user_id, limit, offset])
+            """, friends_params + [user_id] + block_params + [limit, offset])
         else:
             cur.execute(f"""
                 SELECT
@@ -3466,6 +3490,15 @@ def get_user_profile(user_id):
         """, (user_id,))
         favorites = [dict(r) for r in cur.fetchall()]
 
+        # Block status relative to viewer
+        is_blocked = False
+        if viewer and viewer["id"] != user_id:
+            cur.execute("""
+                SELECT 1 FROM user_blocks
+                WHERE blocker_id = %s AND blocked_id = %s
+            """, (viewer["id"], user_id))
+            is_blocked = cur.fetchone() is not None
+
         cur.close(); conn.close()
 
         return jsonify({
@@ -3486,8 +3519,9 @@ def get_user_profile(user_id):
             },
             "favorites":     favorites,
             "friend_count":  friend_count,
-            "friend_status": friend_status,  # null if viewing own profile or not logged in
+            "friend_status": friend_status,
             "is_own":        viewer and viewer["id"] == user_id,
+            "is_blocked":    is_blocked,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3666,6 +3700,101 @@ def remove_friend(target_id):
         cur.close(); conn.close()
         if not deleted:
             return jsonify({"error": "No relationship found"}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Moderation ────────────────────────────────────────────────────
+
+@app.route("/api/reports", methods=["POST"])
+@login_required
+def report_content():
+    me = current_user()
+    data = request.get_json(force=True) or {}
+    review_id = data.get("review_id")
+    if not review_id:
+        return jsonify({"error": "review_id required"}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "INSERT INTO content_reports (reporter_id, review_id) VALUES (%s, %s)",
+            (me["id"], review_id)
+        )
+        cur.execute("""
+            SELECT gr.review_text, u.display_name, gr.game_id
+            FROM game_reviews gr
+            JOIN users u ON gr.user_id = u.id
+            WHERE gr.id = %s
+        """, (review_id,))
+        row = cur.fetchone()
+        conn.commit()
+        cur.close(); conn.close()
+
+        import os as _os, smtplib
+        from email.mime.text import MIMEText
+        report_email = _os.getenv("REPORT_EMAIL")
+        smtp_user    = _os.getenv("SMTP_USER")
+        smtp_pass    = _os.getenv("SMTP_PASS")
+        if report_email and smtp_user and smtp_pass and row:
+            try:
+                body = (
+                    f"New content report\n\n"
+                    f"Reported by user ID: {me['id']} ({me.get('display_name','?')})\n"
+                    f"Review ID: {review_id}\n"
+                    f"Author: {row['display_name']}\n"
+                    f"Game: {row['game_id']}\n"
+                    f"Text: {row['review_text'] or '(no text)'}\n"
+                )
+                msg = MIMEText(body)
+                msg["Subject"] = f"[ydkball] Content report — review #{review_id}"
+                msg["From"]    = smtp_user
+                msg["To"]      = report_email
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
+                    s.login(smtp_user, smtp_pass)
+                    s.sendmail(smtp_user, report_email, msg.as_string())
+            except Exception as mail_err:
+                print(f"[report] email failed: {mail_err}")
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/users/<int:target_id>/block", methods=["POST"])
+@login_required
+def block_user(target_id):
+    me = current_user()
+    if me["id"] == target_id:
+        return jsonify({"error": "Cannot block yourself"}), 400
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO user_blocks (blocker_id, blocked_id)
+            VALUES (%s, %s) ON CONFLICT DO NOTHING
+        """, (me["id"], target_id))
+        conn.commit()
+        cur.close(); conn.close()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/users/<int:target_id>/block", methods=["DELETE"])
+@login_required
+def unblock_user(target_id):
+    me = current_user()
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute(
+            "DELETE FROM user_blocks WHERE blocker_id = %s AND blocked_id = %s",
+            (me["id"], target_id)
+        )
+        conn.commit()
+        cur.close(); conn.close()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

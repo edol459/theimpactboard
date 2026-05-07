@@ -1716,8 +1716,10 @@ def get_top_performers():
 @app.route("/api/preview/records/<away>/<home>")
 def preview_records(away, home):
     """Returns regular-season W/L records for both teams from the games table."""
-    away = away.upper()
-    home = home.upper()
+    away   = away.upper()
+    home   = home.upper()
+    league = request.args.get("league", "nba").lower()
+    season = _get_wnba_season() if league == "wnba" else get_current_season()
     try:
         conn = get_conn()
         cur  = conn.cursor()
@@ -1734,6 +1736,7 @@ def preview_records(away, home):
                 WHERE season_type = 'Regular Season'
                   AND status = 'Final'
                   AND season = %s
+                  AND league = %s
                   AND home_team_abbr = ANY(%s)
                 UNION ALL
                 SELECT
@@ -1743,10 +1746,11 @@ def preview_records(away, home):
                 WHERE season_type = 'Regular Season'
                   AND status = 'Final'
                   AND season = %s
+                  AND league = %s
                   AND away_team_abbr = ANY(%s)
             ) t
             GROUP BY team_abbr
-        """, (get_current_season(), [away, home], get_current_season(), [away, home]))
+        """, (season, league, [away, home], season, league, [away, home]))
         rows = {r["team_abbr"]: r for r in cur.fetchall()}
         conn.close()
 
@@ -1814,8 +1818,9 @@ def preview_h2h(away, home):
     """
     Returns last 5 head-to-head games between two teams from the local DB.
     """
-    away = away.upper()
-    home = home.upper()
+    away   = away.upper()
+    home   = home.upper()
+    league = request.args.get("league", "nba").lower()
 
     try:
         conn = get_conn()
@@ -1825,13 +1830,14 @@ def preview_h2h(away, home):
                    home_score, away_score
             FROM games
             WHERE status = 'Final'
+              AND league = %s
               AND (
                     (home_team_abbr = %s AND away_team_abbr = %s)
                  OR (home_team_abbr = %s AND away_team_abbr = %s)
               )
             ORDER BY game_date DESC
             LIMIT 5
-        """, (home, away, away, home))
+        """, (league, home, away, away, home))
         rows = cur.fetchall()
         conn.close()
 
@@ -5206,6 +5212,182 @@ def get_wnba_top_performers():
 
     all_players.sort(key=lambda x: x["total"], reverse=True)
     return jsonify({"players": all_players[:5], "date": date_str})
+
+
+# ── ESPN WNBA team ID cache ───────────────────────────────────────────────────
+_wnba_team_ids: dict = {}   # abbr → espn_team_id
+_wnba_team_ids_ts: float = 0.0
+
+def _get_wnba_team_ids() -> dict:
+    """Fetch ESPN WNBA team list and return abbr→id map. Cached 24h."""
+    global _wnba_team_ids, _wnba_team_ids_ts
+    if _wnba_team_ids and _time.time() - _wnba_team_ids_ts < 86400:
+        return _wnba_team_ids
+    try:
+        url  = "https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/teams"
+        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        result = {}
+        for entry in resp.json().get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", []):
+            team = entry.get("team", {})
+            abbr = team.get("abbreviation", "").upper()
+            tid  = team.get("id", "")
+            if abbr and tid:
+                result[abbr] = str(tid)
+        if result:
+            _wnba_team_ids = result
+            _wnba_team_ids_ts = _time.time()
+        return result
+    except Exception as e:
+        print(f"[wnba] team IDs fetch error: {e}", flush=True)
+        return _wnba_team_ids  # return stale cache
+
+
+def _wnba_box_star(event_id: str) -> tuple[str | None, str | None]:
+    """Fetch ESPN WNBA boxscore, return (away_player_id, home_player_id) top P+R+A each."""
+    try:
+        url  = (f"https://site.api.espn.com/apis/site/v2/sports/basketball"
+                f"/wnba/summary?event={event_id}")
+        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        bs_teams = resp.json().get("boxscore", {}).get("players", [])
+        # bs_teams order: [away, home]
+        results = []
+        for team_entry in bs_teams:
+            best_id, best_total = None, -1
+            for section in team_entry.get("statistics", []):
+                labels = section.get("names") or section.get("labels") or []
+                for ae in section.get("athletes", []):
+                    stats_list = ae.get("stats", [])
+                    if not stats_list:
+                        continue
+                    stat_map = {labels[i]: stats_list[i]
+                                for i in range(min(len(labels), len(stats_list)))}
+                    min_val = stat_map.get("MIN", "0:00")
+                    if not min_val or min_val in ("0:00", "--", ""):
+                        continue
+                    def _si(v):
+                        try:
+                            s = str(v)
+                            return int(s.split("-")[0]) if "-" in s else int(float(s))
+                        except Exception:
+                            return 0
+                    total = _si(stat_map.get("PTS", 0)) + _si(stat_map.get("REB", 0)) + _si(stat_map.get("AST", 0))
+                    if total > best_total:
+                        best_total = total
+                        best_id = ae.get("athlete", {}).get("id")
+            results.append(best_id)
+        # pad to 2 slots
+        while len(results) < 2:
+            results.append(None)
+        return results[0], results[1]
+    except Exception as e:
+        print(f"[wnba] box_star error {event_id}: {e}", flush=True)
+        return None, None
+
+
+def _wnba_top_player_for_team(team_id: str) -> str | None:
+    """Fetch ESPN WNBA roster and return the first active player ID (best available)."""
+    try:
+        url  = (f"https://site.api.espn.com/apis/site/v2/sports/basketball"
+                f"/wnba/teams/{team_id}/roster")
+        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        athletes = resp.json().get("athletes", [])
+        if athletes:
+            return str(athletes[0].get("id", ""))
+    except Exception as e:
+        print(f"[wnba] roster error team {team_id}: {e}", flush=True)
+    return None
+
+
+@app.route("/api/wnba/game-posters", methods=["POST"])
+def get_wnba_game_posters():
+    """
+    Returns best-fit ESPN WNBA player IDs for scoreboard poster headers.
+    Final games → top P+R+A from boxscore.
+    Upcoming/live → first player from team roster.
+
+    Body:    {"games": [{"gameId":"...","away":"NY","home":"IND","status":3}, ...]}
+    Returns: {"posters": {"<gameId>": {"away": "<espnId>", "home": "<espnId>"}}}
+    """
+    body  = request.get_json(force=True, silent=True) or {}
+    games = body.get("games", [])
+    if not games:
+        return jsonify({"posters": {}})
+
+    posters: dict = {}
+    team_ids = _get_wnba_team_ids()
+
+    final_games    = [g for g in games if int(g.get("status", 1) or 1) == 3]
+    nonfinal_games = [g for g in games if int(g.get("status", 1) or 1) != 3]
+
+    # Finals → boxscore actual leaders (parallel)
+    if final_games:
+        with ThreadPoolExecutor(max_workers=min(len(final_games), 6)) as pool:
+            futures = {pool.submit(_wnba_box_star, g["gameId"]): g for g in final_games}
+            for fut in as_completed(futures):
+                g = futures[fut]
+                away_id, home_id = fut.result()
+                posters[g["gameId"]] = {"away": away_id, "home": home_id}
+
+    # Non-finals → roster top player
+    for g in nonfinal_games:
+        gid      = g.get("gameId", "")
+        away_tid = team_ids.get(g.get("away", "").upper())
+        home_tid = team_ids.get(g.get("home", "").upper())
+        away_id  = _wnba_top_player_for_team(away_tid) if away_tid else None
+        home_id  = _wnba_top_player_for_team(home_tid) if home_tid else None
+        posters[gid] = {"away": away_id, "home": home_id}
+
+    return jsonify({"posters": posters})
+
+
+# ── /api/wnba/team-stats/<abbr> ───────────────────────────────────────────────
+_wnba_team_stats_cache: dict = {}   # abbr → {"data": dict, "ts": float}
+
+@app.route("/api/wnba/team-stats/<abbr>")
+def get_wnba_team_stats(abbr):
+    """WNBA team season averages from ESPN. Cached 1 hour."""
+    abbr = abbr.upper()
+    cached = _wnba_team_stats_cache.get(abbr)
+    if cached and _time.time() - cached["ts"] < 3600:
+        return jsonify(cached["data"])
+
+    team_ids = _get_wnba_team_ids()
+    tid = team_ids.get(abbr)
+    if not tid:
+        return jsonify({"error": f"Unknown WNBA team: {abbr}"}), 404
+
+    try:
+        url  = (f"https://site.api.espn.com/apis/site/v2/sports/basketball"
+                f"/wnba/teams/{tid}/statistics")
+        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        cats = resp.json().get("results", {}).get("stats", {}).get("categories", [])
+
+        def _find(name):
+            for cat in cats:
+                for stat in cat.get("stats", []):
+                    if stat.get("name", "").lower() == name.lower():
+                        v = stat.get("value")
+                        return round(float(v), 1) if v is not None else None
+            return None
+
+        result = {
+            "abbr":    abbr,
+            "ppg":     _find("points"),
+            "rpg":     _find("rebounds"),
+            "apg":     _find("assists"),
+            "topg":    _find("turnovers"),
+            "fg_pct":  _find("fieldGoalPct"),
+            "fg3_pct": _find("threePointFieldGoalPct"),
+        }
+        _wnba_team_stats_cache[abbr] = {"data": result, "ts": _time.time()}
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e), "abbr": abbr}), 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

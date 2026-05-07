@@ -168,6 +168,9 @@ def _ensure_tables():
                 PRIMARY KEY (blocker_id, blocked_id)
             )
         """)
+        cur.execute("""
+            ALTER TABLE games ADD COLUMN IF NOT EXISTS league TEXT NOT NULL DEFAULT 'nba'
+        """)
         # Backfill review_count / rating_sum from game_reviews (in case they drifted out of sync)
         cur.execute("""
             UPDATE games g
@@ -194,14 +197,16 @@ _ensure_tables()
 def get_seasons():
     try:
         source = request.args.get("source", "stats")  # "stats" | "games"
+        league = request.args.get("league", "nba").lower().strip()
         conn = get_conn()
         cur  = conn.cursor()
         if source == "games":
             cur.execute("""
                 SELECT DISTINCT season, season_type
                 FROM games
+                WHERE league = %s
                 ORDER BY season DESC, season_type
-            """)
+            """, (league,))
         else:
             cur.execute("""
                 SELECT DISTINCT season, season_type
@@ -2387,6 +2392,7 @@ def _format_game(g: dict) -> dict:
         "home_score":     g["home_score"],
         "away_score":     g["away_score"],
         "status":         g["status"],
+        "league":         g.get("league", "nba"),
         "review_count":   g.get("review_count", 0),
         "avg_stars":      avg_stars,
         "bayesian_rating": g.get("bayesian_rating"),
@@ -2398,7 +2404,9 @@ def _format_game(g: dict) -> dict:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.route("/api/games")
 def get_games():
-    season      = request.args.get("season",      get_current_season())
+    league      = request.args.get("league",      "nba").lower().strip()
+    default_season = _get_wnba_season() if league == "wnba" else get_current_season()
+    season      = request.args.get("season",      default_season)
     season_type = request.args.get("season_type", "").strip()
     team        = request.args.get("team",        "").upper().strip()
     sort        = request.args.get("sort",        "date")
@@ -2414,8 +2422,8 @@ def get_games():
     }
     order_col = SORT_MAP.get(sort, "g.game_date")
 
-    filters = ["g.season = %s", "g.status = 'Final'"]
-    params  = [season]
+    filters = ["g.season = %s", "g.status = 'Final'", "g.league = %s"]
+    params  = [season, league]
     if season_type:
         filters.append("g.season_type = %s")
         params.append(season_type)
@@ -4907,6 +4915,297 @@ def wowy_stat_line():
 
 
 start_sb_poller()
+
+
+# ── WNBA ──────────────────────────────────────────────────────────────────────
+
+_wnba_past_sb_cache:   dict = {}
+_wnba_future_sb_cache: dict = {}
+_wnba_today_sb_cache:  dict = {}
+
+_ESPN_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept":     "application/json",
+}
+
+
+def _get_wnba_season() -> str:
+    """Current WNBA season year, e.g. '2025'. Season runs May–October."""
+    today = date.today()
+    return str(today.year) if today.month >= 5 else str(today.year - 1)
+
+
+def _espn_wnba_scoreboard(date_str: str) -> list | None:
+    """Fetch WNBA scoreboard from ESPN for YYYY-MM-DD.
+    Returns list of game dicts (same shape as NBA scoreboard) or None on failure."""
+    date_compact = date_str.replace("-", "")
+    url = (f"https://site.api.espn.com/apis/site/v2/sports/basketball/wnba"
+           f"/scoreboard?dates={date_compact}")
+    try:
+        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+        resp.raise_for_status()
+        events = resp.json().get("events", [])
+        games = []
+        for event in events:
+            competitions = event.get("competitions", [])
+            if not competitions:
+                continue
+            comp        = competitions[0]
+            status_obj  = comp.get("status", {})
+            status_name = status_obj.get("type", {}).get("name", "")
+
+            if status_name == "STATUS_FINAL":
+                game_status, game_status_text = 3, "Final"
+            elif status_name == "STATUS_IN_PROGRESS":
+                game_status = 2
+                game_status_text = status_obj.get("displayClock", "")
+            else:
+                game_status, game_status_text = 1, "Scheduled"
+
+            home_d, away_d = {}, {}
+            for ct in comp.get("competitors", []):
+                abbr  = ct.get("team", {}).get("abbreviation", "")
+                score = int(ct.get("score", 0) or 0)
+                if ct.get("homeAway") == "home":
+                    home_d = {"abbr": abbr, "score": score}
+                else:
+                    away_d = {"abbr": abbr, "score": score}
+
+            game_id = event.get("id", "")
+            g = {
+                "gameId":         game_id,
+                "gameStatus":     game_status,
+                "gameStatusText": game_status_text,
+                "period":         status_obj.get("period", 0),
+                "gameClock":      status_obj.get("displayClock", ""),
+                "gameTimeUTC":    comp.get("date", ""),
+                "away": away_d,
+                "home": home_d,
+            }
+            games.append(g)
+
+            if game_status == 3 and game_id:
+                _upsert_wnba_game(game_id, date_str,
+                                  home_d.get("abbr", ""), away_d.get("abbr", ""),
+                                  home_d.get("score", 0), away_d.get("score", 0))
+        return games
+    except Exception as e:
+        print(f"[wnba] ESPN fetch error: {e}", flush=True)
+        return None
+
+
+def _upsert_wnba_game(game_id, game_date, home_abbr, away_abbr, home_score, away_score):
+    """Upsert a completed WNBA game into the shared games table."""
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO games (
+                game_id, season, season_type, game_date,
+                home_team_abbr, away_team_abbr,
+                home_score, away_score, status, league
+            ) VALUES (%s, %s, 'Regular Season', %s, %s, %s, %s, %s, 'Final', 'wnba')
+            ON CONFLICT (game_id) DO UPDATE SET
+                home_score = EXCLUDED.home_score,
+                away_score = EXCLUDED.away_score,
+                status     = 'Final',
+                updated_at = NOW()
+            WHERE games.status != 'Final' OR games.home_score IS NULL
+        """, (game_id, _get_wnba_season(), game_date,
+              home_abbr, away_abbr, home_score, away_score))
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"[wnba] upsert error: {e}", flush=True)
+
+
+def _enrich_wnba_games(games: list):
+    """Attach review stats to WNBA game dicts in-place."""
+    if not games:
+        return
+    game_ids = [str(g.get("gameId", "")) for g in games if g.get("gameId")]
+    if not game_ids:
+        return
+    review_stats: dict = {}
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT game_id,
+                   COUNT(*) AS review_count,
+                   ROUND(AVG(rating)::float / 2, 2) AS avg_stars
+            FROM game_reviews
+            WHERE game_id = ANY(%s)
+            GROUP BY game_id
+        """, (game_ids,))
+        for r in cur.fetchall():
+            review_stats[r["game_id"]] = {
+                "avg_stars":    r["avg_stars"],
+                "review_count": int(r["review_count"] or 0),
+            }
+        cur.close(); conn.close()
+    except Exception:
+        pass
+    for g in games:
+        rs = review_stats.get(str(g.get("gameId", "")), {})
+        g["avg_stars"]    = rs.get("avg_stars")
+        g["review_count"] = rs.get("review_count", 0)
+        g["is_playoffs"]  = False
+
+
+# ── /api/wnba/scoreboard?date=YYYY-MM-DD ─────────────────────────────────────
+@app.route("/api/wnba/scoreboard")
+def get_wnba_scoreboard():
+    date_str    = request.args.get("date", "").strip()
+    _game_today = _compute_game_today()
+    if not date_str:
+        date_str = _game_today
+
+    is_past  = date_str < _game_today
+    is_today = date_str == _game_today
+
+    if is_past and date_str in _wnba_past_sb_cache:
+        return jsonify(_wnba_past_sb_cache[date_str]["payload"])
+
+    # Past — DB first
+    if is_past:
+        try:
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute("""
+                SELECT game_id, home_team_abbr, away_team_abbr, home_score, away_score
+                FROM games
+                WHERE game_date = %s AND league = 'wnba' AND status = 'Final'
+                ORDER BY game_id
+            """, (date_str,))
+            db_rows = cur.fetchall()
+            cur.close(); conn.close()
+            if db_rows:
+                games = [{
+                    "gameId": r["game_id"], "gameStatus": 3,
+                    "gameStatusText": "Final", "period": 0,
+                    "gameClock": "", "gameTimeUTC": "",
+                    "away": {"abbr": r["away_team_abbr"], "score": int(r["away_score"] or 0)},
+                    "home": {"abbr": r["home_team_abbr"], "score": int(r["home_score"] or 0)},
+                } for r in db_rows]
+                _enrich_wnba_games(games)
+                payload = {"games": games, "date": date_str}
+                _wnba_past_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
+                return jsonify(payload)
+        except Exception:
+            pass
+
+    # Today — serve from in-memory cache (TTL 2 min)
+    if is_today:
+        c = _wnba_today_sb_cache
+        if c.get("date") == _game_today and _time.time() - c.get("ts", 0) < 120:
+            return jsonify(c["payload"])
+
+    # Future — check cache (TTL 60 min)
+    if not is_past and not is_today and date_str in _wnba_future_sb_cache:
+        entry = _wnba_future_sb_cache[date_str]
+        if _time.time() - entry["ts"] < 3600:
+            return jsonify(entry["payload"])
+
+    games = _espn_wnba_scoreboard(date_str) or []
+    _enrich_wnba_games(games)
+    payload = {"games": games, "date": date_str}
+
+    if is_past:
+        _wnba_past_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
+    elif is_today:
+        _wnba_today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
+    else:
+        _wnba_future_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
+
+    return jsonify(payload)
+
+
+# ── /api/wnba/top-performers?date=YYYY-MM-DD ─────────────────────────────────
+@app.route("/api/wnba/top-performers")
+def get_wnba_top_performers():
+    date_str    = request.args.get("date", "").strip()
+    _game_today = _compute_game_today()
+    if not date_str:
+        date_str = _game_today
+
+    games = _espn_wnba_scoreboard(date_str)
+    if not games:
+        try:
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute(
+                "SELECT game_id FROM games WHERE game_date = %s AND league = 'wnba' AND status = 'Final'",
+                (date_str,)
+            )
+            rows = cur.fetchall()
+            cur.close(); conn.close()
+            games = [{"gameId": r["game_id"], "gameStatus": 3, "away": {}, "home": {}} for r in rows]
+        except Exception:
+            games = []
+
+    if not games:
+        return jsonify({"players": [], "date": date_str})
+
+    all_players = []
+    for g in games:
+        gid = g.get("gameId", "")
+        if not gid:
+            continue
+        away_abbr = g.get("away", {}).get("abbr", "")
+        home_abbr = g.get("home", {}).get("abbr", "")
+        matchup   = f"{away_abbr} @ {home_abbr}" if away_abbr else gid
+        is_live   = g.get("gameStatus") == 2
+        try:
+            url  = (f"https://site.api.espn.com/apis/site/v2/sports/basketball"
+                    f"/wnba/summary?event={gid}")
+            resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
+            resp.raise_for_status()
+            bs_players = resp.json().get("boxscore", {}).get("players", [])
+            for team_entry in bs_players:
+                team_abbr = team_entry.get("team", {}).get("abbreviation", "")
+                for section in team_entry.get("statistics", []):
+                    labels = section.get("names") or section.get("labels") or []
+                    for ae in section.get("athletes", []):
+                        stats_list = ae.get("stats", [])
+                        if not stats_list:
+                            continue
+                        # Build label→value map
+                        stat_map = {labels[i]: stats_list[i]
+                                    for i in range(min(len(labels), len(stats_list)))}
+                        min_val = stat_map.get("MIN", "0:00")
+                        if not min_val or min_val in ("0:00", "--", ""):
+                            continue
+
+                        def _si(v):
+                            try:
+                                s = str(v)
+                                return int(s.split("-")[0]) if "-" in s else int(float(s))
+                            except Exception:
+                                return 0
+
+                        pts = _si(stat_map.get("PTS", 0))
+                        reb = _si(stat_map.get("REB", 0))
+                        ast = _si(stat_map.get("AST", 0))
+                        athlete = ae.get("athlete", {})
+                        all_players.append({
+                            "player_id": athlete.get("id"),
+                            "name":      athlete.get("displayName", ""),
+                            "team":      team_abbr,
+                            "matchup":   matchup,
+                            "game_id":   gid,
+                            "is_live":   is_live,
+                            "pts":       pts,
+                            "reb":       reb,
+                            "ast":       ast,
+                            "total":     pts + reb + ast,
+                            "league":    "wnba",
+                        })
+        except Exception as e:
+            print(f"[wnba] boxscore error {gid}: {e}", flush=True)
+
+    all_players.sort(key=lambda x: x["total"], reverse=True)
+    return jsonify({"players": all_players[:5], "date": date_str})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

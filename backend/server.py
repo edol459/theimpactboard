@@ -5345,7 +5345,7 @@ def _wnba_get_team_star(abbr: str) -> int | None:
 
     player_id = None
     try:
-        conn = _get_db()
+        conn = get_conn()
         cur  = conn.cursor()
         cur.execute("""
             SELECT player_id
@@ -5379,12 +5379,39 @@ def get_wnba_game_posters():
     if not games:
         return jsonify({"posters": {}})
 
+    # Collect unique team abbrs that need a DB lookup (not yet cached)
+    now       = _time.time()
+    all_abbrs = {g.get("away", "").upper() for g in games} | {g.get("home", "").upper() for g in games}
+    uncached  = [a for a in all_abbrs
+                 if not (a in _wnba_team_star_cache and now - _wnba_team_star_cache[a]["ts"] < _WNBA_TEAM_STAR_TTL)]
+
+    if uncached:
+        try:
+            conn = get_conn()
+            cur  = conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT ON (team) team, player_id
+                FROM   wnba_player_seasons
+                WHERE  team = ANY(%s) AND season_type = 'Regular Season'
+                ORDER  BY team, season DESC, (pts + reb + ast) DESC NULLS LAST
+            """, (uncached,))
+            for row in cur.fetchall():
+                abbr = row["team"]
+                _wnba_team_star_cache[abbr] = {"id": int(row["player_id"]), "ts": now}
+            # Mark any abbrs with no data as None
+            for abbr in uncached:
+                if abbr not in _wnba_team_star_cache or _wnba_team_star_cache[abbr]["ts"] != now:
+                    _wnba_team_star_cache[abbr] = {"id": None, "ts": now}
+            cur.close(); conn.close()
+        except Exception as e:
+            print(f"[wnba] game-posters bulk lookup error: {e}", flush=True)
+
     posters: dict = {}
     for g in games:
-        gid      = g.get("gameId", "")
-        away_id  = _wnba_get_team_star(g.get("away", ""))
-        home_id  = _wnba_get_team_star(g.get("home", ""))
-        posters[gid] = {"away": away_id, "home": home_id}
+        gid     = g.get("gameId", "")
+        away_cd = _wnba_team_star_cache.get(g.get("away", "").upper(), {})
+        home_cd = _wnba_team_star_cache.get(g.get("home", "").upper(), {})
+        posters[gid] = {"away": away_cd.get("id"), "home": home_cd.get("id")}
 
     return jsonify({"posters": posters})
 
@@ -5408,7 +5435,7 @@ def get_wnba_leaderboard():
         sort_col = "pts"
 
     try:
-        conn = _get_db()
+        conn = get_conn()
         cur  = conn.cursor()
         if not season:
             cur.execute("SELECT MAX(season) FROM wnba_player_seasons WHERE season_type = %s", (season_type,))
@@ -5440,7 +5467,7 @@ def get_wnba_player_stats():
     if not player_id:
         return jsonify({"error": "player_id required"}), 400
     try:
-        conn = _get_db()
+        conn = get_conn()
         cur  = conn.cursor()
         if not season:
             cur.execute("SELECT MAX(season) FROM wnba_player_seasons WHERE season_type = %s", (season_type,))

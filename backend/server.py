@@ -3507,7 +3507,8 @@ def get_user_profile(user_id):
         cur.execute("""
             SELECT fg.position, fg.game_id,
                    g.home_team_abbr, g.away_team_abbr,
-                   g.home_score, g.away_score, g.game_date
+                   g.home_score, g.away_score, g.game_date,
+                   COALESCE(g.league, 'nba') AS league
             FROM favorite_games fg
             LEFT JOIN games g ON g.game_id = fg.game_id
             WHERE fg.user_id = %s
@@ -5297,19 +5298,44 @@ def _wnba_box_star(event_id: str) -> tuple[str | None, str | None]:
         return None, None
 
 
-def _wnba_top_player_for_team(team_id: str) -> str | None:
-    """Fetch ESPN WNBA roster and return the first active player ID (best available)."""
+_wnba_team_star_cache: dict = {}  # abbr → {"id": str|None, "ts": float}
+_WNBA_TEAM_STAR_TTL = 6 * 3600
+
+
+def _wnba_get_team_star(abbr: str) -> str | None:
+    """
+    Return the ESPN player ID of the top P+R+A player for a WNBA team,
+    derived from their most recent Final game in our DB.
+    Cached 6 hours per team.
+    """
+    abbr = abbr.upper()
+    cached = _wnba_team_star_cache.get(abbr)
+    if cached and _time.time() - cached["ts"] < _WNBA_TEAM_STAR_TTL:
+        return cached["id"]
+
+    player_id = None
     try:
-        url  = (f"https://site.api.espn.com/apis/site/v2/sports/basketball"
-                f"/wnba/teams/{team_id}/roster")
-        resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
-        resp.raise_for_status()
-        athletes = resp.json().get("athletes", [])
-        if athletes:
-            return str(athletes[0].get("id", ""))
+        conn = _get_db()
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT game_id, away_team_abbr, home_team_abbr
+            FROM   games
+            WHERE  league = 'wnba'
+              AND  status = 'Final'
+              AND  (home_team_abbr = %s OR away_team_abbr = %s)
+            ORDER  BY game_date DESC
+            LIMIT  1
+        """, (abbr, abbr))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        if row:
+            away_id, home_id = _wnba_box_star(row["game_id"])
+            player_id = away_id if row["away_team_abbr"] == abbr else home_id
     except Exception as e:
-        print(f"[wnba] roster error team {team_id}: {e}", flush=True)
-    return None
+        print(f"[wnba] team_star error {abbr}: {e}", flush=True)
+
+    _wnba_team_star_cache[abbr] = {"id": player_id, "ts": _time.time()}
+    return player_id
 
 
 @app.route("/api/wnba/game-posters", methods=["POST"])
@@ -5382,11 +5408,9 @@ def get_wnba_game_posters():
             if gid in date_map:
                 posters[gid] = date_map[gid]
             else:
-                # Fall back to roster lookup
-                away_tid = team_ids.get(g.get("away", "").upper())
-                home_tid = team_ids.get(g.get("home", "").upper())
-                away_id  = _wnba_top_player_for_team(away_tid) if away_tid else None
-                home_id  = _wnba_top_player_for_team(home_tid) if home_tid else None
+                # Fall back to DB-based team star (top P+R+A from most recent final)
+                away_id = _wnba_get_team_star(g.get("away", ""))
+                home_id = _wnba_get_team_star(g.get("home", ""))
                 posters[gid] = {"away": away_id, "home": home_id}
 
     return jsonify({"posters": posters})

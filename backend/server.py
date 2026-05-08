@@ -1436,6 +1436,28 @@ def get_scoreboard():
         return jsonify({"error": str(e), "games": [], "date": date}), 200
 
 
+# ── /api/debug/nba-cdn ────────────────────────────────────────────
+@app.route("/api/debug/nba-cdn")
+def debug_nba_cdn():
+    """Temporary endpoint: tests cdn.nba.com accessibility from this server."""
+    results = {}
+    for label, url in [
+        ("live_sb", "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"),
+        ("schedule", "https://cdn.nba.com/static/json/staticData/scheduleLeagueV2_1.json"),
+    ]:
+        try:
+            r = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
+            results[label] = {"status": r.status_code, "bytes": len(r.content),
+                              "date": r.json().get("scoreboard", r.json().get("leagueSchedule", {})).get("gameDate", "N/A") if r.status_code == 200 else None}
+        except Exception as e:
+            results[label] = {"error": str(e)}
+    game_today = _compute_game_today()
+    results["game_today"] = game_today
+    results["cache_date"] = _today_sb_cache.get("date")
+    results["cache_games"] = len(_today_sb_cache.get("payload", {}).get("games", []))
+    return jsonify(results)
+
+
 # ── /api/news ─────────────────────────────────────────────────────
 _news_cache: dict = {}       # {"payload": list, "ts": float}
 _wnba_news_cache: dict = {}  # {"payload": list, "ts": float}

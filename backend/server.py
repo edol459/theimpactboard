@@ -1376,10 +1376,14 @@ def get_scoreboard():
 
 
 # ── /api/news ─────────────────────────────────────────────────────
-_news_cache: dict = {}  # {"payload": list, "ts": float}
+_news_cache: dict = {}       # {"payload": list, "ts": float}
+_wnba_news_cache: dict = {}  # {"payload": list, "ts": float}
 
 _NEWS_SOURCES = [
     ("https://news.google.com/rss/search?q=NBA+basketball&hl=en-US&gl=US&ceid=US:en", None),
+]
+_WNBA_NEWS_SOURCES = [
+    ("https://news.google.com/rss/search?q=WNBA+basketball&hl=en-US&gl=US&ceid=US:en", None),
 ]
 
 def _parse_rss(content, default_source):
@@ -1400,32 +1404,39 @@ def _parse_rss(content, default_source):
             break
     return items
 
-@app.route("/api/news")
-def get_news():
-    if _news_cache.get("payload") and _time.time() - _news_cache.get("ts", 0) < 300:
-        return jsonify({"status": "ok", "items": _news_cache["payload"]})
-    for url, default_source in _NEWS_SOURCES:
+def _fetch_news(sources: list, cache: dict) -> dict:
+    """Fetch RSS news from sources, populate cache, return jsonifiable response dict."""
+    if cache.get("payload") and _time.time() - cache.get("ts", 0) < 300:
+        return {"status": "ok", "items": cache["payload"]}
+    for url, default_source in sources:
         try:
             resp = _requests.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; NothingButNet/1.0)"},
                 timeout=10,
             )
-            print(f"[news] {default_source or 'Google'} status={resp.status_code} len={len(resp.content)}", flush=True)
             if resp.status_code != 200 or not resp.content:
                 continue
             items = _parse_rss(resp.content, default_source)
             if items:
-                _news_cache["payload"] = items
-                _news_cache["ts"] = _time.time()
-                return jsonify({"status": "ok", "items": items})
-            print(f"[news] {default_source or 'Google'} returned 0 items", flush=True)
+                cache["payload"] = items
+                cache["ts"] = _time.time()
+                return {"status": "ok", "items": items}
         except Exception as ex:
-            print(f"[news] {default_source or 'Google'} error: {ex}", flush=True)
-    print("[news] all sources failed", flush=True)
-    if _news_cache.get("payload"):
-        return jsonify({"status": "ok", "items": _news_cache["payload"]})
-    return jsonify({"status": "error", "message": "all news sources unavailable"}), 200
+            print(f"[news] error: {ex}", flush=True)
+    if cache.get("payload"):
+        return {"status": "ok", "items": cache["payload"]}
+    return {"status": "error", "message": "all news sources unavailable"}
+
+@app.route("/api/news")
+def get_news():
+    league = request.args.get("league", "nba").lower()
+    if league == "wnba":
+        result = _fetch_news(_WNBA_NEWS_SOURCES, _wnba_news_cache)
+    else:
+        result = _fetch_news(_NEWS_SOURCES, _news_cache)
+    status = 200 if result.get("status") == "ok" else 200
+    return jsonify(result), status
 
 
 # ── Injury helpers ───────────────────────────────────────────────
@@ -5331,14 +5342,52 @@ def get_wnba_game_posters():
                 away_id, home_id = fut.result()
                 posters[g["gameId"]] = {"away": away_id, "home": home_id}
 
-    # Non-finals → roster top player
-    for g in nonfinal_games:
-        gid      = g.get("gameId", "")
-        away_tid = team_ids.get(g.get("away", "").upper())
-        home_tid = team_ids.get(g.get("home", "").upper())
-        away_id  = _wnba_top_player_for_team(away_tid) if away_tid else None
-        home_id  = _wnba_top_player_for_team(home_tid) if home_tid else None
-        posters[gid] = {"away": away_id, "home": home_id}
+    # Non-finals → scoreboard leaders (top scorer for the team), fall back to roster
+    if nonfinal_games:
+        from datetime import date as _date, timedelta
+        date_map: dict[str, dict] = {}  # game_id → {away, home}
+        try:
+            for delta in [0, 1, -1]:
+                d = _date.today()
+                if delta:
+                    d = d + timedelta(days=delta)
+                url = (f"https://site.api.espn.com/apis/site/v2/sports/basketball/wnba"
+                       f"/scoreboard?dates={d.strftime('%Y%m%d')}")
+                resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=8)
+                if resp.status_code != 200:
+                    continue
+                for event in resp.json().get("events", []):
+                    eid = str(event.get("id", ""))
+                    away_id, home_id = None, None
+                    for comp in event.get("competitions", [])[:1]:
+                        for ct in comp.get("competitors", []):
+                            ha = ct.get("homeAway", "")
+                            pid = None
+                            for cat in ct.get("leaders", []):
+                                ls = cat.get("leaders", [])
+                                if ls:
+                                    pid = ls[0].get("athlete", {}).get("id")
+                                    break
+                            if ha == "away":
+                                away_id = str(pid) if pid else None
+                            elif ha == "home":
+                                home_id = str(pid) if pid else None
+                    if away_id or home_id:
+                        date_map[eid] = {"away": away_id, "home": home_id}
+        except Exception as e:
+            print(f"[wnba] scoreboard leaders error: {e}", flush=True)
+
+        for g in nonfinal_games:
+            gid = g.get("gameId", "")
+            if gid in date_map:
+                posters[gid] = date_map[gid]
+            else:
+                # Fall back to roster lookup
+                away_tid = team_ids.get(g.get("away", "").upper())
+                home_tid = team_ids.get(g.get("home", "").upper())
+                away_id  = _wnba_top_player_for_team(away_tid) if away_tid else None
+                home_id  = _wnba_top_player_for_team(home_tid) if home_tid else None
+                posters[gid] = {"away": away_id, "home": home_id}
 
     return jsonify({"posters": posters})
 
@@ -5374,14 +5423,18 @@ def get_wnba_team_stats(abbr):
                         return round(float(v), 1) if v is not None else None
             return None
 
+        def _pct(name):
+            v = _find(name)
+            return round(v / 100, 4) if v is not None else None
+
         result = {
             "abbr":    abbr,
-            "ppg":     _find("points"),
-            "rpg":     _find("rebounds"),
-            "apg":     _find("assists"),
-            "topg":    _find("turnovers"),
-            "fg_pct":  _find("fieldGoalPct"),
-            "fg3_pct": _find("threePointFieldGoalPct"),
+            "ppg":     _find("avgPoints"),
+            "rpg":     _find("avgRebounds"),
+            "apg":     _find("avgAssists"),
+            "topg":    _find("avgTurnovers"),
+            "fg_pct":  _pct("fieldGoalPct"),
+            "fg3_pct": _pct("threePointFieldGoalPct"),
         }
         _wnba_team_stats_cache[abbr] = {"data": result, "ts": _time.time()}
         return jsonify(result)

@@ -172,6 +172,19 @@ def _ensure_tables():
             ALTER TABLE games ADD COLUMN IF NOT EXISTS league TEXT NOT NULL DEFAULT 'nba'
         """)
         cur.execute("""
+            CREATE TABLE IF NOT EXISTS wnba_player_game_stats (
+                player_id   INTEGER NOT NULL,
+                player_name TEXT,
+                team        TEXT,
+                game_id     TEXT    NOT NULL,
+                season      TEXT,
+                pts         INTEGER DEFAULT 0,
+                reb         INTEGER DEFAULT 0,
+                ast         INTEGER DEFAULT 0,
+                PRIMARY KEY (player_id, game_id)
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS wnba_player_seasons (
                 player_id   INTEGER NOT NULL,
                 player_name TEXT    NOT NULL,
@@ -4984,9 +4997,97 @@ def _get_wnba_season() -> str:
     return str(today.year) if today.month >= 5 else str(today.year - 1)
 
 
+# CDN tricode → app abbreviation (WNBA CDN uses different tricodes than our app)
+_WNBA_CDN_ABBR_MAP = {"LVA": "LV", "LAS": "LA", "NYL": "NY", "GSV": "GS", "WAS": "WSH"}
+
+# Static schedule cache (2026 season, refreshed every 2h)
+_wnba_cdn_schedule_cache: dict = {}   # {"dates": {dateStr: [game, ...]}, "ts": float}
+_WNBA_CDN_SCHEDULE_TTL = 7200
+
+# Live CDN scoreboard cache (today only, 2-minute TTL)
+_wnba_cdn_today_cache: dict = {}
+
+
+def _wnba_cdn_abbr(tricode: str) -> str:
+    """Map WNBA CDN tricode to our app abbreviation."""
+    return _WNBA_CDN_ABBR_MAP.get(tricode.upper(), tricode.upper())
+
+
+def _wnba_cdn_game_dict(g: dict) -> dict:
+    """Convert a WNBA CDN game entry into our standard game dict format."""
+    away = g.get("awayTeam", {})
+    home = g.get("homeTeam", {})
+    return {
+        "gameId":         g.get("gameId", ""),
+        "gameStatus":     g.get("gameStatus", 1),
+        "gameStatusText": g.get("gameStatusText", ""),
+        "period":         g.get("period", 0),
+        "gameClock":      g.get("gameClock", ""),
+        "gameTimeUTC":    g.get("gameTimeUTC", ""),
+        "away": {"abbr": _wnba_cdn_abbr(away.get("teamTricode", "")),
+                 "score": int(away.get("score", 0) or 0)},
+        "home": {"abbr": _wnba_cdn_abbr(home.get("teamTricode", "")),
+                 "score": int(home.get("score", 0) or 0)},
+    }
+
+
+def _wnba_cdn_schedule() -> dict:
+    """Return the 2026 WNBA CDN schedule as {dateStr: [game_dict, ...]}. Cached 2h."""
+    cached = _wnba_cdn_schedule_cache
+    if cached.get("dates") and _time.time() - cached.get("ts", 0) < _WNBA_CDN_SCHEDULE_TTL:
+        return cached["dates"]
+    try:
+        resp = _requests.get(
+            "https://cdn.wnba.com/static/json/staticData/scheduleLeagueV2_1.json",
+            headers=_CDN_HEADERS, timeout=15)
+        resp.raise_for_status()
+        dates: dict[str, list] = {}
+        for entry in resp.json().get("leagueSchedule", {}).get("gameDates", []):
+            raw_date = entry.get("gameDate", "")         # "04/25/2026 00:00:00"
+            try:
+                from datetime import datetime as _dt2
+                date_key = _dt2.strptime(raw_date, "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%d")
+            except Exception:
+                continue
+            dates[date_key] = [_wnba_cdn_game_dict(g) for g in entry.get("games", [])]
+        cached["dates"] = dates
+        cached["ts"]    = _time.time()
+        return dates
+    except Exception as e:
+        print(f"[wnba-cdn] schedule fetch error: {e}", flush=True)
+        return cached.get("dates", {})
+
+
+def _wnba_cdn_scoreboard_today(game_today: str) -> list | None:
+    """Fetch today's WNBA games from the live CDN. Returns game-list or None."""
+    c = _wnba_cdn_today_cache
+    if c.get("date") == game_today and _time.time() - c.get("ts", 0) < 120:
+        return c["games"]
+    try:
+        resp = _requests.get(
+            "https://cdn.wnba.com/static/json/liveData/scoreboard/todaysScoreboard_10.json",
+            headers=_CDN_HEADERS, timeout=8)
+        resp.raise_for_status()
+        cdn_games = resp.json().get("scoreboard", {}).get("games", [])
+        cdn_date  = resp.json().get("scoreboard", {}).get("gameDate", "")
+        if cdn_date != game_today:
+            return None  # CDN still on prior date
+        games = [_wnba_cdn_game_dict(g) for g in cdn_games]
+        for g, raw in zip(games, cdn_games):
+            if g["gameStatus"] == 3 and g["gameId"]:
+                _upsert_wnba_game(g["gameId"], game_today,
+                                  g["home"]["abbr"], g["away"]["abbr"],
+                                  g["home"]["score"], g["away"]["score"])
+        c.update({"games": games, "date": game_today, "ts": _time.time()})
+        return games
+    except Exception as e:
+        print(f"[wnba-cdn] live scoreboard error: {e}", flush=True)
+        return None
+
+
 def _espn_wnba_scoreboard(date_str: str) -> list | None:
-    """Fetch WNBA scoreboard from ESPN for YYYY-MM-DD.
-    Returns list of game dicts (same shape as NBA scoreboard) or None on failure."""
+    """Fetch WNBA scoreboard from ESPN for YYYY-MM-DD (fallback for pre-2026 dates).
+    Returns list of game dicts (same shape as CDN) or None on failure."""
     date_compact = date_str.replace("-", "")
     url = (f"https://site.api.espn.com/apis/site/v2/sports/basketball/wnba"
            f"/scoreboard?dates={date_compact}")
@@ -4994,7 +5095,7 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
         resp = _requests.get(url, headers=_ESPN_HEADERS, timeout=10)
         resp.raise_for_status()
         events = resp.json().get("events", [])
-        games = []
+        games  = []
         for event in events:
             competitions = event.get("competitions", [])
             if not competitions:
@@ -5002,7 +5103,6 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
             comp        = competitions[0]
             status_obj  = comp.get("status", {})
             status_name = status_obj.get("type", {}).get("name", "")
-
             if status_name == "STATUS_FINAL":
                 game_status, game_status_text = 3, "Final"
             elif status_name == "STATUS_IN_PROGRESS":
@@ -5010,7 +5110,6 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
                 game_status_text = status_obj.get("displayClock", "")
             else:
                 game_status, game_status_text = 1, "Scheduled"
-
             home_d, away_d = {}, {}
             for ct in comp.get("competitors", []):
                 abbr  = ct.get("team", {}).get("abbreviation", "")
@@ -5019,9 +5118,8 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
                     home_d = {"abbr": abbr, "score": score}
                 else:
                     away_d = {"abbr": abbr, "score": score}
-
             game_id = event.get("id", "")
-            g = {
+            games.append({
                 "gameId":         game_id,
                 "gameStatus":     game_status,
                 "gameStatusText": game_status_text,
@@ -5030,9 +5128,7 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
                 "gameTimeUTC":    comp.get("date", ""),
                 "away": away_d,
                 "home": home_d,
-            }
-            games.append(g)
-
+            })
             if game_status == 3 and game_id:
                 _upsert_wnba_game(game_id, date_str,
                                   home_d.get("abbr", ""), away_d.get("abbr", ""),
@@ -5041,6 +5137,78 @@ def _espn_wnba_scoreboard(date_str: str) -> list | None:
     except Exception as e:
         print(f"[wnba] ESPN fetch error: {e}", flush=True)
         return None
+
+
+# Game IDs we've already triggered a CDN boxscore ingest for
+_wnba_ingested_game_ids: set = set()
+
+
+def _wnba_cdn_ingest_game_bg(game_id: str, home_abbr: str, away_abbr: str):
+    """
+    Background thread: fetch WNBA CDN boxscore (uses WNBA personId = cdn.wnba.com IDs)
+    and upsert each player's game stats into wnba_player_game_stats.
+    Only runs for WNBA CDN game IDs (starts with '10').
+    """
+    if not str(game_id).startswith("10"):
+        return  # ESPN game IDs — CDN boxscore not available
+    try:
+        url  = f"https://cdn.wnba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        resp = _requests.get(url, headers=_CDN_HEADERS, timeout=12)
+        resp.raise_for_status()
+        game_data = resp.json().get("game", {})
+        season    = _get_wnba_season()
+
+        def _si(v):
+            try:
+                return int(float(str(v)))
+            except Exception:
+                return 0
+
+        rows: list = []
+        for side in ["awayTeam", "homeTeam"]:
+            team_data = game_data.get(side, {})
+            tricode   = team_data.get("teamTricode", "")
+            abbr      = _wnba_cdn_abbr(tricode)
+            for player in team_data.get("players", []):
+                if not player.get("played"):
+                    continue
+                pid   = player.get("personId")
+                if not pid:
+                    continue
+                stats = player.get("statistics", {})
+                rows.append((
+                    int(pid),
+                    player.get("name", ""),
+                    abbr,
+                    game_id,
+                    season,
+                    _si(stats.get("points", 0)),
+                    _si(stats.get("reboundsTotal", 0)),
+                    _si(stats.get("assists", 0)),
+                ))
+
+        if not rows:
+            return
+
+        conn = get_conn()
+        cur  = conn.cursor()
+        for row in rows:
+            cur.execute("""
+                INSERT INTO wnba_player_game_stats
+                    (player_id, player_name, team, game_id, season, pts, reb, ast)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (player_id, game_id) DO NOTHING
+            """, row)
+        conn.commit()
+        cur.close(); conn.close()
+
+        for abbr in [home_abbr.upper(), away_abbr.upper()]:
+            _wnba_team_star_cache.pop(abbr, None)
+
+        print(f"[wnba-cdn] boxscore ingested: {game_id} ({len(rows)} players)", flush=True)
+    except Exception as e:
+        print(f"[wnba-cdn] boxscore ingest error {game_id}: {e}", flush=True)
+        _wnba_ingested_game_ids.discard(game_id)  # allow retry
 
 
 def _upsert_wnba_game(game_id, game_date, home_abbr, away_abbr, home_score, away_score):
@@ -5066,6 +5234,16 @@ def _upsert_wnba_game(game_id, game_date, home_abbr, away_abbr, home_score, away
         cur.close(); conn.close()
     except Exception as e:
         print(f"[wnba] upsert error: {e}", flush=True)
+        return
+
+    # Trigger a background CDN boxscore ingest the first time we see this game as Final
+    if game_id not in _wnba_ingested_game_ids:
+        _wnba_ingested_game_ids.add(game_id)
+        _threading.Thread(
+            target=_wnba_cdn_ingest_game_bg,
+            args=(game_id, home_abbr, away_abbr),
+            daemon=True
+        ).start()
 
 
 def _enrich_wnba_games(games: list):
@@ -5144,29 +5322,56 @@ def get_wnba_scoreboard():
         except Exception:
             pass
 
-    # Today — serve from in-memory cache (TTL 2 min)
-    if is_today:
-        c = _wnba_today_sb_cache
-        if c.get("date") == _game_today and _time.time() - c.get("ts", 0) < 120:
-            return jsonify(c["payload"])
+    cdn_season = _get_wnba_season()  # e.g. "2026"
+    is_cdn_season = date_str >= f"{cdn_season}-01-01"  # CDN only has current season
 
-    # Future — check cache (TTL 60 min)
+    # Today — try WNBA CDN live scoreboard first (2-min cache), then ESPN fallback
+    if is_today:
+        c = _wnba_cdn_today_cache
+        if c.get("date") == _game_today and _time.time() - c.get("ts", 0) < 120:
+            return jsonify({"games": c["games"], "date": date_str})
+        games = _wnba_cdn_scoreboard_today(_game_today)
+        if games is not None:
+            _enrich_wnba_games(games)
+            payload = {"games": games, "date": date_str}
+            _wnba_cdn_today_cache.update({"games": games, "date": _game_today, "ts": _time.time()})
+            return jsonify(payload)
+
+    # Non-today CDN season — try static schedule, then ESPN fallback
+    if is_cdn_season and not is_today:
+        schedule = _wnba_cdn_schedule()
+        cdn_games = schedule.get(date_str)
+        if cdn_games is not None:
+            if is_past and date_str in _wnba_past_sb_cache:
+                return jsonify(_wnba_past_sb_cache[date_str]["payload"])
+            # Upsert any Final games from the schedule
+            for g in cdn_games:
+                if g["gameStatus"] == 3 and g["gameId"]:
+                    _upsert_wnba_game(g["gameId"], date_str,
+                                      g["home"]["abbr"], g["away"]["abbr"],
+                                      g["home"]["score"], g["away"]["score"])
+            _enrich_wnba_games(cdn_games)
+            payload = {"games": cdn_games, "date": date_str}
+            if is_past:
+                _wnba_past_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
+            elif not is_today and date_str in _wnba_future_sb_cache:
+                pass  # let it fall through each time for schedule accuracy
+            return jsonify(payload)
+
+    # Future non-CDN — check cache (TTL 60 min)
     if not is_past and not is_today and date_str in _wnba_future_sb_cache:
         entry = _wnba_future_sb_cache[date_str]
         if _time.time() - entry["ts"] < 3600:
             return jsonify(entry["payload"])
 
+    # ESPN fallback (pre-2026 dates and CDN failures)
     games = _espn_wnba_scoreboard(date_str) or []
     _enrich_wnba_games(games)
     payload = {"games": games, "date": date_str}
-
     if is_past:
         _wnba_past_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
-    elif is_today:
-        _wnba_today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
-    else:
+    elif not is_today:
         _wnba_future_sb_cache[date_str] = {"payload": payload, "ts": _time.time()}
-
     return jsonify(payload)
 
 
@@ -5178,26 +5383,84 @@ def get_wnba_top_performers():
     if not date_str:
         date_str = _game_today
 
-    games = _espn_wnba_scoreboard(date_str)
-    if not games:
-        try:
-            conn = get_conn()
-            cur  = conn.cursor()
-            cur.execute(
-                "SELECT game_id FROM games WHERE game_date = %s AND league = 'wnba' AND status = 'Final'",
-                (date_str,)
-            )
-            rows = cur.fetchall()
-            cur.close(); conn.close()
-            games = [{"gameId": r["game_id"], "gameStatus": 3, "away": {}, "home": {}} for r in rows]
-        except Exception:
-            games = []
+    is_today      = date_str == _game_today
+    cdn_season    = _get_wnba_season()
+    is_cdn_season = date_str >= f"{cdn_season}-01-01"
+
+    # ── Get game list ─────────────────────────────────────────────
+    games = None
+    if is_today:
+        games = _wnba_cdn_scoreboard_today(_game_today)
+    if games is None and is_cdn_season:
+        schedule = _wnba_cdn_schedule()
+        cdn_games = schedule.get(date_str)
+        if cdn_games is not None:
+            games = cdn_games
+    if games is None:
+        games = _espn_wnba_scoreboard(date_str) or []
 
     if not games:
         return jsonify({"players": [], "date": date_str})
 
     all_players = []
-    for g in games:
+
+    # ── CDN games: parallel boxscore fetch ────────────────────────
+    cdn_game_ids = [g.get("gameId", "") for g in games
+                    if str(g.get("gameId", "")).startswith("10")]
+    espn_games   = [g for g in games if not str(g.get("gameId", "")).startswith("10")]
+
+    if cdn_game_ids:
+        boxscores = _wnba_fetch_cdn_boxscores_parallel(cdn_game_ids)
+        for g in games:
+            gid = g.get("gameId", "")
+            if not str(gid).startswith("10"):
+                continue
+            box = boxscores.get(gid)
+            if not box:
+                continue
+            away_abbr = g.get("away", {}).get("abbr", "")
+            home_abbr = g.get("home", {}).get("abbr", "")
+            matchup   = f"{away_abbr} @ {home_abbr}" if away_abbr else gid
+            is_live   = g.get("gameStatus") == 2
+            for side in ["awayTeam", "homeTeam"]:
+                team_data = box.get(side, {})
+                team_abbr = _wnba_cdn_abbr(team_data.get("teamTricode", ""))
+                for player in team_data.get("players", []):
+                    if not player.get("played"):
+                        continue
+                    pid   = player.get("personId")
+                    if not pid:
+                        continue
+                    stats = player.get("statistics", {})
+                    min_str = stats.get("minutes", "PT0M0.00S") or "PT0M0.00S"
+                    try:
+                        mins = float(min_str.replace("PT", "").replace("S", "").split("M")[0])
+                    except Exception:
+                        mins = 0
+                    if mins < 1:
+                        continue
+                    def _si(v):
+                        try: return int(float(str(v)))
+                        except Exception: return 0
+                    pts   = _si(stats.get("points", 0))
+                    reb   = _si(stats.get("reboundsTotal", 0))
+                    ast   = _si(stats.get("assists", 0))
+                    all_players.append({
+                        "player_id": pid,
+                        "name":      player.get("name", ""),
+                        "team":      team_abbr,
+                        "matchup":   matchup,
+                        "game_id":   gid,
+                        "is_live":   is_live,
+                        "pts":       pts,
+                        "reb":       reb,
+                        "ast":       ast,
+                        "total":     pts + reb + ast,
+                        "league":    "wnba",
+                    })
+
+    # ── ESPN games (pre-2026 IDs): legacy ESPN boxscore ──────────
+    for g in espn_games:
         gid = g.get("gameId", "")
         if not gid:
             continue
@@ -5219,20 +5482,17 @@ def get_wnba_top_performers():
                         stats_list = ae.get("stats", [])
                         if not stats_list:
                             continue
-                        # Build label→value map
                         stat_map = {labels[i]: stats_list[i]
                                     for i in range(min(len(labels), len(stats_list)))}
                         min_val = stat_map.get("MIN", "0:00")
                         if not min_val or min_val in ("0:00", "--", ""):
                             continue
-
                         def _si(v):
                             try:
                                 s = str(v)
                                 return int(s.split("-")[0]) if "-" in s else int(float(s))
                             except Exception:
                                 return 0
-
                         pts = _si(stat_map.get("PTS", 0))
                         reb = _si(stat_map.get("REB", 0))
                         ast = _si(stat_map.get("AST", 0))
@@ -5335,8 +5595,10 @@ _WNBA_TEAM_STAR_TTL = 6 * 3600
 
 def _wnba_get_team_star(abbr: str) -> int | None:
     """
-    Return the WNBA CDN player ID of the top P+R+A player for a WNBA team
-    from wnba_player_seasons (most recent season). Cached 6 hours per team.
+    Return the WNBA CDN player ID (cdn.wnba.com personId) of the top P+R+A player
+    for a WNBA team. Checks current-season game stats first (auto-ingested from CDN
+    boxscores), then falls back to wnba_player_seasons (historical ingest).
+    Cached 6 hours per team.
     """
     abbr = abbr.upper()
     cached = _wnba_team_star_cache.get(abbr)
@@ -5347,17 +5609,32 @@ def _wnba_get_team_star(abbr: str) -> int | None:
     try:
         conn = get_conn()
         cur  = conn.cursor()
+        season = _get_wnba_season()
+        # 1. Try current-season game stats (CDN personIds, updates after each game)
         cur.execute("""
             SELECT player_id
-            FROM   wnba_player_seasons
-            WHERE  team = %s AND season_type = 'Regular Season'
-            ORDER  BY season DESC, (pts + reb + ast) DESC NULLS LAST
+            FROM   wnba_player_game_stats
+            WHERE  team = %s AND season = %s
+            GROUP  BY player_id
+            ORDER  BY SUM(pts + reb + ast) DESC NULLS LAST
             LIMIT  1
-        """, (abbr,))
+        """, (abbr, season))
         row = cur.fetchone()
-        cur.close(); conn.close()
         if row:
             player_id = int(row["player_id"])
+        else:
+            # 2. Fall back to wnba_player_seasons (manually ingested historical data)
+            cur.execute("""
+                SELECT player_id
+                FROM   wnba_player_seasons
+                WHERE  team = %s AND season_type = 'Regular Season'
+                ORDER  BY season DESC, (pts + reb + ast) DESC NULLS LAST
+                LIMIT  1
+            """, (abbr,))
+            row = cur.fetchone()
+            if row:
+                player_id = int(row["player_id"])
+        cur.close(); conn.close()
     except Exception as e:
         print(f"[wnba] team_star error {abbr}: {e}", flush=True)
 
@@ -5365,11 +5642,36 @@ def _wnba_get_team_star(abbr: str) -> int | None:
     return player_id
 
 
+def _wnba_fetch_cdn_boxscores_parallel(game_ids, timeout=8):
+    """Fetch WNBA CDN boxscores for multiple game IDs in parallel.
+    Returns a dict mapping game_id -> game dict (or None on failure)."""
+    def _fetch_one(gid):
+        try:
+            url  = f"https://cdn.wnba.com/static/json/liveData/boxscore/boxscore_{gid}.json"
+            resp = _requests.get(url, headers=_CDN_HEADERS, timeout=timeout)
+            if resp.status_code == 200:
+                return gid, resp.json().get("game", {})
+        except Exception:
+            pass
+        return gid, None
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=min(len(game_ids), 12)) as pool:
+        futures = {pool.submit(_fetch_one, gid): gid for gid in game_ids}
+        for fut in as_completed(futures):
+            gid, box = fut.result()
+            results[gid] = box
+    return results
+
+
 @app.route("/api/wnba/game-posters", methods=["POST"])
 def get_wnba_game_posters():
     """
     Returns WNBA CDN player IDs (Integer) for scoreboard poster headers.
-    Uses wnba_player_seasons stats DB to find top P+R+A player per team.
+
+    Final CDN games (gameId starts with '10') → actual P+R+A leader from CDN boxscore.
+    All others (pre-2026 ESPN IDs, upcoming/live) → top player from wnba_player_game_stats
+    or wnba_player_seasons DB.
 
     Body:    {"games": [{"gameId":"...","away":"NY","home":"IND","status":3}, ...]}
     Returns: {"posters": {"<gameId>": {"away": <int|null>, "home": <int|null>}}}
@@ -5379,39 +5681,81 @@ def get_wnba_game_posters():
     if not games:
         return jsonify({"posters": {}})
 
-    # Collect unique team abbrs that need a DB lookup (not yet cached)
-    now       = _time.time()
-    all_abbrs = {g.get("away", "").upper() for g in games} | {g.get("home", "").upper() for g in games}
-    uncached  = [a for a in all_abbrs
-                 if not (a in _wnba_team_star_cache and now - _wnba_team_star_cache[a]["ts"] < _WNBA_TEAM_STAR_TTL)]
-
-    if uncached:
-        try:
-            conn = get_conn()
-            cur  = conn.cursor()
-            cur.execute("""
-                SELECT DISTINCT ON (team) team, player_id
-                FROM   wnba_player_seasons
-                WHERE  team = ANY(%s) AND season_type = 'Regular Season'
-                ORDER  BY team, season DESC, (pts + reb + ast) DESC NULLS LAST
-            """, (uncached,))
-            for row in cur.fetchall():
-                abbr = row["team"]
-                _wnba_team_star_cache[abbr] = {"id": int(row["player_id"]), "ts": now}
-            # Mark any abbrs with no data as None
-            for abbr in uncached:
-                if abbr not in _wnba_team_star_cache or _wnba_team_star_cache[abbr]["ts"] != now:
-                    _wnba_team_star_cache[abbr] = {"id": None, "ts": now}
-            cur.close(); conn.close()
-        except Exception as e:
-            print(f"[wnba] game-posters bulk lookup error: {e}", flush=True)
-
     posters: dict = {}
-    for g in games:
-        gid     = g.get("gameId", "")
-        away_cd = _wnba_team_star_cache.get(g.get("away", "").upper(), {})
-        home_cd = _wnba_team_star_cache.get(g.get("home", "").upper(), {})
-        posters[gid] = {"away": away_cd.get("id"), "home": home_cd.get("id")}
+
+    # ── Final CDN games: fetch actual boxscore leaders ────────────
+    cdn_final   = [g for g in games if str(g.get("gameId", "")).startswith("10")
+                   and int(g.get("status", 1) or 1) == 3]
+    other_games = [g for g in games if g not in cdn_final]
+
+    if cdn_final:
+        boxscores = _wnba_fetch_cdn_boxscores_parallel([g["gameId"] for g in cdn_final])
+        for g in cdn_final:
+            gid = g.get("gameId", "")
+            box = boxscores.get(gid)
+            if box:
+                posters[gid] = {
+                    "away": _box_star(box.get("awayTeam", {})),
+                    "home": _box_star(box.get("homeTeam", {})),
+                }
+            else:
+                other_games.append(g)  # CDN miss → fall back to DB
+
+    # ── Upcoming / live / pre-2026: team star from DB ─────────────
+    if other_games:
+        now       = _time.time()
+        all_abbrs = {g.get("away", "").upper() for g in other_games} | \
+                    {g.get("home", "").upper() for g in other_games}
+        uncached  = [a for a in all_abbrs if a and
+                     not (a in _wnba_team_star_cache and
+                          now - _wnba_team_star_cache[a]["ts"] < _WNBA_TEAM_STAR_TTL)]
+
+        if uncached:
+            season = _get_wnba_season()
+            try:
+                conn = get_conn()
+                cur  = conn.cursor()
+                # Check current-season game stats first (CDN ingest)
+                cur.execute("""
+                    SELECT DISTINCT ON (team) team, player_id
+                    FROM (
+                        SELECT team, player_id, SUM(pts + reb + ast) AS total
+                        FROM   wnba_player_game_stats
+                        WHERE  team = ANY(%s) AND season = %s
+                        GROUP  BY team, player_id
+                    ) agg
+                    ORDER  BY team, total DESC NULLS LAST
+                """, (uncached, season))
+                found = set()
+                for row in cur.fetchall():
+                    abbr = row["team"]
+                    _wnba_team_star_cache[abbr] = {"id": int(row["player_id"]), "ts": now}
+                    found.add(abbr)
+                # Fall back to historical seasons for any still uncached
+                still_missing = [a for a in uncached if a not in found]
+                if still_missing:
+                    cur.execute("""
+                        SELECT DISTINCT ON (team) team, player_id
+                        FROM   wnba_player_seasons
+                        WHERE  team = ANY(%s) AND season_type = 'Regular Season'
+                        ORDER  BY team, season DESC, (pts + reb + ast) DESC NULLS LAST
+                    """, (still_missing,))
+                    for row in cur.fetchall():
+                        abbr = row["team"]
+                        _wnba_team_star_cache[abbr] = {"id": int(row["player_id"]), "ts": now}
+                # Mark any abbrs with no data as None
+                for abbr in uncached:
+                    if abbr not in _wnba_team_star_cache or _wnba_team_star_cache[abbr]["ts"] != now:
+                        _wnba_team_star_cache[abbr] = {"id": None, "ts": now}
+                cur.close(); conn.close()
+            except Exception as e:
+                print(f"[wnba] game-posters bulk lookup error: {e}", flush=True)
+
+        for g in other_games:
+            gid     = g.get("gameId", "")
+            away_cd = _wnba_team_star_cache.get(g.get("away", "").upper(), {})
+            home_cd = _wnba_team_star_cache.get(g.get("home", "").upper(), {})
+            posters[gid] = {"away": away_cd.get("id"), "home": home_cd.get("id")}
 
     return jsonify({"posters": posters})
 

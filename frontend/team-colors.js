@@ -38,7 +38,7 @@ const TEAM_COLORS = {
   UTA: { primary: '#002B5C', secondary: '#F9A01B' },
   WAS: { primary: '#002B5C', secondary: '#E31837' },
 
-  // ── WNBA ─────────────────────────────────────────
+  // ── WNBA (legacy shortcodes kept for compat) ────────────────
   ACE: { primary: '#A6192E', secondary: '#000000' },
   SKY: { primary: '#418FDE', secondary: '#FFCD00' },
   SUN: { primary: '#F05023', secondary: '#0A2240' },
@@ -53,6 +53,31 @@ const TEAM_COLORS = {
   VAL: { primary: '#E31837', secondary: '#002B5C' },
   APH: { primary: '#CB6015', secondary: '#000000' },
 };
+
+// ── WNBA colors keyed by our API abbreviations ─────────────────
+const WNBA_TEAM_COLORS = {
+  ATL: { primary: '#552583', secondary: '#FDB927' }, // Atlanta Dream
+  CHI: { primary: '#418FDE', secondary: '#FFCD00' }, // Chicago Sky
+  CON: { primary: '#F05023', secondary: '#0A2240' }, // Connecticut Sun
+  DAL: { primary: '#CB6015', secondary: '#201747' }, // Dallas Wings
+  GS:  { primary: '#E31837', secondary: '#002B5C' }, // Golden State Valkyries
+  IND: { primary: '#2C5234', secondary: '#BE3A34' }, // Indiana Fever
+  LA:  { primary: '#2C5234', secondary: '#FEE11A' }, // Los Angeles Sparks
+  LV:  { primary: '#A6192E', secondary: '#000000' }, // Las Vegas Aces
+  MIN: { primary: '#236192', secondary: '#0C2340' }, // Minnesota Lynx
+  NY:  { primary: '#6ECEB2', secondary: '#000000' }, // New York Liberty
+  PHX: { primary: '#CB6015', secondary: '#000000' }, // Phoenix Mercury
+  POR: { primary: '#E31837', secondary: '#000000' }, // Portland Fire
+  SEA: { primary: '#2C5234', secondary: '#FFC72C' }, // Seattle Storm
+  TOR: { primary: '#7B1E3C', secondary: '#C5A843' }, // Toronto Tempo
+  WSH: { primary: '#0C2340', secondary: '#78BE20' }, // Washington Mystics
+};
+
+function getWnbaTeamColor(abbr, type = 'primary') {
+  const colors = WNBA_TEAM_COLORS[(abbr || '').toUpperCase()];
+  if (!colors) return type === 'primary' ? '#333333' : '#888888';
+  return colors[type] || colors.primary;
+}
 
 /**
  * Get a team's color with fallback.

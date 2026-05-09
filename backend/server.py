@@ -1273,26 +1273,26 @@ def get_scoreboard():
         except Exception:
             pass  # CDN failed — fall through to schedule then ScoreboardV3
 
-    # Future dates — serve from cache (60 min TTL) before fetching schedule
+    # Future dates — cache for 60 min
     if not is_past and not is_today and date in _future_sb_cache:
         entry = _future_sb_cache[date]
         if _time.time() - entry["ts"] < 3600:
             return jsonify(entry["payload"])
 
-    # Today/future — CDN season schedule fallback (fast, cached 2h, works on cloud IPs).
-    # Tried before ScoreboardV3 so cold-start requests don't block for 15 s.
-    if not is_past:
+    # Future dates — CDN season schedule (not rate-limited on cloud IPs)
+    if not is_past and not is_today:
         try:
             sched = _fetch_nba_schedule()
             if sched:
-                dt_sched  = _dt.strptime(date, "%Y-%m-%d")
-                sched_key = f"{dt_sched.month:02d}/{dt_sched.day:02d}/{dt_sched.year} 00:00:00"
+                dt = _dt.strptime(date, "%Y-%m-%d")
+                sched_key  = f"{dt.month:02d}/{dt.day:02d}/{dt.year} 00:00:00"
                 game_dates = sched.get("leagueSchedule", {}).get("gameDates", [])
                 target     = next((gd for gd in game_dates if gd.get("gameDate") == sched_key), None)
                 if target is not None:
                     games = []
                     for g in target.get("games", []):
-                        away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
+                        away = g.get("awayTeam", {})
+                        home = g.get("homeTeam", {})
                         games.append({
                             "gameId":         g.get("gameId", ""),
                             "gameStatus":     1,
@@ -1307,15 +1307,7 @@ def get_scoreboard():
                         })
                     _enrich_games_with_records(games)
                     payload = {"games": games, "date": date}
-                    if is_today:
-                        # Only seed cache if poller hasn't already set real (live/final) data
-                        cached = _today_sb_cache.get("payload", {})
-                        has_real = (_today_sb_cache.get("date") == _game_today
-                                    and any(g["gameStatus"] in (2, 3) for g in cached.get("games", [])))
-                        if not has_real:
-                            _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": _game_today})
-                    else:
-                        _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
+                    _future_sb_cache[date] = {"payload": payload, "ts": _time.time()}
                     return jsonify(payload)
         except Exception:
             pass  # Fall through to ScoreboardV3

@@ -527,6 +527,7 @@ table.box-table tfoot td:first-child{text-align:left;}
 const API = window.location.protocol === 'file:' ? 'http://localhost:5000' : '';
 const params = new URLSearchParams(window.location.search);
 const GAME_ID = params.get('gameId');
+const IS_WNBA = GAME_ID ? GAME_ID.startsWith('10') : false;
 let POLL_TIMER = null;
 let ACTIVE_TAB = params.get('tab') || 'pbp';
 let BOX_TEAM = 'away';
@@ -632,8 +633,10 @@ function renderScoreboard(box) {
 }
 
 function teamLogo(abbr) {
-  return `<img class="sb-logo" src="https://cdn.nba.com/logos/nba/${nbaTeamId(abbr)}/global/L/logo.svg"
-    alt="${abbr}" onerror="this.outerHTML='<div class=\\'sb-logo-fallback\\'>🏀</div>'">`;
+  const src = IS_WNBA
+    ? (wnbaTeamLogoUrl(abbr) || '')
+    : `https://cdn.nba.com/logos/nba/${nbaTeamId(abbr)}/global/L/logo.svg`;
+  return `<img class="sb-logo" src="${src}" alt="${abbr}" onerror="this.outerHTML='<div class=\\'sb-logo-fallback\\'>🏀</div>'">`;
 }
 
 function renderTabs(box) {
@@ -727,7 +730,7 @@ function buildBox(box) {
       const pmColor = pm > 0 ? 'var(--green)' : pm < 0 ? 'var(--red)' : 'var(--ink3)';
       return `<tr>
         <td><div class="player-cell">
-          ${p.personId ? `<img class="player-headshot-sm" src="https://cdn.nba.com/headshots/nba/latest/260x190/${p.personId}.png" onerror="this.style.display='none'">` : ''}
+          ${p.personId ? `<img class="player-headshot-sm" src="${_headshotUrl(p.personId)}" onerror="this.style.display='none'">` : ''}
           <span>${p.name || ''}</span>
         </div></td>
         <td>${min}</td>
@@ -842,7 +845,7 @@ function buildPbpRow(a, awayAbbr, homeAbbr) {
 
   const dot = `<div class="pbp-team-dot" style="background:${dotColor}"></div>`;
   const actor = a.personId
-    ? `<img class="pbp-headshot" src="https://cdn.nba.com/headshots/nba/latest/260x190/${a.personId}.png" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pbp-team-dot',style:'background:${dotColor}'}))">`
+    ? `<img class="pbp-headshot" src="${_headshotUrl(a.personId)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pbp-team-dot',style:'background:${dotColor}'}))">`
     : dot;
 
   return `<div class="pbp-row">
@@ -871,6 +874,19 @@ const TEAM_IDS = {
   SAC:1610612758,SAS:1610612759,TOR:1610612761,UTA:1610612762,WAS:1610612764,
 };
 function nbaTeamId(abbr) { return TEAM_IDS[abbr] || 0; }
+
+const WNBA_CDN_TEAM_IDS = {
+  ATL:1611661330, CHI:1611661329, CON:1611661323, DAL:1611661321,
+  GS:1611661331,  GSV:1611661331, IND:1611661325, LA:1611661320,
+  LAS:1611661320, LV:1611661319,  LVA:1611661319, MIN:1611661324,
+  NY:1611661313,  NYL:1611661313, PHX:1611661317, POR:1611661327,
+  PDX:1611661327, SEA:1611661328, TOR:1611661332, WSH:1611661322,
+  WAS:1611661322,
+};
+function wnbaTeamLogoUrl(abbr) {
+  const id = WNBA_CDN_TEAM_IDS[(abbr || '').toUpperCase()];
+  return id ? `https://cdn.wnba.com/logos/wnba/${id}/global/L/logo.svg` : null;
+}
 </script>
 <script>
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1447,7 +1463,11 @@ const STAT_OPTS = [
 function _esc(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function _headshotUrl(pid) { return `https://cdn.nba.com/headshots/nba/latest/260x190/${pid}.png`; }
+function _headshotUrl(pid) {
+  return IS_WNBA
+    ? `https://ak-static.cms.nba.com/wp-content/uploads/headshots/wnba/latest/260x190/${pid}.png`
+    : `https://cdn.nba.com/headshots/nba/latest/260x190/${pid}.png`;
+}
 function _teamLogoUrl(abbr) {
   const id = TEAM_IDS[abbr];
   return id ? `https://cdn.nba.com/logos/nba/${id}/global/L/logo.svg` : '';

@@ -1970,13 +1970,16 @@ def preview_page():
 
 # ── /api/live/boxscore/<game_id> ──────────────────────────────────
 @app.route("/api/live/boxscore/<game_id>")
-@app.route("/api/live/boxscore/<game_id>")
 def get_live_boxscore(game_id):
-    """Proxy NBA CDN live boxscore + auto-upsert completed games.
-    Falls back to nba_api BoxScoreTraditionalV3 for historical games."""
+    """Proxy CDN live boxscore (NBA or WNBA) + auto-upsert completed games.
+    Falls back to nba_api BoxScoreTraditionalV3 for historical NBA games."""
+    is_wnba = str(game_id).startswith("10")
     # Try CDN first (works for current season)
     try:
-        url  = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        if is_wnba:
+            url = f"https://cdn.wnba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+        else:
+            url = f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
         resp = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
@@ -2125,11 +2128,15 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
 # ── /api/live/pbp/<game_id> ───────────────────────────────────────
 @app.route("/api/live/pbp/<game_id>")
 def get_live_pbp(game_id):
-    """Proxy NBA CDN live play-by-play.
-    Falls back to nba_api PlayByPlayV3 for historical games."""
+    """Proxy CDN live play-by-play (NBA or WNBA).
+    Falls back to nba_api PlayByPlayV3 for historical NBA games."""
+    is_wnba = str(game_id).startswith("10")
     # Try CDN first
     try:
-        url = f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
+        if is_wnba:
+            url = f"https://cdn.wnba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
+        else:
+            url = f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
         resp = _requests.get(url, headers=_CDN_HEADERS, timeout=10)
         resp.raise_for_status()
         data = resp.json()
@@ -2137,15 +2144,18 @@ def get_live_pbp(game_id):
     except Exception:
         pass
 
-    # Fall back to nba_api for historical games
-    try:
-        from nba_api.stats.endpoints import playbyplayv3
-        pbp = playbyplayv3.PlayByPlayV3(game_id=game_id, timeout=30)
-        raw = pbp.get_dict()
-        actions = raw.get("game", {}).get("actions", [])
-        return jsonify({"gameId": game_id, "actions": actions})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    # Fall back to nba_api for historical NBA games only
+    if not is_wnba:
+        try:
+            from nba_api.stats.endpoints import playbyplayv3
+            pbp = playbyplayv3.PlayByPlayV3(game_id=game_id, timeout=30)
+            raw = pbp.get_dict()
+            actions = raw.get("game", {}).get("actions", [])
+            return jsonify({"gameId": game_id, "actions": actions})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 404
+
+    return jsonify({"error": "play-by-play unavailable"}), 404
 
 
 # ── Serve game.html ───────────────────────────────────────────────

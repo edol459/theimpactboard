@@ -3405,13 +3405,20 @@ def set_night_mode():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# PATCH /api/me/favorite-team  — set or clear favorite NBA team
+# PATCH /api/me/favorite-team  — set or clear favorite team (NBA or WNBA)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 _NBA_ABBRS = {
     "ATL","BOS","BKN","CHA","CHI","CLE","DAL","DEN","DET","GSW",
     "HOU","IND","LAC","LAL","MEM","MIA","MIL","MIN","NOP","NYK",
     "OKC","ORL","PHI","PHX","POR","SAC","SAS","TOR","UTA","WAS",
 }
+# WNBA teams stored with "WNBA_" prefix to avoid conflicts with NBA abbreviations
+_WNBA_FAV_ABBRS = {
+    "WNBA_ATL","WNBA_CHI","WNBA_CON","WNBA_DAL","WNBA_GS",
+    "WNBA_IND","WNBA_LA", "WNBA_LV", "WNBA_MIN","WNBA_NY",
+    "WNBA_PHX","WNBA_POR","WNBA_SEA","WNBA_TOR","WNBA_WSH",
+}
+_ALL_TEAM_ABBRS = _NBA_ABBRS | _WNBA_FAV_ABBRS
 
 @app.route("/api/me/favorite-team", methods=["PATCH"])
 @login_required
@@ -3420,7 +3427,7 @@ def update_favorite_team():
     body = request.get_json() or {}
     team = (body.get("favorite_team") or "").strip().upper() or None
 
-    if team and team not in _NBA_ABBRS:
+    if team and team not in _ALL_TEAM_ABBRS:
         return jsonify({"error": "Invalid team abbreviation"}), 400
 
     try:

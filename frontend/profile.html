@@ -88,7 +88,6 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
 .profile-team-badge {
   position: absolute; bottom: -1px; right: -1px;
   width: 26px; height: 26px; border-radius: 50%;
-  background: var(--paper); border: 2px solid var(--paper);
   object-fit: contain; pointer-events: none;
 }
 /* Team picker modal */
@@ -517,6 +516,10 @@ nav { position: fixed; top: 0; left: 0; right: 0; height: var(--nav-h); backgrou
   <div class="modal" style="max-width:400px" onclick="event.stopPropagation()">
     <h2 style="margin-bottom:4px">Favorite team</h2>
     <p style="font-size:13px;color:var(--ink3);margin-bottom:0">Shows as a badge on your profile photo.</p>
+    <div style="display:flex;gap:6px;margin-top:12px;">
+      <button id="team-tab-nba" class="btn btn-primary" style="flex:1;font-size:12px;padding:6px 0" onclick="switchTeamTab('nba')">NBA</button>
+      <button id="team-tab-wnba" class="btn" style="flex:1;font-size:12px;padding:6px 0" onclick="switchTeamTab('wnba')">WNBA</button>
+    </div>
     <div class="team-grid" id="team-picker-grid"></div>
     <div class="modal-actions" style="margin-top:16px">
       <button class="btn" onclick="closeTeamModal()">Cancel</button>
@@ -651,9 +654,7 @@ function renderProfile() {
     ? `<img src="${u.avatar_url}" alt="${u.display_name}">`
     : u.display_name.charAt(0).toUpperCase();
 
-  const teamBadgeHtml = u.favorite_team && _RI_TEAM_IDS[u.favorite_team]
-    ? `<img class="profile-team-badge" src="https://cdn.nba.com/logos/nba/${_RI_TEAM_IDS[u.favorite_team]}/global/L/logo.svg" alt="${u.favorite_team}">`
-    : '';
+  const teamBadgeHtml = _teamBadgeHtml(u.favorite_team);
 
   const avatarContent = isOwn
     ? `<div class="profile-avatar-wrap editable" onclick="triggerAvatarUpload()">
@@ -671,7 +672,7 @@ function renderProfile() {
     const nightChecked = ME && ME.night_mode ? 'checked' : '';
     actionsHtml = `
       <button class="btn" onclick="openNameModal(false)">Edit display name</button>
-      <button class="btn" onclick="openTeamModal()">Favorite team${u.favorite_team ? ` · ${u.favorite_team}` : ''}</button>
+      <button class="btn" onclick="openTeamModal()">Favorite team${u.favorite_team ? ` · ${_teamDisplayAbbr(u.favorite_team)}` : ''}</button>
       <div class="night-toggle-row">
         <label class="night-toggle">
           <input type="checkbox" id="night-mode-toggle" ${nightChecked} onchange="setNightMode(this.checked)">
@@ -1557,6 +1558,27 @@ const _RI_TEAM_IDS = {
   OKC:1610612760,ORL:1610612753,PHI:1610612755,PHX:1610612756,POR:1610612757,
   SAC:1610612758,SAS:1610612759,TOR:1610612761,UTA:1610612762,WAS:1610612764,
 };
+
+const _WNBA_CDN_IDS = {
+  ATL:1611661330,CHI:1611661329,CON:1611661323,DAL:1611661321,GS:1611661331,
+  IND:1611661325,LA:1611661320,  LV:1611661319, MIN:1611661324,NY:1611661313,
+  PHX:1611661317,POR:1611661327, SEA:1611661328,TOR:1611661332,WSH:1611661322,
+};
+
+function _teamBadgeHtml(favorite_team) {
+  if (!favorite_team) return '';
+  if (favorite_team.startsWith('WNBA_')) {
+    const abbr = favorite_team.slice(5);
+    const id = _WNBA_CDN_IDS[abbr];
+    return id ? `<img class="profile-team-badge" src="https://cdn.wnba.com/logos/wnba/${id}/global/L/logo.svg" alt="${abbr}">` : '';
+  }
+  const id = _RI_TEAM_IDS[favorite_team];
+  return id ? `<img class="profile-team-badge" src="https://cdn.nba.com/logos/nba/${id}/global/L/logo.svg" alt="${favorite_team}">` : '';
+}
+
+function _teamDisplayAbbr(favorite_team) {
+  return favorite_team && favorite_team.startsWith('WNBA_') ? favorite_team.slice(5) : (favorite_team || '');
+}
 function riLogo(abbr) {
   const id = _RI_TEAM_IDS[abbr];
   if (!id) return `<div class="ri-logo-fallback">🏀</div>`;
@@ -1600,23 +1622,45 @@ const _TEAMS_ORDERED = [
   'HOU','IND','LAC','LAL','MEM','MIA','MIL','MIN','NOP','NYK',
   'OKC','ORL','PHI','PHX','POR','SAC','SAS','TOR','UTA','WAS',
 ];
-let _pendingTeam = undefined; // undefined = no change, null = clear, string = new abbr
+const _WNBA_TEAMS_ORDERED = [
+  'ATL','CHI','CON','DAL','GS','IND','LA','LV','MIN','NY','PHX','POR','SEA','TOR','WSH',
+];
+let _pendingTeam = undefined; // undefined = no change, null = clear, string = new stored abbr
+let _teamPickerLeague = 'nba';
 
 function openTeamModal() {
   _pendingTeam = undefined;
   const current = PROFILE.user.favorite_team || null;
+  _teamPickerLeague = (current && current.startsWith('WNBA_')) ? 'wnba' : 'nba';
+  renderTeamGrid();
+  document.getElementById('team-picker-modal').style.display = 'flex';
+}
+
+function switchTeamTab(league) {
+  _teamPickerLeague = league;
+  renderTeamGrid();
+}
+
+function renderTeamGrid() {
+  const current = PROFILE.user.favorite_team || null;
+  const isWnba = _teamPickerLeague === 'wnba';
+  document.getElementById('team-tab-nba').className = `btn${isWnba ? '' : ' btn-primary'}`;
+  document.getElementById('team-tab-wnba').className = `btn${isWnba ? ' btn-primary' : ''}`;
   const grid = document.getElementById('team-picker-grid');
+  const teams = isWnba ? _WNBA_TEAMS_ORDERED : _TEAMS_ORDERED;
   grid.innerHTML = `
     <div class="team-none-cell${!current ? ' selected' : ''}" data-team="" onclick="selectTeam(this,'')">None</div>
-    ${_TEAMS_ORDERED.map(abbr => {
-      const id = _RI_TEAM_IDS[abbr];
-      return `<div class="team-cell${current === abbr ? ' selected' : ''}" data-team="${abbr}" onclick="selectTeam(this,'${abbr}')">
-        <img src="https://cdn.nba.com/logos/nba/${id}/global/L/logo.svg" alt="${abbr}">
+    ${teams.map(abbr => {
+      const stored = isWnba ? `WNBA_${abbr}` : abbr;
+      const logoSrc = isWnba
+        ? `https://cdn.wnba.com/logos/wnba/${_WNBA_CDN_IDS[abbr]}/global/L/logo.svg`
+        : `https://cdn.nba.com/logos/nba/${_RI_TEAM_IDS[abbr]}/global/L/logo.svg`;
+      return `<div class="team-cell${current === stored ? ' selected' : ''}" data-team="${stored}" onclick="selectTeam(this,'${stored}')">
+        <img src="${logoSrc}" alt="${abbr}">
         <span class="team-cell-abbr">${abbr}</span>
       </div>`;
     }).join('')}
   `;
-  document.getElementById('team-picker-modal').style.display = 'flex';
 }
 
 function selectTeam(el, abbr) {

@@ -254,19 +254,35 @@ _ensure_tables()
 
 def _fix_wnba_league_column():
     """Fix games whose game_id starts with '10' but were inserted with wrong
-    league ('nba') or wrong season ('2025-26') by the live-boxscore path."""
+    league, season, or raw CDN tricodes (PDX→POR, LVA→LV, etc.) by the
+    live-boxscore path before those fields were handled correctly."""
+    from datetime import date as _d
+    today = _d.today()
+    wnba_season = str(today.year) if today.month >= 5 else str(today.year - 1)
+    # Raw CDN tricodes that need remapping to app abbreviations
+    _abbr_fixes = {"LVA": "LV", "LAS": "LA", "NYL": "NY", "GSV": "GS",
+                   "WAS": "WSH", "PDX": "POR"}
     try:
-        wnba_season = _get_wnba_season()
         conn = get_conn()
         cur  = conn.cursor()
+        # Fix league and season for any game_id starting with '10'
         cur.execute(
-            """UPDATE games
-               SET league = 'wnba', season = %s
+            """UPDATE games SET league = 'wnba', season = %s
                WHERE game_id LIKE %s
                  AND (league IS NULL OR league != 'wnba' OR season != %s)""",
             (wnba_season, "10%", wnba_season)
         )
         updated = cur.rowcount
+        # Fix raw CDN tricodes stored as home/away team abbreviations
+        for raw, mapped in _abbr_fixes.items():
+            cur.execute(
+                "UPDATE games SET home_team_abbr = %s WHERE home_team_abbr = %s AND game_id LIKE %s",
+                (mapped, raw, "10%")
+            )
+            cur.execute(
+                "UPDATE games SET away_team_abbr = %s WHERE away_team_abbr = %s AND game_id LIKE %s",
+                (mapped, raw, "10%")
+            )
         conn.commit()
         cur.close(); conn.close()
         if updated:
@@ -2091,8 +2107,17 @@ def _upsert_game_from_boxscore(game_id: str, game: dict, league: str = "nba"):
     try:
         away = game.get("awayTeam", {})
         home = game.get("homeTeam", {})
-        away_abbr  = away.get("teamTricode", "")
-        home_abbr  = home.get("teamTricode", "")
+        _raw_away = away.get("teamTricode", "")
+        _raw_home = home.get("teamTricode", "")
+        # Map raw WNBA CDN tricodes (e.g. PDX→POR, LVA→LV) to app abbreviations
+        _wnba_map = {"LVA": "LV", "LAS": "LA", "NYL": "NY", "GSV": "GS",
+                     "WAS": "WSH", "PDX": "POR"}
+        if league == "wnba":
+            away_abbr = _wnba_map.get(_raw_away, _raw_away)
+            home_abbr = _wnba_map.get(_raw_home, _raw_home)
+        else:
+            away_abbr = _raw_away
+            home_abbr = _raw_home
         away_score = int(away.get("score", 0) or 0)
         home_score = int(home.get("score", 0) or 0)
 

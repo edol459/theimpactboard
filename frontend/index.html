@@ -1075,6 +1075,7 @@ function switchLeague(league) {
   buildCalStrip();
   loadScoreboard();
   loadPerformers();
+  loadNews();
 }
 
 // ── Calendar strip ────────────────────────────────────────────
@@ -1451,7 +1452,7 @@ async function loadNews() {
   const container = document.getElementById('news-container');
   if (!container) return;
   try {
-    const res  = await fetch(NEWS_URL);
+    const res  = await fetch(`${NEWS_URL}?league=${SB.league}`);
     const data = await res.json();
     if (data.status !== 'ok' || !data.items?.length) {
       container.innerHTML = '<div class="news-error-msg">Unavailable.</div>';
@@ -1468,7 +1469,7 @@ async function loadNews() {
     container.innerHTML = `<div class="news-list">${
       data.items.slice(0, 8).map(item => `
         <a class="news-item" href="${item.link}" target="_blank" rel="noopener noreferrer">
-          <div class="news-source">${item.source || 'NBA'}</div>
+          <div class="news-source">${item.source || SB.league.toUpperCase()}</div>
           <div class="news-title">${item.title || ''}</div>
           <div class="news-meta">${timeAgo(item.pubDate)}</div>
         </a>`).join('')

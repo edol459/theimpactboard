@@ -2510,7 +2510,7 @@ def _format_game(g: dict) -> dict:
         "home_score":     g["home_score"],
         "away_score":     g["away_score"],
         "status":         g["status"],
-        "league":         g.get("league", "nba"),
+        "league":         g.get("league") or ("wnba" if str(g["game_id"]).startswith("10") else "nba"),
         "review_count":   g.get("review_count", 0),
         "avg_stars":      avg_stars,
         "bayesian_rating": g.get("bayesian_rating"),

@@ -252,6 +252,27 @@ def _ensure_tables():
 
 _ensure_tables()
 
+def _fix_wnba_league_column():
+    """One-time fix: any game whose game_id starts with '10' was inserted by the
+    live-boxscore path without a league value and got the DB default 'nba'.
+    Correct them to 'wnba' so they don't appear in NBA browse results."""
+    try:
+        conn = get_conn()
+        cur  = conn.cursor()
+        cur.execute("""
+            UPDATE games SET league = 'wnba'
+            WHERE game_id LIKE '10%' AND (league IS NULL OR league != 'wnba')
+        """)
+        updated = cur.rowcount
+        conn.commit()
+        cur.close(); conn.close()
+        if updated:
+            print(f"[startup] fixed league='wnba' for {updated} misclassified game(s)", flush=True)
+    except Exception as e:
+        print(f"[startup] _fix_wnba_league_column warning: {e}", flush=True)
+
+_fix_wnba_league_column()
+
 # ── /api/seasons ─────────────────────────────────────────────
 
 @app.route("/api/seasons")
@@ -1985,7 +2006,7 @@ def get_live_boxscore(game_id):
         data = resp.json()
         game = data.get("game", data)
         if game.get("gameStatus") == 3:
-            _upsert_game_from_boxscore(game_id, game)
+            _upsert_game_from_boxscore(game_id, game, league="wnba" if is_wnba else "nba")
         return jsonify(game)
     except Exception:
         pass
@@ -2059,7 +2080,7 @@ def _season_type_from_game_id(game_id: str) -> str:
     }.get(prefix, os.getenv("NBA_SEASON_TYPE", "Regular Season"))
 
 
-def _upsert_game_from_boxscore(game_id: str, game: dict):
+def _upsert_game_from_boxscore(game_id: str, game: dict, league: str = "nba"):
     """
     Upsert a completed game into the games table from CDN boxscore data.
     Silently swallows errors so it never breaks the main response.
@@ -2100,17 +2121,19 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
             INSERT INTO games (
                 game_id, season, season_type, game_date,
                 home_team_abbr, away_team_abbr,
-                home_score, away_score, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Final')
+                home_score, away_score, status, league
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Final', %s)
             ON CONFLICT (game_id) DO UPDATE SET
                 home_score     = EXCLUDED.home_score,
                 away_score     = EXCLUDED.away_score,
                 season_type    = EXCLUDED.season_type,
+                league         = EXCLUDED.league,
                 status         = 'Final',
                 updated_at     = NOW()
             WHERE games.status != 'Final'
                OR games.home_score IS NULL
                OR games.season_type != EXCLUDED.season_type
+               OR games.league != EXCLUDED.league
         """, (
             game_id,
             os.getenv("NBA_SEASON", "2025-26"),
@@ -2118,6 +2141,7 @@ def _upsert_game_from_boxscore(game_id: str, game: dict):
             game_date,
             home_abbr, away_abbr,
             home_score, away_score,
+            league,
         ))
         conn.commit()
         cur.close()

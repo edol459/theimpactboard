@@ -3077,7 +3077,9 @@ def admin_list_reviews():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 @app.route("/api/reviews/top-games")
 def get_top_rated_games():
-    season      = request.args.get("season",      get_current_season()).strip()
+    league      = request.args.get("league", "nba").lower().strip()
+    _def_season = _get_wnba_season() if league == "wnba" else get_current_season()
+    season      = request.args.get("season", _def_season).strip()
     season_type = request.args.get("season_type", "").strip()
     min_reviews = int(request.args.get("min_reviews", 1))
     limit       = min(int(request.args.get("limit", 25)), 100)
@@ -3095,12 +3097,13 @@ def get_top_rated_games():
             SELECT *
             FROM games
             WHERE status = 'Final'
+              AND league = %s
               {s_filter}
               {st_filter}
               AND review_count >= %s
             ORDER BY (rating_sum::float / NULLIF(review_count, 0)) DESC NULLS LAST
             LIMIT %s
-        """, s_params + st_params + [min_reviews, limit])
+        """, [league] + s_params + st_params + [min_reviews, limit])
         games = [_format_game(dict(r)) for r in cur.fetchall()]
         cur.close(); conn.close()
         return jsonify({"games": games})

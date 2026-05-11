@@ -961,6 +961,35 @@
     font-family: var(--mono);
   }
 
+  /* ── League toggle pills ── */
+  .league-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-card);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 2px;
+    flex-shrink: 0;
+  }
+  .league-pill {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    background: none;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--ink-3);
+    transition: color 0.12s, background 0.12s;
+  }
+  .league-pill.active {
+    background: var(--orange);
+    color: #fff;
+  }
+
   @media (max-width: 768px) {
     .page { grid-template-columns: 1fr; gap: 32px; }
     .sidebar { position: static; }
@@ -1050,6 +1079,10 @@
     <!-- Top Rated -->
     <div id="paneTop" style="display:none">
       <div class="filters-row">
+        <div class="league-toggle">
+          <button class="league-pill active" data-pane="top" data-league="nba" onclick="switchTopLeague('nba')">NBA</button>
+          <button class="league-pill" data-pane="top" data-league="wnba" onclick="switchTopLeague('wnba')">WNBA</button>
+        </div>
         <span class="filter-label">Season</span>
         <select class="filter-select" id="topFilterSeason"></select>
         <select class="filter-select" id="topFilterSeasonType">
@@ -1065,6 +1098,10 @@
     <!-- Browse Games -->
     <div id="paneBrowse" style="display:none">
       <div class="filters-row">
+        <div class="league-toggle">
+          <button class="league-pill active" data-pane="browse" data-league="nba" onclick="switchBrowseLeague('nba')">NBA</button>
+          <button class="league-pill" data-pane="browse" data-league="wnba" onclick="switchBrowseLeague('wnba')">WNBA</button>
+        </div>
         <span class="filter-label">Season</span>
         <select class="filter-select" id="filterSeason"></select>
         <select class="filter-select" id="filterSeasonType">
@@ -1207,10 +1244,17 @@ const likedState  = { offset: 0, loading: false, exhausted: false };
 const recentState = { offset: 0, loading: false, exhausted: false };
 const browseState = { offset: 0, loading: false, exhausted: false };
 
+let browseLeague = 'nba';
+let topLeague    = 'nba';
+
 const TEAMS = [
   'ATL','BOS','BKN','CHA','CHI','CLE','DAL','DEN','DET','GSW',
   'HOU','IND','LAC','LAL','MEM','MIA','MIL','MIN','NOP','NYK',
   'OKC','ORL','PHI','PHX','POR','SAC','SAS','TOR','UTA','WAS',
+];
+
+const WNBA_TEAMS = [
+  'ATL','CHI','CON','DAL','GS','IND','LA','LV','MIN','NY','PHX','POR','SEA','TOR','WSH',
 ];
 
 // NBA team abbreviation → team ID for CDN logos
@@ -1234,6 +1278,15 @@ function logoImg(abbr, size = 28) {
   const url = logoURL(abbr);
   if (!url) return `<span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-2)">${abbr}</span>`;
   return `<img src="${url}" alt="${abbr}" width="${size}" height="${size}" style="display:block;object-fit:contain" onerror="this.style.display='none'">`;
+}
+
+function logoImgLeague(abbr, league, size = 20) {
+  if (league === 'wnba') {
+    const id = _WNBA_IDS[abbr];
+    if (!id) return `<span style="font-family:var(--mono);font-size:0.72rem;color:var(--ink-2)">${abbr}</span>`;
+    return `<img src="https://cdn.wnba.com/logos/wnba/${id}/global/L/logo.svg" alt="${abbr}" width="${size}" height="${size}" style="display:block;object-fit:contain" onerror="this.style.display='none'">`;
+  }
+  return logoImg(abbr, size);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1604,7 +1657,7 @@ async function loadTopRated() {
 
   const season     = document.getElementById('topFilterSeason').value;
   const seasonType = document.getElementById('topFilterSeasonType').value;
-  const params = new URLSearchParams({ limit: 25 });
+  const params = new URLSearchParams({ limit: 25, league: topLeague });
   if (season) params.set('season', season);
   if (seasonType) params.set('season_type', seasonType);
 
@@ -1627,11 +1680,11 @@ async function loadTopRated() {
       <div class="tgc-rank">${i + 1}</div>
       <div class="tgc-body">
         <div class="tgc-logos">
-          ${logoImg(g.away_team_abbr, 20)}
+          ${logoImgLeague(g.away_team_abbr, topLeague, 20)}
           <span class="tgc-logo-score ${awayWin ? '' : 'loser'}">${g.away_score}</span>
           <span class="tgc-vs">@</span>
           <span class="tgc-logo-score ${awayWin ? 'loser' : ''}">${g.home_score}</span>
-          ${logoImg(g.home_team_abbr, 20)}
+          ${logoImgLeague(g.home_team_abbr, topLeague, 20)}
         </div>
         <div class="tgc-meta">
           <span class="tgc-date">${fmtShortDate(g.game_date)}</span>
@@ -1645,6 +1698,58 @@ async function loadTopRated() {
     `;
     feed.appendChild(div);
   });
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LEAGUE SWITCH HELPERS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+async function populateSeasonDropdownLeague(selectEl, league, prependAllTime = false) {
+  try {
+    const res = await fetch(`/api/seasons?source=games&league=${league}`);
+    const data = await res.json();
+    const seasons = [...new Set((data.seasons || []).map(s => s.season))].sort().reverse();
+    let currentSeason;
+    if (league === 'wnba') {
+      const now = new Date();
+      currentSeason = String(now.getMonth() + 1 >= 5 ? now.getFullYear() : now.getFullYear() - 1);
+    } else {
+      currentSeason = computeCurrentSeason();
+    }
+    if (!seasons.includes(currentSeason)) seasons.unshift(currentSeason);
+    const opts = seasons.map(s => `<option value="${s}"${s === currentSeason ? ' selected' : ''}>${s.replace('-', '–')}</option>`);
+    if (prependAllTime) opts.unshift('<option value="all">All Time</option>');
+    selectEl.innerHTML = opts.join('');
+  } catch {
+    selectEl.innerHTML = '';
+  }
+}
+
+async function switchBrowseLeague(league) {
+  if (browseLeague === league) return;
+  browseLeague = league;
+  document.querySelectorAll('[data-pane="browse"].league-pill').forEach(b => {
+    b.classList.toggle('active', b.dataset.league === league);
+  });
+  await populateSeasonDropdownLeague(document.getElementById('filterSeason'), league, false);
+  const teamSel = document.getElementById('filterTeam');
+  teamSel.innerHTML = '<option value="">All Teams</option>';
+  (league === 'wnba' ? WNBA_TEAMS : TEAMS).forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t; opt.textContent = t;
+    teamSel.appendChild(opt);
+  });
+  resetBrowse();
+}
+
+async function switchTopLeague(league) {
+  if (topLeague === league) return;
+  topLeague = league;
+  document.querySelectorAll('[data-pane="top"].league-pill').forEach(b => {
+    b.classList.toggle('active', b.dataset.league === league);
+  });
+  await populateSeasonDropdownLeague(document.getElementById('topFilterSeason'), league, true);
+  document.getElementById('topFeed').dataset.loaded = '';
+  loadTopRated();
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1715,7 +1820,7 @@ async function loadBrowse(append = false) {
   const limit = 30;
 
   const params = new URLSearchParams({
-    limit, offset: browseState.offset, sort, dir: 'desc',
+    limit, offset: browseState.offset, sort, dir: 'desc', league: browseLeague,
     ...(season     ? { season }          : {}),
     ...(seasonType ? { season_type: seasonType } : {}),
     ...(team ? { team } : {}),
@@ -1749,11 +1854,11 @@ async function loadBrowse(append = false) {
     div.innerHTML = `
       <div class="tgc-body">
         <div class="tgc-logos">
-          ${logoImg(g.away_team_abbr, 20)}
+          ${logoImgLeague(g.away_team_abbr, browseLeague, 20)}
           <span class="tgc-logo-score ${awayWin ? '' : 'loser'}">${g.away_score ?? '?'}</span>
           <span class="tgc-vs">@</span>
           <span class="tgc-logo-score ${awayWin ? 'loser' : ''}">${g.home_score ?? '?'}</span>
-          ${logoImg(g.home_team_abbr, 20)}
+          ${logoImgLeague(g.home_team_abbr, browseLeague, 20)}
         </div>
         <div class="tgc-meta">
           <span class="tgc-date">${fmtDate(g.game_date)}</span>

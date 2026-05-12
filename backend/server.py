@@ -915,8 +915,9 @@ _today_sb_cache: dict = {}   # {"payload": dict, "ts": float, "date": str}
 
 _sb_poller_stop   = _threading.Event()
 _sb_poller_thread = None
-_POLL_LIVE_S      = 30
-_POLL_IDLE_S      = 300
+_POLL_LIVE_S      = 30   # games in progress
+_POLL_SOON_S      = 60   # upcoming games today (pregame window)
+_POLL_IDLE_S      = 300  # no games today
 
 
 def _parse_cdn_scoreboard(cdn_data: dict, game_today: str) -> dict | None:
@@ -947,8 +948,8 @@ def _parse_cdn_scoreboard(cdn_data: dict, game_today: str) -> dict | None:
     return {"games": games, "date": cdn_date}
 
 
-def _sb_poller_tick() -> tuple[bool, bool]:
-    """One poll iteration. Returns (has_live_game, cdn_succeeded)."""
+def _sb_poller_tick() -> tuple[bool, bool, bool]:
+    """One poll iteration. Returns (has_live_game, cdn_succeeded, has_upcoming_game)."""
     game_today = _compute_game_today()
 
     # ── Primary: NBA live CDN ─────────────────────────────────────────────────
@@ -961,7 +962,9 @@ def _sb_poller_tick() -> tuple[bool, bool]:
         payload = _parse_cdn_scoreboard(r.json(), game_today)
         if payload:
             _today_sb_cache.update({"payload": payload, "ts": _time.time(), "date": game_today})
-            return any(g["gameStatus"] == 2 for g in payload["games"]), True
+            has_live     = any(g["gameStatus"] == 2 for g in payload["games"])
+            has_upcoming = any(g["gameStatus"] == 1 for g in payload["games"])
+            return has_live, True, has_upcoming
         # CDN returned a past date — fall through to schedule
     except Exception:
         pass
@@ -1005,10 +1008,12 @@ def _sb_poller_tick() -> tuple[bool, bool]:
                             "payload": {"games": games, "date": game_today},
                             "ts": _time.time(), "date": game_today,
                         })
+                    has_upcoming = bool(games)
+                    return False, False, has_upcoming
     except Exception:
         pass
 
-    return False, False
+    return False, False, False
 
 
 def _sb_poller_loop():
@@ -1017,11 +1022,18 @@ def _sb_poller_loop():
     log.info("[POLLER] Scoreboard background poller started")
     while not _sb_poller_stop.is_set():
         try:
-            has_live, cdn_ok = _sb_poller_tick()
+            has_live, cdn_ok, has_upcoming = _sb_poller_tick()
         except Exception:
-            has_live, cdn_ok = False, False
-        # 30 s when live, 5 min when idle, 60 s when CDN is failing (retry sooner)
-        interval = _POLL_LIVE_S if has_live else (_POLL_IDLE_S if cdn_ok else 60)
+            has_live, cdn_ok, has_upcoming = False, False, False
+        # 30 s when live, 60 s when games are upcoming today, 5 min when truly idle
+        if has_live:
+            interval = _POLL_LIVE_S
+        elif has_upcoming:
+            interval = _POLL_SOON_S
+        elif cdn_ok:
+            interval = _POLL_IDLE_S
+        else:
+            interval = 60  # CDN failing — retry sooner
         _sb_poller_stop.wait(interval)
     log.info("[POLLER] Scoreboard background poller stopped")
 

@@ -1220,9 +1220,10 @@ async function loadScoreboard() {
     // Load player headshots (injury-aware, season-stats ranked)
     loadGamePosters(games);
 
-    // Auto-refresh live games
-    if (games.some(g => g.gameStatus === 2) && !SB.date) {
-      SB.liveTimer = setTimeout(() => { SB.loading = false; loadScoreboard(); }, 30000);
+    // Auto-refresh when any game today is live or upcoming
+    if (!SB.date && games.some(g => g.gameStatus !== 3)) {
+      const hasLive = games.some(g => g.gameStatus === 2);
+      SB.liveTimer = setTimeout(() => { SB.loading = false; loadScoreboard(); }, hasLive ? 30000 : 60000);
     }
 
   } catch(e) {

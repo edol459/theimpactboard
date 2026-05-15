@@ -1084,6 +1084,11 @@ def start_sb_poller():
     global _sb_poller_thread
     if _sb_poller_thread and _sb_poller_thread.is_alive():
         return
+    # Warm the cache immediately so the first request is never slow
+    try:
+        _sb_poller_tick()
+    except Exception:
+        pass
     _sb_poller_stop.clear()
     _sb_poller_thread = _threading.Thread(
         target=_sb_poller_loop, daemon=True, name="ScoreboardPoller",

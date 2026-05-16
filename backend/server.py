@@ -957,6 +957,9 @@ def _parse_cdn_scoreboard(cdn_data: dict, game_today: str) -> dict | None:
         return None
     games = []
     for g in cdn_games:
+        # Skip if-necessary playoff games where the series is already decided
+        if g.get("ifNecessary") and " wins " in g.get("seriesText", "").lower():
+            continue
         away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
         games.append({
             "gameId":         g.get("gameId", ""),
@@ -1055,6 +1058,9 @@ def _sb_poller_tick() -> tuple[bool, bool, bool]:
             if target:
                 games = []
                 for g in target.get("games", []):
+                    # Skip if-necessary games where the series is already decided
+                    if g.get("ifNecessary") and " wins " in g.get("seriesText", "").lower():
+                        continue
                     away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
                     games.append({
                         "gameId": g.get("gameId", ""), "gameStatus": 1,

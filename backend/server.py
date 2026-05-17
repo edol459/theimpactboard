@@ -1326,6 +1326,7 @@ def get_scoreboard():
                        home_score, away_score, status
                 FROM games
                 WHERE game_date = %s AND (league IS NULL OR league = 'nba')
+                  AND (COALESCE(home_score, 0) > 0 OR COALESCE(away_score, 0) > 0)
                 ORDER BY game_id
             """, (date,))
             db_rows = cur.fetchall()
@@ -1383,6 +1384,9 @@ def get_scoreboard():
                 away_k = "awayTeam"; home_k = "homeTeam"
                 games = []
                 for g in cdn_games:
+                    # Skip if-necessary playoff games that won't be played
+                    if g.get("ifNecessary") and str(g.get("gameStatusText", "")).strip().upper() == "TBD":
+                        continue
                     away = g.get(away_k, {}); home = g.get(home_k, {})
                     games.append({
                         "gameId":         g.get("gameId", ""),
@@ -1396,8 +1400,11 @@ def get_scoreboard():
                         "home": {"abbr": home.get("teamTricode",""), "score": int(home.get("score",0) or 0),
                                  "wins": home.get("wins"), "losses": home.get("losses")},
                     })
-                    # Persist Final games to DB so they're available tomorrow via the DB-first path
-                    if int(g.get("gameStatus", 1) or 1) == 3 and g.get("gameId"):
+                    # Persist Final games to DB — skip ghost games (0-0 score means never played)
+                    game_status = int(g.get("gameStatus", 1) or 1)
+                    away_sc = int(away.get("score", 0) or 0)
+                    home_sc = int(home.get("score", 0) or 0)
+                    if game_status == 3 and g.get("gameId") and (away_sc > 0 or home_sc > 0):
                         _upsert_game_from_boxscore(g["gameId"], g)
                 _enrich_games_with_records(games)
                 payload = {"games": games, "date": _game_today}
@@ -1421,6 +1428,8 @@ def get_scoreboard():
             if target:
                 games = []
                 for g in target.get("games", []):
+                    if g.get("ifNecessary") and str(g.get("gameStatusText", "")).strip().upper() == "TBD":
+                        continue
                     away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
                     games.append({
                         "gameId": g.get("gameId", ""), "gameStatus": 1,
@@ -1456,6 +1465,8 @@ def get_scoreboard():
                 if target is not None:
                     games = []
                     for g in target.get("games", []):
+                        if g.get("ifNecessary") and str(g.get("gameStatusText", "")).strip().upper() == "TBD":
+                            continue
                         away = g.get("awayTeam", {})
                         home = g.get("homeTeam", {})
                         games.append({

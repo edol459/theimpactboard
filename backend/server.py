@@ -5231,6 +5231,9 @@ _WNBA_CDN_ABBR_MAP = {"LVA": "LV", "LAS": "LA", "NYL": "NY", "GSV": "GS", "WAS":
 _wnba_cdn_schedule_cache: dict = {}   # {"dates": {dateStr: [game, ...]}, "ts": float}
 _WNBA_CDN_SCHEDULE_TTL = 7200
 
+# Final game poster cache — result never changes once a game is final
+_wnba_game_posters_cache: dict = {}  # gameId -> {"away": int|None, "home": int|None}
+
 # Live CDN scoreboard cache (today only, 2-minute TTL)
 _wnba_cdn_today_cache: dict = {}
 
@@ -5939,15 +5942,21 @@ def get_wnba_game_posters():
     other_games = [g for g in games if g not in cdn_final]
 
     if cdn_final:
-        boxscores = _wnba_fetch_cdn_boxscores_parallel([g["gameId"] for g in cdn_final])
+        uncached_final = [g for g in cdn_final if g.get("gameId") not in _wnba_game_posters_cache]
+        if uncached_final:
+            boxscores = _wnba_fetch_cdn_boxscores_parallel([g["gameId"] for g in uncached_final])
+            for g in uncached_final:
+                gid = g.get("gameId", "")
+                box = boxscores.get(gid)
+                if box:
+                    _wnba_game_posters_cache[gid] = {
+                        "away": _box_star(box.get("awayTeam", {})),
+                        "home": _box_star(box.get("homeTeam", {})),
+                    }
         for g in cdn_final:
             gid = g.get("gameId", "")
-            box = boxscores.get(gid)
-            if box:
-                posters[gid] = {
-                    "away": _box_star(box.get("awayTeam", {})),
-                    "home": _box_star(box.get("homeTeam", {})),
-                }
+            if gid in _wnba_game_posters_cache:
+                posters[gid] = _wnba_game_posters_cache[gid]
             else:
                 other_games.append(g)  # CDN miss → fall back to DB
 

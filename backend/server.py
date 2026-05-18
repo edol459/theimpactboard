@@ -3569,10 +3569,13 @@ def revenuecat_webhook():
     event_type   = event.get("type", "")
     app_user_id  = event.get("app_user_id", "")
 
+    print(f"[webhook] revenuecat event_type={event_type!r} app_user_id={app_user_id!r}", flush=True)
+
     # app_user_id is the string we passed to Purchases.logIn — our user's numeric ID
     try:
         user_id = int(app_user_id)
     except (ValueError, TypeError):
+        print(f"[webhook] non-integer app_user_id, ignoring: {app_user_id!r}", flush=True)
         return jsonify({"ok": True})  # anonymous / non-integer ID, ignore
 
     # Events that mean the user has an active subscription

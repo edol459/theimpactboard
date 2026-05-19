@@ -1011,17 +1011,22 @@ def _crosscheck_tipoff(games: list, nba: bool = True) -> None:
     import datetime as _dt_mod
     now_utc = _dt_mod.datetime.now(_dt_mod.timezone.utc).replace(tzinfo=None)
     for g in games:
-        if g.get("gameStatus") != 1:
-            continue
-        tipoff_str = g.get("gameTimeUTC", "")
-        if not tipoff_str:
-            continue
-        try:
-            tipoff = _dt.strptime(tipoff_str[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
-        except Exception:
-            continue
-        if now_utc < tipoff:
-            continue  # hasn't tipped yet
+        status = g.get("gameStatus")
+        if status == 2:
+            pass  # already live — always fetch boxscore for real-time clock/period
+        elif status == 1:
+            # upcoming — only fetch if tipoff time has passed
+            tipoff_str = g.get("gameTimeUTC", "")
+            if not tipoff_str:
+                continue
+            try:
+                tipoff = _dt.strptime(tipoff_str[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                continue
+            if now_utc < tipoff:
+                continue  # hasn't tipped yet
+        else:
+            continue  # final or unknown — skip
         gid = g.get("gameId", "")
         if not gid:
             continue

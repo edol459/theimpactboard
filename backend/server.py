@@ -2244,6 +2244,20 @@ def _season_type_from_game_id(game_id: str) -> str:
     }.get(prefix, os.getenv("NBA_SEASON_TYPE", "Regular Season"))
 
 
+def _season_from_game_id(game_id: str) -> str:
+    """
+    Extract season string from NBA game ID.
+    Format: 00TYYXXXX where YY at positions [3:5] is the 2-digit season start year.
+    e.g. 0022400001 → '24' → 2024 → '2024-25'
+    """
+    try:
+        yr = int(game_id[3:5])
+        year = 2000 + yr
+        return f"{year}-{str(year + 1)[-2:]}"
+    except Exception:
+        return os.getenv("NBA_SEASON", "2025-26")
+
+
 def _upsert_game_from_boxscore(game_id: str, game: dict, league: str = "nba"):
     """
     Upsert a completed game into the games table from CDN boxscore data.
@@ -2314,7 +2328,7 @@ def _upsert_game_from_boxscore(game_id: str, game: dict, league: str = "nba"):
                OR games.season != EXCLUDED.season
         """, (
             game_id,
-            _get_wnba_season() if league == "wnba" else os.getenv("NBA_SEASON", "2025-26"),
+            _get_wnba_season() if league == "wnba" else _season_from_game_id(game_id),
             season_type,
             game_date,
             home_abbr, away_abbr,

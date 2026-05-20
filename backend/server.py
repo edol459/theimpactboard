@@ -3133,7 +3133,7 @@ def post_review_reply(review_id):
         row = cur.fetchone()
         conn.commit()
         cur.close(); conn.close()
-        return jsonify({
+        return jsonify({"reply": {
             "id":           row["id"],
             "review_id":    review_id,
             "user_id":      user["id"],
@@ -3142,7 +3142,7 @@ def post_review_reply(review_id):
             "favorite_team": user.get("favorite_team"),
             "reply_text":   text,
             "created_at":   str(row["created_at"]),
-        }), 201
+        }}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

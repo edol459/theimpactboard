@@ -39,7 +39,24 @@ def index():
 
 @app.route('/.well-known/apple-app-site-association')
 def aasa():
-    return app.send_static_file('.well-known/apple-app-site-association'), 200, {'Content-Type': 'application/json'}
+    import json
+    data = {
+        "applinks": {
+            "details": [
+                {
+                    "appIDs": ["RHB7DB5Q97.net.ydkball.ydkball"],
+                    "components": [
+                        { "/": "/profile/*" }
+                    ]
+                }
+            ]
+        }
+    }
+    return app.response_class(
+        response=json.dumps(data),
+        status=200,
+        mimetype='application/json'
+    )
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 

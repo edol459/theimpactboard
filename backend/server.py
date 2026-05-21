@@ -90,6 +90,32 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor,
                             connect_timeout=10)
 
+def _resolve_1900_game_time(status_text: str, game_date: str) -> str:
+    """Convert a CDN 1900-era placeholder gameTimeUTC to the real UTC time.
+    Uses gameStatusText (e.g. '8:00 pm ET') + the ET game date (e.g. '2026-05-21').
+    Returns a proper UTC string like '2026-05-22T00:00:00Z', or '' on failure."""
+    import re
+    m = re.match(r'(\d+):(\d+)\s*(am|pm)', status_text or "", re.IGNORECASE)
+    if not m:
+        return ""
+    h, mins = int(m.group(1)), int(m.group(2))
+    if m.group(3).lower() == "pm" and h != 12:
+        h += 12
+    elif m.group(3).lower() == "am" and h == 12:
+        h = 0
+    try:
+        try:
+            from zoneinfo import ZoneInfo
+        except ImportError:
+            from backports.zoneinfo import ZoneInfo
+        from datetime import datetime, timezone
+        et = ZoneInfo("America/New_York")
+        naive = datetime.strptime(game_date, "%Y-%m-%d").replace(hour=h, minute=mins)
+        return naive.replace(tzinfo=et).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        return ""
+
+
 def _fmt_game_time(val) -> str:
     """Return gameTimeUTC as a proper ISO 8601 UTC string (e.g. '2026-04-25T01:30:00Z').
     PostgreSQL returns naive datetimes via psycopg2 as Python datetime objects; str() gives
@@ -1481,11 +1507,14 @@ def get_scoreboard():
                     if g.get("ifNecessary") and str(g.get("gameStatusText", "")).strip().upper() == "TBD":
                         continue
                     away = g.get("awayTeam", {}); home = g.get("homeTeam", {})
+                    raw_utc = g.get("gameTimeUTC", "")
+                    if raw_utc.startswith("1900-"):
+                        raw_utc = _resolve_1900_game_time(g.get("gameStatusText", ""), _game_today) or raw_utc
                     games.append({
                         "gameId": g.get("gameId", ""), "gameStatus": 1,
                         "gameStatusText": g.get("gameStatusText", ""),
                         "period": 0, "gameClock": "",
-                        "gameTimeUTC": g.get("gameTimeUTC", ""),
+                        "gameTimeUTC": raw_utc,
                         "away": {"abbr": away.get("teamTricode", ""), "score": 0,
                                  "wins": None, "losses": None},
                         "home": {"abbr": home.get("teamTricode", ""), "score": 0,
@@ -1519,13 +1548,16 @@ def get_scoreboard():
                             continue
                         away = g.get("awayTeam", {})
                         home = g.get("homeTeam", {})
+                        raw_utc = g.get("gameTimeUTC", "")
+                        if raw_utc.startswith("1900-"):
+                            raw_utc = _resolve_1900_game_time(g.get("gameStatusText", ""), date) or raw_utc
                         games.append({
                             "gameId":         g.get("gameId", ""),
                             "gameStatus":     1,
                             "gameStatusText": g.get("gameStatusText", ""),
                             "period":         0,
                             "gameClock":      "",
-                            "gameTimeUTC":    g.get("gameTimeUTC", ""),
+                            "gameTimeUTC":    raw_utc,
                             "away": {"abbr": away.get("teamTricode", ""), "score": 0,
                                      "wins": None, "losses": None},
                             "home": {"abbr": home.get("teamTricode", ""), "score": 0,
@@ -5598,17 +5630,22 @@ def _wnba_cdn_abbr(tricode: str) -> str:
     return _WNBA_CDN_ABBR_MAP.get(tricode.upper(), tricode.upper())
 
 
-def _wnba_cdn_game_dict(g: dict) -> dict:
+def _wnba_cdn_game_dict(g: dict, game_date: str = "") -> dict:
     """Convert a WNBA CDN game entry into our standard game dict format."""
     away = g.get("awayTeam", {})
     home = g.get("homeTeam", {})
+    raw_utc = g.get("gameTimeUTC", "")
+    # CDN schedule uses "1900-01-01T..." as a placeholder for upcoming games.
+    # Resolve to real UTC using gameStatusText + the known game date.
+    if raw_utc.startswith("1900-") and game_date:
+        raw_utc = _resolve_1900_game_time(g.get("gameStatusText", ""), game_date) or raw_utc
     return {
         "gameId":         g.get("gameId", ""),
         "gameStatus":     g.get("gameStatus", 1),
         "gameStatusText": g.get("gameStatusText", ""),
         "period":         g.get("period", 0),
         "gameClock":      g.get("gameClock", ""),
-        "gameTimeUTC":    g.get("gameTimeUTC", ""),
+        "gameTimeUTC":    raw_utc,
         "away": {"abbr": _wnba_cdn_abbr(away.get("teamTricode", "")),
                  "score": int(away.get("score", 0) or 0)},
         "home": {"abbr": _wnba_cdn_abbr(home.get("teamTricode", "")),
@@ -5634,7 +5671,7 @@ def _wnba_cdn_schedule() -> dict:
                 date_key = _dt2.strptime(raw_date, "%m/%d/%Y %H:%M:%S").strftime("%Y-%m-%d")
             except Exception:
                 continue
-            dates[date_key] = [_wnba_cdn_game_dict(g) for g in entry.get("games", [])]
+            dates[date_key] = [_wnba_cdn_game_dict(g, date_key) for g in entry.get("games", [])]
         cached["dates"] = dates
         cached["ts"]    = _time.time()
         return dates

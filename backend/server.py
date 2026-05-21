@@ -1300,7 +1300,7 @@ def _enrich_games_with_records(games):
             cur.execute("""
                 SELECT game_id,
                        COUNT(*)                          AS review_count,
-                       ROUND(AVG(rating)::float / 2, 2) AS avg_stars
+                       ROUND((AVG(rating) / 2.0)::numeric, 2) AS avg_stars
                 FROM game_reviews
                 WHERE game_id = ANY(%s)
                 GROUP BY game_id
@@ -5856,7 +5856,7 @@ def _enrich_wnba_games(games: list):
         cur.execute("""
             SELECT game_id,
                    COUNT(*) AS review_count,
-                   ROUND(AVG(rating)::float / 2, 2) AS avg_stars
+                   ROUND((AVG(rating) / 2.0)::numeric, 2) AS avg_stars
             FROM game_reviews
             WHERE game_id = ANY(%s)
             GROUP BY game_id
